@@ -1,5 +1,6 @@
 RELEASE = True
 
+import codecs
 from setuptools import setup, find_packages
 import sys, os
 
