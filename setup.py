@@ -17,6 +17,14 @@ Topic :: Software Development :: Libraries :: Python Modules
 
 version = '0.1'
 
+def read(*parts):
+    """
+    Build an absolute path from *parts* and and return the contents of the
+    resulting file.  Assume UTF-8 encoding.
+    """
+    with codecs.open(os.path.join(HERE, *parts), "rb", "utf-8") as f:
+        return f.read()
+
 setup(
         name='veneer-py',
         version=version,
