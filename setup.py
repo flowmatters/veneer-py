@@ -18,6 +18,8 @@ Topic :: Software Development :: Libraries :: Python Modules
 
 version = '0.1'
 
+HERE = os.path.abspath(os.path.dirname(__file__))
+
 def read(*parts):
     """
     Build an absolute path from *parts* and and return the contents of the
