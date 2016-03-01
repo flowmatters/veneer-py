@@ -150,6 +150,8 @@ class Veneer(object):
 class VeneerIronPython(object):
 	def __init__(self,veneer):
 		self._veneer = veneer
+		self.ui = VeneerSourceUIHelpers(self)
+		self._generator = VeneerScriptGenerators(self)
 
 	def _initScript(self,namespace=None):
 		script = "# Generated Script\n"
@@ -258,3 +260,40 @@ class VeneerIronPython(object):
 				script += "%s.%s = %s\n"%(retrieve,option,newVal)
 			script += "result = %s.%s\n"%(retrieve,option)
 		return self.runScript(script)
+
+	def _safe_run(self,script):
+		result = self.runScript(script)
+		if not result['Exception'] is None:
+			raise Exception(result['Exception'])
+		return result
+
+class VeneerScriptGenerators(object):
+	def __init__(self,ironpython):
+		self._ironpy = ironpython
+
+	def find_feature_by_name(self,name):
+		script = self._ironpy._initScript()
+		script += "def find_feature_by_name(searchTerm):\n"
+		script += "  for n in scenario.Network.Nodes:\n"
+		script += "    if n.Name.startswith(searchTerm):\n"
+		script += "      return n\n"
+		script += "  for l in scenario.Network.Links:\n"
+		script += "    if l.Name.startswith(searchTerm):\n"
+		script += "      return l\n"
+		script += "  return None\n\n"
+		return script
+
+class VeneerSourceUIHelpers(object):
+	def __init__(self,ironpython):
+		self._ironpy = ironpython
+
+	def open_editor(self,name_of_element):
+		script = self._ironpy._initScript(namespace="RiverSystem.Controls.Controllers.FeatureEditorController as FeatureEditorController")
+		script += self._ironpy._generator.find_feature_by_name(name_of_element)
+		script += "f = find_feature_by_name('%s')\n"%name_of_element
+		script += "if not f is None:\n"
+		script += "  ctrl = FeatureEditorController(f)\n"
+		script += "  ctrl.Initialise(scenario)\n"
+		script += "  ctrl.Show(None)\n"
+		
+		self._ironpy._safe_run(script)
