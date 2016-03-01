@@ -148,6 +148,12 @@ class Veneer(object):
 			return DataFrame(data=data,index=index)
 
 class VeneerIronPython(object):
+	"""
+	Helper functions for manipulating the internals of the Source model itself.
+
+	These features rely on 'Allow Scripting' being enabled in Veneer in order to
+	post custom IronPython scripts to Source.
+	"""
 	def __init__(self,veneer):
 		self._veneer = veneer
 		self.ui = VeneerSourceUIHelpers(self)
@@ -210,6 +216,11 @@ class VeneerIronPython(object):
 		return script
 
 	def get(self,theThing,namespace=None):
+		"""
+		Retrieve a value, or list of values from Source using theThing as a query string.
+
+		Query should either start with `scenario` OR from a class imported using `namespace`
+		"""
 		script = self._initScript(namespace)
 		listQuery = theThing.find(".*") != -1
 		if listQuery:
