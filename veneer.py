@@ -96,6 +96,17 @@ class Veneer(object):
 
         return self.retrieve_json('/runs/%s'%str(run))
 
+    def network(self):
+        result = self.retrieve_json('/network')
+        result['features'] = SearchableList(result['features'])
+        return result
+
+    def functions(self):
+        return SearchableList(self.retrieve_json('/functions'))
+
+    def variables(self):       
+        return SearchableList(self.retrieve_json('/variables'))
+
     def result_matches_criteria(self,result,criteria):
         import re
         for key,pattern in criteria.items():
@@ -408,3 +419,33 @@ class VeneerCatchmentGenerationActions(object):
         accessor = self._build_accessor(parameter,catchments,fus,constituents)
 
         return self._ironpy.set(accessor,values,self._ns,literal,fromList)
+
+
+class SearchableList(object):
+    def __init__(self,the_list):
+        self._list = the_list
+
+    def __len__(self):
+        return len(self._list)
+
+    def __getitem__(self,i):
+        return self._list[i]
+
+
+    def __iter__(self):
+        return self._list.__iter__()
+
+    def __reversed__(self):
+        return SearchableList(reversed(self._list))
+
+    def __contains__(self,item):
+        return self._list.__contains__(item)
+
+    def __getattr__(self,name):
+        PREFIX='find_by_'
+        if name.startswith(PREFIX):
+            field_name = name[len(PREFIX):]
+            return lambda x: list(filter(lambda y: y[field_name]==x,self._list))
+
+        raise AttributeError(attr + ' not allowed')
+
