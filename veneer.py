@@ -183,6 +183,9 @@ class VeneerIronPython(object):
         return script
 
     def runScript(self,script,async=False):
+        return self.run_script(script,async)
+
+    def run_script(self,script,async=False):
         return self._veneer.run_server_side_script(script,async)
 
     def sourceHelp(self,theThing='scenario',namespace=None):
@@ -207,7 +210,7 @@ class VeneerIronPython(object):
         innerLoop += "else:\n"
         innerLoop += "    result = dir(theThing)"
         script += self._generateLoop(theThing,innerLoop,first=True)
-        data = self.runScript(script)
+        data = self.run_script(script)
         if not data['Exception'] is None:
             raise Exception(data['Exception'])
         if data['Response'] is None:
@@ -299,7 +302,7 @@ class VeneerIronPython(object):
         else:
             script += "result = %s\n"%theThing
 #       return script
-        resp = self.runScript(script)
+        resp = self.run_script(script)
         if not resp['Exception'] is None:
             raise Exception(resp['Exception'])
         data = resp['Response']['Value']
@@ -328,12 +331,15 @@ class VeneerIronPython(object):
 #       return script
 #        print(script)
 #        return None
-        result = self.runScript(script)
+        result = self.run_script(script)
         if not result['Exception'] is None:
             raise Exception(result['Exception'])
         return None
 
     def sourceScenarioOptions(self,optionType,option=None,newVal = None):
+        self.source_scenario_options(optionType,option,newVal)
+
+    def source_scenario_options(self,optionType,option=None,newVal = None):
         script = self._initScript('RiverSystem.ScenarioConfiguration.%s as %s'%(optionType,optionType))
         retrieve = "scenario.GetScenarioConfiguration[%s]()"%optionType
         if option is None:
@@ -342,10 +348,12 @@ class VeneerIronPython(object):
             if not newVal is None:
                 script += "%s.%s = %s\n"%(retrieve,option,newVal)
             script += "result = %s.%s\n"%(retrieve,option)
-        return self.runScript(script)
+        res = self._safe_run(script)
+        if newVal is None:
+            return res
 
     def _safe_run(self,script):
-        result = self.runScript(script)
+        result = self.run_script(script)
         if not result['Exception'] is None:
             raise Exception(result['Exception'])
         return result
