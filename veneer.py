@@ -92,13 +92,15 @@ class Veneer(object):
     def retrieve_run(self,run='latest'):
         if run=='latest' and not self.live_source:
             all_runs = self.retrieve_json('/runs')
-            return self.retrieve_json(all_runs[-1]['RunUrl'])
-
-        return self.retrieve_json('/runs/%s'%str(run))
+            result = self.retrieve_json(all_runs[-1]['RunUrl'])
+        else:
+            result = self.retrieve_json('/runs/%s'%str(run))
+        result['Results'] = SearchableList(result['Results'])
+        return result
 
     def network(self):
         result = self.retrieve_json('/network')
-        result['features'] = SearchableList(result['features'])
+        result['features'] = SearchableList(result['features'],['geometry','properties'])
         return result
 
     def functions(self):
@@ -422,15 +424,18 @@ class VeneerCatchmentGenerationActions(object):
 
 
 class SearchableList(object):
-    def __init__(self,the_list):
+    def __init__(self,the_list,nested=[]):
         self._list = the_list
+        self._nested = nested
+
+    def __repr__(self):
+        return self._list.__repr__()
 
     def __len__(self):
         return len(self._list)
 
     def __getitem__(self,i):
         return self._list[i]
-
 
     def __iter__(self):
         return self._list.__iter__()
@@ -441,11 +446,36 @@ class SearchableList(object):
     def __contains__(self,item):
         return self._list.__contains__(item)
 
-    def __getattr__(self,name):
-        PREFIX='find_by_'
-        if name.startswith(PREFIX):
-            field_name = name[len(PREFIX):]
-            return lambda x: list(filter(lambda y: y[field_name]==x,self._list))
+    def _search_all(self,key,val,entry):
+        if (key in entry) and entry[key]==val: return True
+        for nested in self._nested:
+            if not nested in entry: continue
+            if not key in entry[nested]: continue
+            if entry[nested][key]==val: return True
+        return False
 
+    def _nested_retrieve(self,key,entry):
+        if (key in entry): return entry[key]
+        for nested in self._nested:
+            if not nested in entry: continue
+            if key in entry[nested]: return entry[nested][key]
+        return None
+
+    def _unique_values(self,key):
+        return set(self._all_values(key))
+
+    def _all_values(self,key):
+        return [self._nested_retrieve(key,e) for e in self._list]
+
+    def __getattr__(self,name):
+        FIND_PREFIX='find_by_'
+        if name.startswith(FIND_PREFIX):
+            field_name = name[len(FIND_PREFIX):]
+            return lambda x: SearchableList(list(filter(lambda y: self._search_all(field_name,x,y),self._list)),self._nested)
+
+        GROUP_PREFIX='group_by_'
+        if name.startswith(GROUP_PREFIX):
+            field_name = name[len(GROUP_PREFIX):]
+            return lambda: {k:self.__getattr__(FIND_PREFIX+field_name)(k) for k in self._unique_values(field_name)}
         raise AttributeError(attr + ' not allowed')
 
