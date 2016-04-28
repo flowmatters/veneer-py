@@ -89,8 +89,22 @@ class Veneer(object):
             raise Exception('Script disabled. Enable scripting in Veneer')
         return data
 
-    def run_model(self,params={},async=False):
+    def configure_recording(self,enable=[],disable=[]):
+        def get_many(src,keys,default):
+            return [src.get(k,default) for k in keys]
 
+        def translate(rule):
+            keys = ['NetworkElement','RecordingElement','RecordingVariable']
+            vals = get_many(rule,keys,'')
+            if vals[2]=='':vals[2]=vals[1]
+
+            return 'location/%s/element/%s/variable/%s'%tuple(vals)
+
+        modifier = {'RecordNone':[translate(r) for r in disable],
+                    'RecordAll':[translate(r) for r in enable]}
+        self.update_json('/recorders',modifier)
+
+    def run_model(self,params={},async=False):
         conn = hc.HTTPConnection(self.host,port=self.port)
     #   conn.request('POST','/runs',json.dumps({'parameters':params}),headers={'Content-type':'application/json','Accept':'application/json'})
         conn.request('POST','/runs',json.dumps(params),headers={'Content-type':'application/json','Accept':'application/json'})
