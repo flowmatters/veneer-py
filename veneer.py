@@ -117,6 +117,21 @@ class Veneer(object):
         else:
             return resp.getcode(),None
 
+    def drop_run(self,run='latest'):
+        assert self.live_source
+        conn = hc.HTTPConnection(self.host,port=self.port)
+        conn.request('DELETE','/runs/%s'%str(run))
+        resp = conn.getresponse()
+        code = resp.getcode()
+        return code
+
+    def drop_all_runs(self):
+        while len(self.retrieve_runs())>0:
+            self.drop_run()
+
+    def retrieve_runs(self):
+        return self.retrieve_json('/runs')
+
     def retrieve_run(self,run='latest'):
         if run=='latest' and not self.live_source:
             all_runs = self.retrieve_json('/runs')
