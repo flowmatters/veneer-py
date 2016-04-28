@@ -10,6 +10,19 @@ import http.client as hc
 
 PRINT_URLS=True
 PRINT_ALL=False
+def name_time_series(result):
+    return result['TimeSeriesName']
+
+def name_element_variable(result):
+    element = result['NetworkElement']
+    variable = result['RecordingVariable'].split(' - ')[-1]
+    return '%s:%s'%(element,variable)
+
+def name_for_variable(result):
+    return result['RecordingVariable']
+
+def name_for_location(result):
+    return result['NetworkElement']
 
 class Veneer(object):
     def __init__(self,port=9876,host='localhost',protocol='http',prefix='',live=True):
@@ -115,14 +128,6 @@ class Veneer(object):
             if not re.match(pattern,result[key]):
                 return False
         return True
-        
-    def name_time_series(self,result):
-        return result['TimeSeriesName']
-
-    def name_element_variable(self,result):
-        element = result['NetworkElement']
-        variable = result['RecordingVariable'].split(' - ')[-1]
-        return '%s:%s'%(element,variable)
 
     def retrieve_multiple_time_series(self,run='latest',run_data=None,criteria={},timestep='daily',name_fn=name_element_variable):
         """
@@ -156,7 +161,7 @@ class Veneer(object):
         if len(retrieved) == 0:
             return DataFrame()
         else:
-            index = [event['Date'] for event in retrieved.values()[0]]
+            index = [event['Date'] for event in list(retrieved.values())[0]]
             data = {k:[event['Value'] for event in result] for k,result in retrieved.items()}
             return DataFrame(data=data,index=index)
 
