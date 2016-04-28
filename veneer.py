@@ -69,7 +69,8 @@ class Veneer(object):
         if code==302:
             return code,resp.getheader('Location')
         elif code==200:
-            return code,json.loads(resp.read().decode('utf-8'))
+            resp_body = resp.read().decode('utf-8')
+            return code,(json.loads(resp_body) if len(resp_body) else None)
         else:
             return code,None
 
