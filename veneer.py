@@ -510,6 +510,15 @@ class SearchableList(object):
     def _all_values(self,key):
         return [self._nested_retrieve(key,e) for e in self._list]
 
+    def _select(self,keys,transforms={}):
+        result = [{k:self._nested_retrieve(k,e) for k in keys} for e in self]
+
+        for key,fn in transforms.items():
+            for r,e in zip(result,self):
+                r[key] = fn(e)
+
+        return SearchableList(result)
+
     def __getattr__(self,name):
         FIND_PREFIX='find_by_'
         if name.startswith(FIND_PREFIX):
@@ -520,5 +529,5 @@ class SearchableList(object):
         if name.startswith(GROUP_PREFIX):
             field_name = name[len(GROUP_PREFIX):]
             return lambda: {k:self.__getattr__(FIND_PREFIX+field_name)(k) for k in self._unique_values(field_name)}
-        raise AttributeError(attr + ' not allowed')
+        raise AttributeError(name + ' not allowed')
 
