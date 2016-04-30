@@ -291,20 +291,29 @@ class VeneerIronPython(object):
             return [string_or_list]
         return string_or_list
 
-    def _find_parameters_in_type(self,model_type):
+    def _find_members_with_attribute_in_type(self,model_type,attribute):
         script = self._initScript(model_type)
-        script += 'from TIME.Core.Metadata import ParameterAttribute\n'
+        script += 'from TIME.Core.Metadata import %s\n'%attribute
         script += 'result = []\n'
         script += 'tmp = %s()\n'%model_type
         script += 'typeObject = tmp.GetType()\n'
         script += 'for member in dir(tmp):\n'
         script += '  try:\n'
-        script += '    if typeObject.GetMember(member)[0].IsDefined(ParameterAttribute,True):\n'
+        script += '    if typeObject.GetMember(member)[0].IsDefined(%s,True):\n'%attribute
         script += '      result.append(member)\n'
         script += '  except: pass'
 #        print(script)
         res = self._safe_run(script)
         return [v['Value'] for v in res['Response']['Value']]
+
+    def _find_members_with_attribute_for_types(self,model_types,attribute):
+        model_types = list(set(self._stringToList(model_types)))
+        result = {}
+        for t in model_types:
+            result[t] = self._find_members_with_attribute_in_type(t,attribute)
+        if len(model_types)==1:
+            return result[model_types[0]]
+        return result
 
     def find_parameters(self,model_types):
         """
@@ -314,13 +323,17 @@ class VeneerIronPython(object):
          * A list of parameters (if a single model type is provided)
          * A dictionary model type name -> list of parameters (if more than model type)
         """
-        model_types = list(set(self._stringToList(model_types)))
-        result = {}
-        for t in model_types:
-            result[t] = self._find_parameters_in_type(t)
-        if len(model_types)==1:
-            return result[model_types[0]]
-        return result
+        return self._find_members_with_attribute_for_types(model_types,'ParameterAttribute')
+
+    def find_inputs(self,model_types):
+        """
+        Find the input names for a given model type or list of model types
+
+        Returns:
+         * A list of inputs (if a single model type is provided)
+         * A dictionary model type name -> list of inputs (if more than model type)
+        """
+        return self._find_members_with_attribute_for_types(model_types,'InputAttribute')
 
     def get(self,theThing,namespace=None):
         """
