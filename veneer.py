@@ -214,6 +214,7 @@ class VeneerIronPython(object):
             script += "import %s\n"%namespace
         script += "import clr\n"
         script += "import System\n"
+        script += "import FlowMatters.Source.Veneer.RemoteScripting.ScriptHelpers as H\n"
         script += "clr.ImportExtensions(System.Linq)\n"
         return script
 
@@ -258,6 +259,7 @@ class VeneerIronPython(object):
     def _generateLoop(self,theThing,innerLoop,first=False):
         script = ''
         script += "have_succeeded = False\n"
+        script += "ignoreExceptions = True\n"
         indent = 0
         indentText = ''
         levels = theThing.split('.*')
@@ -279,7 +281,8 @@ class VeneerIronPython(object):
         while indent >0:
             indent -= 1
             indentText = ' '*(indent*4) 
-            script += indentText + "except: pass\n"
+            script += indentText + "except:\n"
+            script += indentText + '  if not ignoreExceptions: raise\n'
             if first:
                 script += indentText + "if have_succeeded: break\n"
             indent -= 1     
@@ -350,6 +353,8 @@ class VeneerIronPython(object):
         else:
             script += "result = %s\n"%theThing
 #       return script
+
+#        print(script)
         resp = self.run_script(script)
         if not resp['Exception'] is None:
             raise Exception(resp['Exception'])
@@ -358,9 +363,17 @@ class VeneerIronPython(object):
             return [d['Value'] for d in data]
         return data
 
-    def set(self,theThing,theValue,namespace=None,literal=False,fromList=False):
+    def _assignment(self,theThing,theValue,namespace=None,literal=False,
+                    fromList=False,instantiate=False,
+                    assignment="",post_assignment="",
+                    print_script=False):
+        val_transform='()' if instantiate else ''
         if literal and isinstance(theValue,str):
             theValue = "'"+theValue+"'"
+        if fromList:
+            if literal:
+                theValue = [("'"+v+"'") if isinstance(v,str) else v for v in theValue]
+            theValue = '['+(','.join(theValue))+']'
         script = self._initScript(namespace)
         script += 'origNewVal = %s\n'%theValue
         if fromList:
@@ -369,20 +382,45 @@ class VeneerIronPython(object):
         else:
             script += 'newVal = origNewVal\n'
 
-        innerLoop = 'checkValueExists = %s%s\n'
-        innerLoop += "%s%s = newVal"
+        innerLoop = 'ignoreExceptions = True\n'
+        innerLoop += 'checkValueExists = %s%s\n'
+        innerLoop += 'ignoreExceptions = False\n'
+        innerLoop += assignment
         if fromList:
-            innerLoop += '.pop()\n'
+            innerLoop += '.pop()'+ val_transform + post_assignment +'\n'
             innerLoop += 'if len(newVal)==0: newVal = origNewVal[:]\n'
+        else:
+            innerLoop += val_transform + post_assignment
         script += self._generateLoop(theThing,innerLoop)
-
+        script += 'result = have_succeeded\n'
 #       return script
-#        print(script)
+        if print_script: print(script)
 #        return None
         result = self.run_script(script)
         if not result['Exception'] is None:
             raise Exception(result['Exception'])
-        return None
+        return result['Response']['Value']
+
+    def set(self,theThing,theValue,namespace=None,literal=False,fromList=False,instantiate=False):
+        return self._assignment(theThing,theValue,namespace,literal,fromList,instantiate,"%s%s = newVal","")
+
+    def add_to_list(self,theThing,theValue,namespace=None,literal=False,
+                    fromList=False,instantiate=False,allow_duplicates=False):
+        if allow_duplicates:
+            assignment = "%s%s.Add(newVal"
+        else:
+            assignment = "theList=%s%s\nif not H.ListContainsInstance(theList,newVal"
+            if instantiate: assignment += "()"
+            assignment +="): theList.Add(newVal"
+
+        return self._assignment(theThing,theValue,namespace,literal,fromList,instantiate,assignment,")",print_script=True)
+
+    def assign_time_series(self,theThing,theValue,column=0,from_list=False,literal=True,
+                           data_group=None):
+        ns = None
+        assignment = "H.AssignTimeSeries(scenario,%s__init__.__self__,'%s','"+data_group+"',newVal"
+        post_assignment = ",%d)"%column
+        return self._assignment(theThing,theValue,ns,literal,from_list,False,assignment,post_assignment)
 
     def sourceScenarioOptions(self,optionType,option=None,newVal = None):
         self.source_scenario_options(optionType,option,newVal)
@@ -440,12 +478,68 @@ class VeneerSourceUIHelpers(object):
 class VeneerCatchmentActions(object):
     def __init__(self,ironpython):
         self._ironpy = ironpython
+        self.runoff = VeneerRunoffActions(self)
         self.generation = VeneerCatchmentGenerationActions(self)
+        self.subcatchment = VeneerSubcatchmentActions(self)
 
-class VeneerCatchmentGenerationActions(object):
+class VeneerFunctionalUnitActions(object):
     def __init__(self,catchment):
         self._catchment = catchment
         self._ironpy = catchment._ironpy
+
+class VeneerRunoffActions(VeneerFunctionalUnitActions):
+    def __init__(self,catchment):
+        super(VeneerRunoffActions,self).__init__(catchment)
+
+    def _build_accessor(self,parameter=None,catchments=None,fus=None):
+        accessor = 'scenario.Network.Catchments'
+
+        if not catchments is None:
+            catchments = self._ironpy._stringToList(catchments)
+            accessor += '.Where(lambda c: c.DisplayName in %s)'%catchments
+
+        accessor += '.*FunctionalUnits'
+
+        if not fus is None:
+            fus = self._ironpy._stringToList(fus)
+            accessor += '.Where(lambda fu: fu.DisplayName in %s)'%fus
+
+        accessor += '.*rainfallRunoffModel'
+
+        if not parameter is None:
+            accessor += '.%s'%parameter
+
+        return accessor
+
+    def get_models(self,catchments=None,fus=None):
+        return self.get_param_values('GetType().FullName',catchments,fus)
+
+    def set_models(self,models,catchments=None,fus=None,constituents=None,fromList=False):
+        self.set_param_values(None,models,catchments,fus,fromList=fromList,instantiate=True)
+
+    def get_param_values(self,parameter,catchments=None,fus=None):
+        accessor = self._build_accessor(parameter,catchments,fus)
+        return self._ironpy.get(accessor)
+
+    def set_param_values(self,parameter,values,catchments=None,fus=None,literal=False,fromList=False,instantiate=False):
+        accessor = self._build_accessor(parameter,catchments,fus)
+        ns = None
+        if instantiate:
+            values = self._ironpy._stringToList(values)
+            ns = ','.join(set(values))
+            fromList = True
+        return self._ironpy.set(accessor,values,ns,literal=literal,fromList=fromList,instantiate=instantiate)
+
+    def assign_time_series(self,parameter,values,data_group,column=0,
+                           catchments=None,fus=None,literal=True,fromList=False):
+        accessor = self._build_accessor(parameter,catchments,fus)
+        return self._ironpy.assign_time_series(accessor,values,from_list=fromList,
+                                               literal=literal,column=column,
+                                               data_group=data_group)
+
+class VeneerCatchmentGenerationActions(VeneerFunctionalUnitActions):
+    def __init__(self,catchment):
+        super(VeneerCatchmentGenerationActions,self).__init__(catchment)
         self._ns = 'RiverSystem.Constituents.CatchmentElementConstituentData as CatchmentElementConstituentData'
 
     def _build_accessor(self,parameter,catchments=None,fus=None,constituents=None):
@@ -478,6 +572,35 @@ class VeneerCatchmentGenerationActions(object):
 
         return self._ironpy.set(accessor,values,self._ns,literal,fromList)
 
+class VeneerSubcatchmentActions(object):
+    def __init__(self,catchment):
+        self._catchment = catchment
+        self._ironpy = catchment._ironpy
+
+    def _build_accessor(self,parameter=None,catchments=None):
+        accessor = 'scenario.Network.Catchments'
+
+        if not catchments is None:
+            catchments = self._ironpy._stringToList(fus)
+            accessor += '.Where(lambda sc: sc.DisplayName in %s)'%catchments
+
+        accessor += '.*CatchmentModels'
+
+        if not parameter is None:
+            accessor += '.*%s'%parameter
+        return accessor
+
+    def get_param_values(self,parameter,catchments=None):
+        accessor = self._build_accessor(parameter,catchments)
+        return self._ironpy.get(accessor)
+
+    def get_models(self,catchments=None):
+        return self.get_param_values('GetType().FullName',catchments)
+
+    def add_model(self,model_type,add_if_existing=False,catchments=None,allow_duplicates=False):
+        accessor = self._build_accessor(catchments=catchments)
+        return self._ironpy.add_to_list(accessor,model_type,model_type,
+                                        instantiate=True,allow_duplicates=allow_duplicates)
 
 class SearchableList(object):
     def __init__(self,the_list,nested=[]):
