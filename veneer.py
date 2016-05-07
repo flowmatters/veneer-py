@@ -26,6 +26,16 @@ def name_for_variable(result):
 def name_for_location(result):
     return result['NetworkElement']
 
+def _stringToList(string_or_list):
+    if isinstance(string_or_list,str):
+        return [string_or_list]
+    return string_or_list
+
+def log(text):
+    import sys
+    print('\n'.join(_stringToList(text)))
+    sys.stdout.flush()
+
 class Veneer(object):
     def __init__(self,port=9876,host='localhost',protocol='http',prefix='',live=True):
         self.port=port
@@ -61,9 +71,16 @@ class Veneer(object):
         return self.send_json(url,data,'PUT',async)
 
     def send_json(self,url,data,method,async=False):
-        conn = hc.HTTPConnection(self.host,port=self.port)
         payload = json.dumps(data)
-        conn.request(method,url,payload,headers={'Content-type':'application/json','Accept':'application/json'})
+        headers={'Content-type':'application/json','Accept':'application/json'}
+        return self.send(url,method,payload,headers,async)
+
+    def post_json(self,url,data=None,async=False):
+        return self.send_json(url,data,'POST',async)
+
+    def send(self,url,method,payload=None,headers={},async=False):
+        conn = hc.HTTPConnection(self.host,port=self.port)
+        conn.request(method,url,payload,headers=headers)
         if async:
             return conn
         resp = conn.getresponse()
@@ -74,12 +91,9 @@ class Veneer(object):
             resp_body = resp.read().decode('utf-8')
             return code,(json.loads(resp_body) if len(resp_body) else None)
         else:
-            return code,None
+            return code,resp.read().decode('utf-8')
 
         return conn
-
-    def post_json(self,url,data,async=False):
-        return self.send_json(url,data,'POST',async)
 
     def run_server_side_script(self,script,async=False):
         if PRINT_SCRIPTS: print(script)
@@ -106,18 +120,27 @@ class Veneer(object):
                     'RecordAll':[translate(r) for r in enable]}
         self.update_json('/recorders',modifier)
 
-    def run_model(self,params={},async=False):
+    def run_model(self,params={},start=None,end=None,async=False):
         conn = hc.HTTPConnection(self.host,port=self.port)
+
+        if not start is None:
+            params['StartDate'] = to_source_date(start)
+        if not end is None:
+            params['EndDate'] = to_source_date(end)
+
     #   conn.request('POST','/runs',json.dumps({'parameters':params}),headers={'Content-type':'application/json','Accept':'application/json'})
         conn.request('POST','/runs',json.dumps(params),headers={'Content-type':'application/json','Accept':'application/json'})
         if async:
             return conn
 
         resp = conn.getresponse()
-        if resp.getcode()==302:
-            return resp.getcode(),resp.getheader('Location')
+        code = resp.getcode()
+        if code==302:
+            return code,resp.getheader('Location')
+        elif code==200:
+            return code,None
         else:
-            return resp.getcode(),None
+            return code,resp.read().decode('utf-8')
 
     def drop_run(self,run='latest'):
         assert self.live_source
@@ -156,10 +179,18 @@ class Veneer(object):
 
     def result_matches_criteria(self,result,criteria):
         import re
+#        MATCH_ALL='__all__'
         for key,pattern in criteria.items():
+#            if pattern==MATCH_ALL: continue
             if not re.match(pattern,result[key]):
                 return False
         return True
+
+    def input_sets(self):
+        return SearchableList(self.retrieve_json('/inputSets'))
+
+    def apply_input_set(self,name):
+        return self.send('/inputSets/%s/run'%(name.replace(' ','%20')),'POST')
 
     def retrieve_multiple_time_series(self,run='latest',run_data=None,criteria={},timestep='daily',name_fn=name_element_variable):
         """
@@ -209,6 +240,7 @@ class VeneerIronPython(object):
         self.ui = VeneerSourceUIHelpers(self)
         self._generator = VeneerScriptGenerators(self)
         self.catchment = VeneerCatchmentActions(self)
+        self.link = VeneerLinkActions(self)
 
     def _initScript(self,namespace=None):
         script = "# Generated Script\n"
@@ -291,10 +323,16 @@ class VeneerIronPython(object):
 
         return script
 
-    def _stringToList(self,string_or_list):
-        if isinstance(string_or_list,str):
-            return [string_or_list]
-        return string_or_list
+    def find_model_type(self,model_type):
+        script = self._initScript('TIME.Management.Finder as Finder')
+        script += 'import TIME.Core.Model as Model\n'
+        script += 'f = Finder(Model)\n'
+        script += 'types = f.types()\n'
+        script += 's = "%s"\n'%model_type
+        script += 'result = types.Where(lambda t:t.Name.ToLower().Contains(s.ToLower()))'
+        script += '.Select(lambda tt:tt.FullName)\n'
+        res = self._safe_run(script)
+        return [v['Value'] for v in res['Response']['Value']]
 
     def _find_members_with_attribute_in_type(self,model_type,attribute):
         script = self._initScript(model_type)
@@ -307,12 +345,11 @@ class VeneerIronPython(object):
         script += '    if typeObject.GetMember(member)[0].IsDefined(%s,True):\n'%attribute
         script += '      result.append(member)\n'
         script += '  except: pass'
-#        print(script)
         res = self._safe_run(script)
         return [v['Value'] for v in res['Response']['Value']]
 
     def _find_members_with_attribute_for_types(self,model_types,attribute):
-        model_types = list(set(self._stringToList(model_types)))
+        model_types = list(set(_stringToList(model_types)))
         result = {}
         for t in model_types:
             result[t] = self._find_members_with_attribute_in_type(t,attribute)
@@ -374,7 +411,7 @@ class VeneerIronPython(object):
         if fromList:
             if literal:
                 theValue = [("'"+v+"'") if isinstance(v,str) else v for v in theValue]
-            theValue = '['+(','.join(theValue))+']'
+            theValue = '['+(','.join([str(s) for s in theValue]))+']'
         script = self._initScript(namespace)
         script += 'origNewVal = %s\n'%theValue
         if fromList:
@@ -413,7 +450,7 @@ class VeneerIronPython(object):
             if instantiate: assignment += "()"
             assignment +="): theList.Add(newVal"
 
-        return self._assignment(theThing,theValue,namespace,literal,fromList,instantiate,assignment,")",print_script=True)
+        return self._assignment(theThing,theValue,namespace,literal,fromList,instantiate,assignment,")")
 
     def assign_time_series(self,theThing,theValue,column=0,from_list=False,literal=True,
                            data_group=None):
@@ -443,6 +480,18 @@ class VeneerIronPython(object):
         if not result['Exception'] is None:
             raise Exception(result['Exception'])
         return result
+
+    def add_constituent(self,new_constituent):
+        s = self._initScript(namespace='RiverSystem.Constituents.Constituent as Constituent')
+        s += 'scenario.Network.ConstituentsManagement.Config.ProcessConstituents = True\n' 
+        s += 'theList = scenario.SystemConfiguration.Constituents\n'
+        s += 'if not theList.Any(lambda c: c.Name=="%s"):\n'%new_constituent
+        s += '  c=Constituent("%s")\n'%new_constituent
+        s += '  theList.Add(c)\n'
+        s += '  H.InitialiseModelsForConstituent(scenario,c)\n'
+#        s += 'nw = scenario.Network\n'
+#        s += 'nw.ConstituentsManagement.Reset(scenario.CurrentConfiguration.StartDate)\n'
+        return self._safe_run(s)
 
 class VeneerScriptGenerators(object):
     def __init__(self,ironpython):
@@ -475,60 +524,97 @@ class VeneerSourceUIHelpers(object):
         
         self._ironpy._safe_run(script)
 
-class VeneerCatchmentActions(object):
+class VeneerNetworkElementActions(object):
+    def __init__(self,ironpython):
+        self._ironpy = ironpython
+        self._ns = None
+
+    def _instantiation_namespace(self,types):
+        ns = ','.join(set(types))
+        if not self._ns is None:
+            ns += ','+self._ns
+        return ns
+
+    def get_models(self,**kwargs):
+        return self.get_param_values('GetType().FullName',**kwargs)
+
+    def get_param_values(self,parameter,**kwargs):
+        accessor = self._build_accessor(parameter,**kwargs)
+        return self._ironpy.get(accessor,kwargs.get('namespace',self._ns))
+
+    def set_models(self,models,fromList=False,**kwargs):
+        return self.set_param_values(None,models,fromList=fromList,instantiate=True,**kwargs)
+
+    def set_param_values(self,parameter,values,literal=False,fromList=False,instantiate=False,**kwargs):
+        accessor = self._build_accessor(parameter,**kwargs)
+        ns = self._ns
+        if instantiate:
+            values = _stringToList(values)
+            ns = self._instantiation_namespace(values)
+            fromList = True
+        return self._ironpy.set(accessor,values,ns,literal=literal,fromList=fromList,instantiate=instantiate)
+
+class VeneerFunctionalUnitActions(VeneerNetworkElementActions):
+    def __init__(self,catchment):
+        self._catchment = catchment
+        super(VeneerFunctionalUnitActions,self).__init__(catchment._ironpy)
+
+    def _build_accessor(self,parameter=None,catchments=None,fus=None):
+        accessor = 'scenario.Network.Catchments'
+
+        if not catchments is None:
+            catchments = _stringToList(catchments)
+            accessor += '.Where(lambda c: c.DisplayName in %s)'%catchments
+
+        accessor += '.*FunctionalUnits'
+
+        if not fus is None:
+            fus = _stringToList(fus)
+            accessor += '.Where(lambda fu: fu.DisplayName in %s)'%fus
+
+        if not parameter is None:
+            accessor += '.*%s'%parameter
+
+        return accessor
+
+class VeneerCatchmentActions(VeneerFunctionalUnitActions):
     def __init__(self,ironpython):
         self._ironpy = ironpython
         self.runoff = VeneerRunoffActions(self)
         self.generation = VeneerCatchmentGenerationActions(self)
         self.subcatchment = VeneerSubcatchmentActions(self)
+        self._ns = None
 
-class VeneerFunctionalUnitActions(object):
-    def __init__(self,catchment):
-        self._catchment = catchment
-        self._ironpy = catchment._ironpy
+    def get_areas(self,catchments=None):
+        return self._ironpy.get('scenario.Network.Catchments.*characteristics.areaInSquareMeters')
+
+    def get_functional_unit_areas(self,catchments=None,fus=None):
+        return self.get_param_values('areaInSquareMeters',catchments=catchments,fus=fus)
+
+    def set_functional_unit_areas(self,values,catchments=None,fus=None):
+        return self.set_param_values('areaInSquareMeters',values,fromList=True,catchments=catchments,fus=fus)
+
+    def get_functional_unit_types(self,catchments=None,fus=None):
+        return self.get_param_values('definition.Name')
 
 class VeneerRunoffActions(VeneerFunctionalUnitActions):
     def __init__(self,catchment):
         super(VeneerRunoffActions,self).__init__(catchment)
 
     def _build_accessor(self,parameter=None,catchments=None,fus=None):
-        accessor = 'scenario.Network.Catchments'
-
-        if not catchments is None:
-            catchments = self._ironpy._stringToList(catchments)
-            accessor += '.Where(lambda c: c.DisplayName in %s)'%catchments
-
-        accessor += '.*FunctionalUnits'
-
-        if not fus is None:
-            fus = self._ironpy._stringToList(fus)
-            accessor += '.Where(lambda fu: fu.DisplayName in %s)'%fus
-
-        accessor += '.*rainfallRunoffModel'
+        accessor = super(VeneerRunoffActions,self)._build_accessor('rainfallRunoffModel',catchments,fus)
 
         if not parameter is None:
             accessor += '.%s'%parameter
 
         return accessor
 
-    def get_models(self,catchments=None,fus=None):
-        return self.get_param_values('GetType().FullName',catchments,fus)
+#    def get_models(self,catchments=None,fus=None):
+#        return self.get_param_values('GetType().FullName',catchments,fus)
 
-    def set_models(self,models,catchments=None,fus=None,constituents=None,fromList=False):
-        self.set_param_values(None,models,catchments,fus,fromList=fromList,instantiate=True)
-
-    def get_param_values(self,parameter,catchments=None,fus=None):
-        accessor = self._build_accessor(parameter,catchments,fus)
-        return self._ironpy.get(accessor)
-
-    def set_param_values(self,parameter,values,catchments=None,fus=None,literal=False,fromList=False,instantiate=False):
-        accessor = self._build_accessor(parameter,catchments,fus)
-        ns = None
-        if instantiate:
-            values = self._ironpy._stringToList(values)
-            ns = ','.join(set(values))
-            fromList = True
-        return self._ironpy.set(accessor,values,ns,literal=literal,fromList=fromList,instantiate=instantiate)
+#    def get_param_values(self,parameter,catchments=None,fus=None):
+#        accessor = self._build_accessor(parameter,catchments,fus)
+#        return self._ironpy.get(accessor)
 
     def assign_time_series(self,parameter,values,data_group,column=0,
                            catchments=None,fus=None,literal=True,fromList=False):
@@ -548,40 +634,28 @@ class VeneerCatchmentGenerationActions(VeneerFunctionalUnitActions):
                     '.*FunctionalUnitData'
 
         if not fus is None:
-            fus = self._ironpy._stringToList(fus)
+            fus = _stringToList(fus)
             accessor += '.Where(lambda fuData: fuData.DisplayName in %s)'%fus
 
         accessor += '.*ConstituentModels'
 
         if not constituents is None:
-            constituents = self._ironpy._stringToList(constituents)
+            constituents = _stringToList(constituents)
             accessor +=  '.Where(lambda x: x.Constituent.Name in %s)'%constituents
 
         accessor += '.*ConstituentSources.*GenerationModel.%s'%parameter
         return accessor
 
-    def get_models(self,catchments=None,fus=None,constituents=None):
-        return self.get_param_values('GetType().FullName',catchments,fus,constituents)
-
-    def get_param_values(self,parameter,catchments=None,fus=None,constituents=None):
-        accessor = self._build_accessor(parameter,catchments,fus,constituents)
-        return self._ironpy.get(accessor,self._ns)
-
-    def set_param_values(self,parameter,values,catchments=None,fus=None,constituents=None,literal=False,fromList=False):
-        accessor = self._build_accessor(parameter,catchments,fus,constituents)
-
-        return self._ironpy.set(accessor,values,self._ns,literal,fromList)
-
-class VeneerSubcatchmentActions(object):
+class VeneerSubcatchmentActions(VeneerNetworkElementActions):
     def __init__(self,catchment):
         self._catchment = catchment
-        self._ironpy = catchment._ironpy
+        super(VeneerSubcatchmentActions,self).__init__(catchment._ironpy)
 
-    def _build_accessor(self,parameter=None,catchments=None):
+    def _build_accessor(self,parameter,**kwargs):
         accessor = 'scenario.Network.Catchments'
 
-        if not catchments is None:
-            catchments = self._ironpy._stringToList(fus)
+        if not kwargs.get('catchments') is None:
+            catchments = _stringToList(kwargs['catchments'])
             accessor += '.Where(lambda sc: sc.DisplayName in %s)'%catchments
 
         accessor += '.*CatchmentModels'
@@ -590,17 +664,81 @@ class VeneerSubcatchmentActions(object):
             accessor += '.*%s'%parameter
         return accessor
 
-    def get_param_values(self,parameter,catchments=None):
-        accessor = self._build_accessor(parameter,catchments)
-        return self._ironpy.get(accessor)
+#    def get_param_values(self,parameter,**kwargs):
+#        accessor = self._build_accessor(parameter,**kwargs)
+#        return self._ironpy.get(accessor)
 
-    def get_models(self,catchments=None):
-        return self.get_param_values('GetType().FullName',catchments)
+#    def get_models(self,**kwargs):
+#        return self.get_param_values('GetType().FullName',**kwargs)
 
     def add_model(self,model_type,add_if_existing=False,catchments=None,allow_duplicates=False):
-        accessor = self._build_accessor(catchments=catchments)
+        accessor = self._build_accessor(parameter=None,catchments=catchments)
         return self._ironpy.add_to_list(accessor,model_type,model_type,
                                         instantiate=True,allow_duplicates=allow_duplicates)
+
+class VeneerLinkActions(object):
+    def __init__(self,ironpython):
+        self._ironpy = ironpython
+        self.constituents = VeneerLinkConstituentActions(self)
+        self.routing = VeneerLinkRoutingActions(self)
+
+class VeneerLinkConstituentActions(VeneerNetworkElementActions):
+    def __init__(self,link):
+        self._link = link
+        super(VeneerLinkConstituentActions,self).__init__(link._ironpy)
+        self._ns = 'RiverSystem.Constituents.LinkElementConstituentData as LinkElementConstituentData'
+
+    def _build_accessor(self,parameter=None,links=None,constituents=None):
+        accessor = 'scenario.Network.ConstituentsManagement.Elements' + \
+                    '.OfType[LinkElementConstituentData]()'
+
+        if not links is None:
+            links = _stringToList(links)
+            accessor += '.Where(lambda lecd: lecd.Element.DisplayName in %s)'%links
+
+        accessor += '.*Data' + \
+                    '.ProcessingModels'
+
+        if not constituents is None:
+            constituents = _stringToList(constituents)
+            accessor += '.Where(lambda c: c.Constituent.Name in %s)'%constituents
+
+        accessor += '.*Model'
+
+        if not parameter is None:
+            accessor += '.%s'%parameter
+        return accessor
+
+class VeneerLinkRoutingActions(VeneerNetworkElementActions):
+    def __init__(self,link):
+        self._link = link
+        super(VeneerLinkRoutingActions,self).__init__(link._ironpy)
+
+    def _build_accessor(self,parameter=None,links=None):
+        accessor = 'scenario.Network.Links'
+        if not links is None:
+            links = _stringToList(links)
+            accessor += '.Where(lambda l:l.DisplayName in %s'%links
+        accessor += '.*FlowRouting'
+        return accessor
+
+#    def set_model(self,theThing,theValue,namespace=None,literal=False,fromList=False,instantiate=False):
+    def set_models(self,models,fromList=False,**kwargs):
+
+        models = _stringToList(models)
+        assignment = "theLink=%s%s\n"
+        assignment += "val = newVal"
+
+        post_assignment = "\n"
+        post_assignment += "is_sr = 'StorageRouting' in val.__name__\n"
+        post_assignment += "theLink.FlowRouting = val(theLink) if is_sr else val()"
+
+        accessor = self._build_accessor()[:-13]+'.*__init__.__self__'
+        namespace = self._instantiation_namespace(models)
+        return self._ironpy._assignment(accessor,models,namespace,literal=False,fromList=True,
+                                       instantiate=False,
+                                       assignment=assignment,
+                                       post_assignment=post_assignment)
 
 class SearchableList(object):
     def __init__(self,the_list,nested=[]):
@@ -652,6 +790,11 @@ class SearchableList(object):
         for key,fn in transforms.items():
             for r,e in zip(result,self):
                 r[key] = fn(e)
+
+        if len(result)==0: SearchableList([])
+        elif len(result[0])==1:
+            key = list(result[0].keys())[0]
+            return [r[key] for r in result]
 
         return SearchableList(result)
 
