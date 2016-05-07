@@ -10,6 +10,8 @@ import http.client as hc
 
 PRINT_URLS=True
 PRINT_ALL=False
+PRINT_SCRIPTS=False
+
 def name_time_series(result):
     return result['TimeSeriesName']
 
@@ -80,7 +82,7 @@ class Veneer(object):
         return self.send_json(url,data,'POST',async)
 
     def run_server_side_script(self,script,async=False):
-        #print(script)
+        if PRINT_SCRIPTS: print(script)
         result = self.post_json('/ironpython',{'Script':script},async=async)
         if async:
             return result
@@ -354,7 +356,6 @@ class VeneerIronPython(object):
             script += "result = %s\n"%theThing
 #       return script
 
-#        print(script)
         resp = self.run_script(script)
         if not resp['Exception'] is None:
             raise Exception(resp['Exception'])
@@ -394,7 +395,6 @@ class VeneerIronPython(object):
         script += self._generateLoop(theThing,innerLoop)
         script += 'result = have_succeeded\n'
 #       return script
-        if print_script: print(script)
 #        return None
         result = self.run_script(script)
         if not result['Exception'] is None:
