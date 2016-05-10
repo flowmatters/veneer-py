@@ -481,6 +481,11 @@ class VeneerIronPython(object):
             raise Exception(result['Exception'])
         return result
 
+    def get_constituents(self):
+        s = self._initScript()
+        s += 'result = scenario.SystemConfiguration.Constituents.Select(lambda c: c.Name)\n'
+        return self._safe_run(s)['Response']['Value']
+
     def add_constituent(self,new_constituent):
         s = self._initScript(namespace='RiverSystem.Constituents.Constituent as Constituent')
         s += 'scenario.Network.ConstituentsManagement.Config.ProcessConstituents = True\n' 
