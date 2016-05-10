@@ -648,7 +648,10 @@ class VeneerCatchmentGenerationActions(VeneerFunctionalUnitActions):
             constituents = _stringToList(constituents)
             accessor +=  '.Where(lambda x: x.Constituent.Name in %s)'%constituents
 
-        accessor += '.*ConstituentSources.*GenerationModel.%s'%parameter
+        accessor += '.*ConstituentSources.*GenerationModel'
+        if not parameter is None:
+            accessor += '.%s'%parameter
+
         return accessor
 
 class VeneerSubcatchmentActions(VeneerNetworkElementActions):
