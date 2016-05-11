@@ -833,7 +833,8 @@ def to_source_date(the_date):
 class VeneerRetriever(object):
     def __init__(self,destination,port=9876,host='localhost',protocol='http',
                  retrieve_daily=True,retreive_monthly=True,retrieve_annual=True,
-                 retrieve_slim_ts=True,print_all = False, print_urls = True):
+                 retrieve_slim_ts=True,retrieve_single_ts=True,
+                 print_all = False, print_urls = True):
         self.destination = destination
         self.port = port
         self.host = host
@@ -842,6 +843,7 @@ class VeneerRetriever(object):
         self.retreive_monthly = retreive_monthly
         self.retrieve_annual = retrieve_annual
         self.retrieve_slim_ts = retrieve_slim_ts
+        self.retrieve_single_ts = retrieve_single_ts
         self.print_all = print_all
         self.print_urls = print_urls
         self.base_url = "%s://%s:%d" % (protocol,host,port)
@@ -886,11 +888,15 @@ class VeneerRetriever(object):
         for run in run_list:
             run_results = self.retrieve_json(run['RunUrl'])
             ts_results = run_results['Results']
-            for result in ts_results:
-                self.retrieve_ts(result['TimeSeriesUrl'])
+            if self.retrieve_single_ts:
+                for result in ts_results:
+                    self.retrieve_ts(result['TimeSeriesUrl'])
 
             if self.retrieve_slim_ts:
                 self.retrieve_multi_ts(ts_results)
+
+        if self.retrieve_slim_ts and len(run_list):
+            self.retrieve_across_runs(ts_results)
 
     def retrieve_multi_ts(self,ts_results):
         recorders = list(set([(r['RecordingElement'],r['RecordingVariable']) for r in ts_results]))
@@ -902,6 +908,14 @@ class VeneerRetriever(object):
                     url = '/'.join(url)
                     self.retrieve_ts(url)
                     break
+
+    def retrieve_across_runs(self,results_set):
+        for option in results_set:
+            url = option['TimeSeriesUrl'].split('/')
+            url[2] = '__all__'
+            url = '/'.join(url)
+            self.retrieve_ts(url)
+            break
 
     def retrieve_ts(self,ts_url):
         if self.retrieve_daily:
