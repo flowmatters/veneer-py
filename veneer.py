@@ -189,8 +189,12 @@ class Veneer(object):
     def input_sets(self):
         return SearchableList(self.retrieve_json('/inputSets'))
 
+    def update_input_set(self,name,input_set):
+        return self.send_json('/inputSets/%s'%(name.replace(' ','%20')),method='PUT',data=input_set)
+
     def apply_input_set(self,name):
-        return self.send('/inputSets/%s/run'%(name.replace(' ','%20')),'POST')
+        return self.send('/inputSets/%s/run'%(name.replace('%','%25').replace(' ','%20')),'POST')
+
 
     def retrieve_multiple_time_series(self,run='latest',run_data=None,criteria={},timestep='daily',name_fn=name_element_variable):
         """
@@ -494,6 +498,7 @@ class VeneerIronPython(object):
         s += '  c=Constituent("%s")\n'%new_constituent
         s += '  theList.Add(c)\n'
         s += '  H.InitialiseModelsForConstituent(scenario,c)\n'
+        s += 'H.EnsureElementsHaveConstituentProviders(scenario)\n'
 #        s += 'nw = scenario.Network\n'
 #        s += 'nw.ConstituentsManagement.Reset(scenario.CurrentConfiguration.StartDate)\n'
         return self._safe_run(s)
@@ -728,6 +733,10 @@ class VeneerLinkRoutingActions(VeneerNetworkElementActions):
             links = _stringToList(links)
             accessor += '.Where(lambda l:l.DisplayName in %s'%links
         accessor += '.*FlowRouting'
+
+        if not parameter is None:
+            accessor += '.%s'%parameter
+
         return accessor
 
 #    def set_model(self,theThing,theValue,namespace=None,literal=False,fromList=False,instantiate=False):
@@ -834,6 +843,7 @@ class VeneerRetriever(object):
     def __init__(self,destination,port=9876,host='localhost',protocol='http',
                  retrieve_daily=True,retreive_monthly=True,retrieve_annual=True,
                  retrieve_slim_ts=True,retrieve_single_ts=True,
+                 retrieve_single_runs=True,retrieve_daily_for=[],
                  print_all = False, print_urls = True):
         self.destination = destination
         self.port = port
@@ -844,6 +854,8 @@ class VeneerRetriever(object):
         self.retrieve_annual = retrieve_annual
         self.retrieve_slim_ts = retrieve_slim_ts
         self.retrieve_single_ts = retrieve_single_ts
+        self.retrieve_single_runs = retrieve_single_runs
+        self.retrieve_daily_for = retrieve_daily_for
         self.print_all = print_all
         self.print_urls = print_urls
         self.base_url = "%s://%s:%d" % (protocol,host,port)
@@ -888,6 +900,10 @@ class VeneerRetriever(object):
         for run in run_list:
             run_results = self.retrieve_json(run['RunUrl'])
             ts_results = run_results['Results']
+
+            if not self.retrieve_single_runs:
+                continue
+
             if self.retrieve_single_ts:
                 for result in ts_results:
                     self.retrieve_ts(result['TimeSeriesUrl'])
@@ -896,14 +912,17 @@ class VeneerRetriever(object):
                 self.retrieve_multi_ts(ts_results)
 
         if self.retrieve_slim_ts and len(run_list):
+            self.retrieve_multi_ts(ts_results,run="__all__")
             self.retrieve_across_runs(ts_results)
 
-    def retrieve_multi_ts(self,ts_results):
+    def retrieve_multi_ts(self,ts_results,run=None):
         recorders = list(set([(r['RecordingElement'],r['RecordingVariable']) for r in ts_results]))
         for r in recorders:
             for option in ts_results:
                 if option['RecordingElement'] == r[0] and option['RecordingVariable'] == r[1]:
                     url = option['TimeSeriesUrl'].split('/')
+                    if not run is None:
+                        url[2] = run
                     url[4] = '__all__'
                     url = '/'.join(url)
                     self.retrieve_ts(url)
@@ -915,10 +934,33 @@ class VeneerRetriever(object):
             url[2] = '__all__'
             url = '/'.join(url)
             self.retrieve_ts(url)
-            break
+
+    def retrieve_this_daily(self,ts_url):
+        if self.retrieve_daily: return True
+
+        splits = ts_url.split('/')
+        run = splits[2]
+        loc = splits[4]
+        ele = splits[6]
+        var = splits[8]
+
+        for exception in self.retrieve_daily_for:
+            matched = True
+            for key,val in exception.items():
+                if key=='NetworkElement' and val!=loc: 
+                    matched=False;
+                    break
+                if key=='RecordingElement' and val!=ele:
+                    matched=False;
+                    break
+                if key=='RecordingVariable' and val!=var:
+                    matched=False;
+                    break
+            if matched: return True
+        return False
 
     def retrieve_ts(self,ts_url):
-        if self.retrieve_daily:
+        if self.retrieve_this_daily(ts_url):
             self.retrieve_json(ts_url)
         if self.retreive_monthly:
             self.retrieve_json(ts_url + "/aggregated/monthly")
