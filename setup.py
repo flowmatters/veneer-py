@@ -32,6 +32,7 @@ setup(
         name='veneer-py',
         version=version,
         description="Support for scripting eWater Source models through the Veneer (RESTful HTTP) plugin",
+        packages=["veneer"],
         long_description=read("README.md"),
         classifiers=filter(None, classifiers.split("\n")),
         keywords='hydrology ewater veneer scripting http rest',
