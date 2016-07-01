@@ -464,7 +464,7 @@ class VeneerIronPython(object):
         return self._assignment(theThing,theValue,ns,literal,from_list,False,assignment,post_assignment)
 
     def sourceScenarioOptions(self,optionType,option=None,newVal = None):
-        self.source_scenario_options(optionType,option,newVal)
+        return self.source_scenario_options(optionType,option,newVal)
 
     def source_scenario_options(self,optionType,option=None,newVal = None):
         script = self._initScript('RiverSystem.ScenarioConfiguration.%s as %s'%(optionType,optionType))
@@ -502,6 +502,18 @@ class VeneerIronPython(object):
 #        s += 'nw = scenario.Network\n'
 #        s += 'nw.ConstituentsManagement.Reset(scenario.CurrentConfiguration.StartDate)\n'
         return self._safe_run(s)
+
+    def running_configuration(self,new_value=None,return_all=False):
+        collection = 'scenario.RunManager.Configurations'
+        if new_value is None:
+            if return_all:
+                script = 'result = [conf.Name for conf in %s]'%collection
+            else:
+                script = 'result = scenario.RunManager.CurrentConfiguration.Name'
+        else:
+            script = 'scenario.RunManager.CurrentConfiguration = [conf for conf in %s if conf.Name.lower()=="%s".lower()][0]'
+            script = script%(collection,new_value)
+        return self._safe_run(script)
 
 class VeneerScriptGenerators(object):
     def __init__(self,ironpython):
