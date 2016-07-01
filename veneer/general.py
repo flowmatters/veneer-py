@@ -5,7 +5,6 @@ except:
 
 import json
 import http.client as hc
-
 # Source
 
 PRINT_URLS=True
@@ -210,7 +209,8 @@ class Veneer(object):
 
         timestep should be one of 'daily' (default), 'monthly', 'annual'
         """
-        from pandas import DataFrame
+        from pandas import DataFrame, datetime
+
         if timestep=="daily":
             suffix = ""
         else:
@@ -228,7 +228,7 @@ class Veneer(object):
         if len(retrieved) == 0:
             return DataFrame()
         else:
-            index = [event['Date'] for event in list(retrieved.values())[0]]
+            index = [datetime.strptime(event['Date'],'%m/%d/%Y %H:%M:%S') for event in list(retrieved.values())[0]]
             data = {k:[event['Value'] for event in result] for k,result in retrieved.items()}
             return DataFrame(data=data,index=index)
 
