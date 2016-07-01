@@ -592,7 +592,7 @@ class VeneerFunctionalUnitActions(VeneerNetworkElementActions):
 
         if not fus is None:
             fus = _stringToList(fus)
-            accessor += '.Where(lambda fu: fu.DisplayName in %s)'%fus
+            accessor += '.Where(lambda fu: fu.definition.Name in %s)'%fus
 
         if not parameter is None:
             accessor += '.*%s'%parameter
