@@ -3,6 +3,7 @@ from queue import Queue, Empty  # python 3.x
 from threading  import Thread
 import sys
 from time import sleep
+from glob import glob
 import atexit
 import os
 
@@ -39,10 +40,13 @@ def find_veneer_cmd_line_exe(project_fn=None,source_version=None):
 				print('Trying to go directly to %s'%direct_path)
 				if os.path.exists(direct_path):
 					return direct_path
-				version_in_many = os.path.join(MANY_VENEERS,version,VENEER_EXE_FN)
-				print('Trying for %s'%version_in_many)
-				if os.path.exists(version_in_many):
-					return version_in_many
+			
+			version_in_many = glob(os.path.join(MANY_VENEERS,'*'+version+'*'))
+			if len(version_in_many):
+				path_in_many = os.path.join(version_in_many[0],VENEER_EXE_FN)
+				print('Trying for %s'%path_in_many)
+				if os.path.exists(path_in_many):
+					return path_in_many
 	return VENEER_EXE
 
 def configure_non_blocking_io(processes,stream):
