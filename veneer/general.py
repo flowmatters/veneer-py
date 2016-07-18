@@ -1,10 +1,11 @@
 try:
     from urllib2 import urlopen, quote
 except:
-    from urllib.request import urlopen, quote
+    from urllib.request import urlopen, quote, Request
 
 import json
 import http.client as hc
+from . import utils
 # Source
 
 PRINT_URLS=True
@@ -65,6 +66,19 @@ class Veneer(object):
             print(json.loads(text))
             print("")
         return json.loads(text)
+
+    def retrieve_csv(self,url):
+        if PRINT_URLS:
+            print("*** %s ***" % (url))
+
+        req = Request(self.base_url + quote(url+self.data_ext),headers={"Accept":"text/csv"})
+        text = urlopen(req).read().decode('utf-8')
+        
+        result = utils.read_veneer_csv(text)
+        if PRINT_ALL:
+            print(result)
+            print("")
+        return result
 
     def update_json(self,url,data,async=False):
         return self.send_json(url,data,'PUT',async)
