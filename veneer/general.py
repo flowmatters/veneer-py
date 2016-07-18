@@ -870,6 +870,7 @@ class VeneerRetriever(object):
                  retrieve_daily=True,retreive_monthly=True,retrieve_annual=True,
                  retrieve_slim_ts=True,retrieve_single_ts=True,
                  retrieve_single_runs=True,retrieve_daily_for=[],
+                 retrieve_ts_json=True,retrieve_ts_csv=False,
                  print_all = False, print_urls = True):
         self.destination = destination
         self.port = port
@@ -882,6 +883,8 @@ class VeneerRetriever(object):
         self.retrieve_single_ts = retrieve_single_ts
         self.retrieve_single_runs = retrieve_single_runs
         self.retrieve_daily_for = retrieve_daily_for
+        self.retrieve_ts_json=retrieve_ts_json
+        self.retrieve_ts_csv=retrieve_ts_csv
         self.print_all = print_all
         self.print_urls = print_urls
         self.base_url = "%s://%s:%d" % (protocol,host,port)
@@ -913,13 +916,16 @@ class VeneerRetriever(object):
             print("")
         return json.loads(text)
     
+    def retrieve_csv(self,url):
+        text = self._veneer.retrieve_csv(url)
+        self.save_data(url[1:],bytes(text,'utf-8'),"csv")
+
     def retrieve_resource(self,url,ext):
         if self.print_urls:
             print("*** %s ***" % (url))
     
         self.save_data(url[1:],urlopen(self.base_url+quote(url)).read(),ext,mode="b")
-    
-    
+
     # Process Run list and results
     def retrieve_runs(self):
         run_list = self.retrieve_json("/runs")
@@ -986,12 +992,20 @@ class VeneerRetriever(object):
         return False
 
     def retrieve_ts(self,ts_url):
+        urls = []
+
         if self.retrieve_this_daily(ts_url):
-            self.retrieve_json(ts_url)
+            urls.append(ts_url)
         if self.retreive_monthly:
-            self.retrieve_json(ts_url + "/aggregated/monthly")
+            urls.append(ts_url + "/aggregated/monthly")
         if self.retrieve_annual:
-            self.retrieve_json(ts_url + "/aggregated/annual")
+            urls.append(ts_url + "/aggregated/annual")
+
+        for url in urls:
+            if self.retrieve_ts_json:
+                self.retrieve_json(url)
+            if self.retrieve_ts_csv:
+                self.retrieve_csv(url)
     
     def retrieve_variables(self):
         variables = self.retrieve_json("/variables")
