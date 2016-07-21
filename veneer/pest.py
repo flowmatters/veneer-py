@@ -13,13 +13,13 @@ from .manage import kill_all_on_exit
 
 dict = OrderedDict
 
-DEFAULT_PEST_DELIMITER='@'
+DEFAULT_PEST_DELIMITER='$'
 
 #
 PTF_SINGLE_THREADED_INSTRUCTION_PREFIX='v.'
 PTF_DATA_IO_INSTRUCTION_PREFIX='pd.'
 
-PTF_PREFIX='''ptf @
+PTF_PREFIX='''ptf $
 from veneer.pest_runtime import *
 from veneer import Veneer
 from veneer.stats import * 
@@ -53,7 +53,7 @@ write_outputs(pest_observations,'%s')
 write_outputs(pest_observations,'__outputs_to_keep.txt')
 '''
 
-PIF_PREFIX='pif @'
+PIF_PREFIX='pif $'
 
 PCF=Template('''pcf
 * control data
@@ -266,7 +266,7 @@ class CalibrationObservations(ConfigItemCollection):
 
 	def script(self):
 		def store_ts(instruction):
-			return "observed_ts.update(pd.%s.dropna().to_dict('series'))"%str(instruction)
+			return "observed_ts.update(pd.%s.dropna(how='all').to_dict('series'))"%str(instruction)
 
 		return self.data.script(store_ts) +'\n' + '\n'.join(self.instructions)
 
@@ -293,7 +293,7 @@ class CalibrationObservations(ConfigItemCollection):
 		self.instructions.append('print(mod_ts.columns)')
 		self.instructions.append('assert(len(mod_ts.columns==0))')
 		self.instructions.append('mod_ts = mod_ts[mod_ts.columns[0]]%s'%('' if mod_scale==1 else ('*%f'%mod_scale)))
-		self.instructions.append('obs_ts = observed_ts["%s"]'%ts_name)
+		self.instructions.append('obs_ts = observed_ts["%s"].dropna()'%ts_name)
 		if time_period is not None:
 			self.instructions.append('# Subset modelled and predicted')
 			self.instructions.append('date_format = "%%Y/%%m/%%d"')
