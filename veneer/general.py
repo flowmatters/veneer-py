@@ -929,9 +929,11 @@ class VeneerRetriever(object):
     # Process Run list and results
     def retrieve_runs(self):
         run_list = self.retrieve_json("/runs")
+        all_results = []
         for run in run_list:
             run_results = self.retrieve_json(run['RunUrl'])
             ts_results = run_results['Results']
+            all_results += ts_results
 
             if not self.retrieve_single_runs:
                 continue
@@ -944,27 +946,42 @@ class VeneerRetriever(object):
                 self.retrieve_multi_ts(ts_results)
 
         if self.retrieve_slim_ts and len(run_list):
-            self.retrieve_multi_ts(ts_results,run="__all__")
-            self.retrieve_across_runs(ts_results)
+            all_results = self.unique_results_across_runs(all_results)
+            self.retrieve_multi_ts(all_results,run="__all__")
+            self.retrieve_across_runs(all_results)
+
+    def unique_results_across_runs(self,all_results):
+        result = {}
+        for ts in all_results:
+            generic_url = self.translate_url(ts['TimeSeriesUrl'],run='__all__')
+            if not generic_url in result:
+                result[generic_url] = ts
+        return result.values()
+
+    def translate_url(self,orig,run=None,loc=None,elem=None,var=None):
+        url = orig.split('/')
+        if not run is None:
+            url[2] = run
+        if not loc is None:
+            url[4] = loc
+        if not elem is None:
+            url[6] = elem
+        if not var is None:
+            url[8] = var
+        return '/'.join(url)
 
     def retrieve_multi_ts(self,ts_results,run=None):
         recorders = list(set([(r['RecordingElement'],r['RecordingVariable']) for r in ts_results]))
         for r in recorders:
             for option in ts_results:
                 if option['RecordingElement'] == r[0] and option['RecordingVariable'] == r[1]:
-                    url = option['TimeSeriesUrl'].split('/')
-                    if not run is None:
-                        url[2] = run
-                    url[4] = '__all__'
-                    url = '/'.join(url)
+                    url = self.translate_url(option['TimeSeriesUrl'],run=run,loc='__all__')
                     self.retrieve_ts(url)
                     break
 
     def retrieve_across_runs(self,results_set):
         for option in results_set:
-            url = option['TimeSeriesUrl'].split('/')
-            url[2] = '__all__'
-            url = '/'.join(url)
+            url = self.translate_url(option['TimeSeriesUrl'],run='__all__')
             self.retrieve_ts(url)
 
     def retrieve_this_daily(self,ts_url):
