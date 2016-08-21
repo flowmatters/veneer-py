@@ -13,6 +13,9 @@ PRINT_ALL=False
 PRINT_SCRIPTS=False
 
 def name_time_series(result):
+    '''
+    Name the retrieved time series based on the full name of the time series (including variable and location)
+    '''
     return result['TimeSeriesName']
 
 def name_element_variable(result):
@@ -21,9 +24,19 @@ def name_element_variable(result):
     return '%s:%s'%(element,variable)
 
 def name_for_variable(result):
+    '''
+    Name the retrieved time series based on the variable only.
+
+    Useful when retrieving multiple time series from one network location.
+    '''
     return result['RecordingVariable']
 
 def name_for_location(result):
+    '''
+    Name the retrieved time series based on the network location only.
+
+    Useful when retrieving the same variable from multiple locations.
+    '''
     return result['NetworkElement']
 
 def _stringToList(string_or_list):
@@ -37,7 +50,21 @@ def log(text):
     sys.stdout.flush()
 
 class Veneer(object):
+    '''
+    Acts as a high level client to the Veneer web service within eWater Source.
+    '''
     def __init__(self,port=9876,host='localhost',protocol='http',prefix='',live=True):
+        '''
+        Instantiate a new Veneer client.
+
+        Parameters:
+
+        port, host, protocol: Connection information for running Veneer service (default 9876, localhost, http)
+
+        prefix: path prefix for all queries. Useful if Veneer is running behind some kind of proxy
+
+        live: Connecting to a live Veneer service or a statically served copy of the results? Default: True
+        '''
         self.port=port
         self.host=host
         self.protocol=protocol
@@ -50,13 +77,12 @@ class Veneer(object):
             self.data_ext='.json'
         self.model = VeneerIronPython(self)
 
-#   def retrieve_resource(self,url,ext):
-#       if PRINT_URLS:
-#           print("*** %s ***" % (url))
-#
-#       save_data(url[1:],urlopen(base_url+quote(url)).read(),ext,mode="b")
-
     def retrieve_json(self,url):
+        '''
+        Retrieve data from the Veneer service at the given url path.
+
+        url: Path to required resource, relative to the root of the Veneer service.
+        '''
         if PRINT_URLS:
             print("*** %s ***" % (url))
 
@@ -68,6 +94,13 @@ class Veneer(object):
         return json.loads(text)
 
     def retrieve_csv(self,url):
+        '''
+        Retrieve data from the Veneer service, at the given url path, in CSV format.
+
+        url: Path to required resource, relative to the root of the Veneer service.
+
+        NOTE: CSV responses are currently only available for time series results
+        '''
         if PRINT_URLS:
             print("*** %s ***" % (url))
 
@@ -81,6 +114,17 @@ class Veneer(object):
         return result
 
     def update_json(self,url,data,async=False):
+        '''
+        Issue a PUT request to the Veneer service to update the data held at url
+
+        url: Path to required resource, relative to the root of the Veneer service.
+
+        data: Data to update.
+
+        NOTE: This method will typically be used internally, by other Veneer methods.
+        Usually, you will want to call one of these other methods to update something specific.
+        For example, configure_recording to enable and disable time series recorders in the model.
+        '''
         return self.send_json(url,data,'PUT',async)
 
     def send_json(self,url,data,method,async=False):
@@ -109,6 +153,16 @@ class Veneer(object):
         return conn
 
     def run_server_side_script(self,script,async=False):
+        '''
+        Run an IronPython script within Source.
+
+        Requires Veneer to be running with 'Allow Scripts' option.
+
+        script: the full text of an IronPython script to execute from within Source.
+
+        NOTE: In many cases, it is possible (and desirable) to call helper methods within Veneer.model,
+        rather than write your own IronPython script.
+        '''
         if PRINT_SCRIPTS: print(script)
         result = self.post_json('/ironpython',{'Script':script},async=async)
         if async:
@@ -119,6 +173,32 @@ class Veneer(object):
         return data
 
     def configure_recording(self,enable=[],disable=[]):
+        '''
+        Enabled and disable time series recording in the Source model.
+
+        enable: List of time series selectors to enable,
+
+        disable: List of time series selectors to disable
+
+        Note: Each time series selector is a python dictionary object with up to three keys:
+          * NetworkElement
+          * RecordingElement
+          * RecordingVariable
+
+        These are used to match time series available from the Source model. A given selector may match
+        multiple time series. For example, a selector of {'RecordingVariable':'Downstream Flow Volume'} 
+        will match Downstream Flow Volume from all nodes and links.
+
+        Any empty dictionary {} will match ALL time series in the model.
+
+        So, for example, you could disable ALL recording in the model with
+    
+        v = Veneer()
+        v.configure_recording(disable=[{}])
+
+        Note, the time series selectors in enable and disable may both match the same time series in some cases. 
+        In this case, the 'enable' will take effect.
+        '''
         def get_many(src,keys,default):
             return [src.get(k,default) for k in keys]
 
@@ -134,6 +214,22 @@ class Veneer(object):
         self.update_json('/recorders',modifier)
 
     def run_model(self,params={},start=None,end=None,async=False):
+        '''
+        Trigger a run of the Source model
+
+        params: Python dictionary of parameters to pass to Source. Should match the parameters expected
+                of the running configuration. (If you just want to set the start and end date of the simulation,
+                use the start and end parameters
+
+        start, end: The start and end date of the simulation. Should be provided as Date objects or as text in the dd/mm/yyyy format
+
+        async: (default False). If True, the method will return immediately rather than waiting for the simulation to finish.
+               Useful for triggering parallel runs. Method will return a connection object that can then be queried to know
+               when the run has finished.
+
+        In the default behaviour (async=False), this method will return once the Source simulation has finished, and will return
+        the URL of the results set in the Veneer service
+        '''
         conn = hc.HTTPConnection(self.host,port=self.port)
 
         if not start is None:
@@ -156,6 +252,11 @@ class Veneer(object):
             return code,resp.read().decode('utf-8')
 
     def drop_run(self,run='latest'):
+        '''
+        Tell Source to drop/delete a specific set of results from memory.
+
+        run: Run number to delete. Default ='latest'. Valid values are 'latest' and integers from 1
+        '''
         assert self.live_source
         conn = hc.HTTPConnection(self.host,port=self.port)
         conn.request('DELETE','/runs/%s'%str(run))
@@ -164,13 +265,28 @@ class Veneer(object):
         return code
 
     def drop_all_runs(self):
+        '''
+        Tell Source to drop/delete ALL current run results from memory
+        '''
         while len(self.retrieve_runs())>0:
             self.drop_run()
 
     def retrieve_runs(self):
+        '''
+        Retrieve the list of available runs.
+
+        Individual runs can be used with retrieve_run to retrieve a summary of results
+        '''
         return self.retrieve_json('/runs')
 
     def retrieve_run(self,run='latest'):
+        '''
+        Retrieve a results summary for a particular run.
+
+        This will include references to all of the time series results available for the run.
+
+        run: Run to retrieve. Either 'latest' (default) or an integer run number from 1
+        '''
         if run=='latest' and not self.live_source:
             all_runs = self.retrieve_json('/runs')
             result = self.retrieve_json(all_runs[-1]['RunUrl'])
@@ -180,14 +296,35 @@ class Veneer(object):
         return result
 
     def network(self):
+        '''
+        Retrieve the network from Veneer.
+
+        The result will be a Python dictionary in GeoJSON conventions.
+
+        The 'features' key of the returned dictionary will be a SearchableList, suitable for querying for
+        different properties - eg to filter out just nodes, or links, or catchments.
+
+        Example: Find all the node names in the current Source model
+
+        v = Veneer()
+        network = v.network()
+        nodes = network['features'].find_by_feature_type('node')
+        node_names = nodes._unique_values('name')
+        '''
         result = self.retrieve_json('/network')
         result['features'] = SearchableList(result['features'],['geometry','properties'])
         return result
 
     def functions(self):
+        '''
+        Return a SearchableList of the functions in the Source model.
+        '''
         return SearchableList(self.retrieve_json('/functions'))
 
-    def variables(self):       
+    def variables(self):
+        '''
+        Return a SearchableList of the function variables in the Source model
+        '''
         return SearchableList(self.retrieve_json('/variables'))
 
     def result_matches_criteria(self,result,criteria):
@@ -200,12 +337,26 @@ class Veneer(object):
         return True
 
     def input_sets(self):
+        '''
+        Return a SearchableList of the input sets in the Source model
+
+        Each input set will be a Python dictionary representing the different information in the input set
+        '''
         return SearchableList(self.retrieve_json('/inputSets'))
 
     def update_input_set(self,name,input_set):
+        '''
+        Modify the input set and send to Source.
+
+        input_set: A Python dictionary representing the updated input set. Should contain the same fields as the input set
+                   returned from the input_sets method.
+        '''
         return self.send_json('/inputSets/%s'%(name.replace(' ','%20')),method='PUT',data=input_set)
 
     def apply_input_set(self,name):
+        '''
+        Have Source apply a given input set
+        '''
         return self.send('/inputSets/%s/run'%(name.replace('%','%25').replace(' ','%20')),'POST')
 
 
@@ -252,6 +403,15 @@ class VeneerIronPython(object):
 
     These features rely on 'Allow Scripting' being enabled in Veneer in order to
     post custom IronPython scripts to Source.
+
+    Specific helpers for querying and modifying the catchment components and instream components exist under
+    .catchment and .link, respectively.
+
+    eg
+
+    v = Veneer()
+    v.model.catchment?
+    v.model.link?
     """
     def __init__(self,veneer):
         self._veneer = veneer
@@ -342,6 +502,13 @@ class VeneerIronPython(object):
         return script
 
     def find_model_type(self,model_type):
+        '''
+        Search for model types matching a given string pattern
+
+        eg
+
+        v.model.find_model_type('emc')
+        '''
         script = self._initScript('TIME.Management.Finder as Finder')
         script += 'import TIME.Core.Model as Model\n'
         script += 'f = Finder(Model)\n'
@@ -518,6 +685,18 @@ class VeneerIronPython(object):
         return self._safe_run(s)
 
     def running_configuration(self,new_value=None,return_all=False):
+        '''
+        Set or get the current running configuration for the Source model (eg Single Simulation), or
+        get a list of all available running configurations
+
+        eg:
+
+        current = v.model.running_configuration()
+
+        v.model.running_configuration('Single Simulation')
+
+        all_available = v.model.running_configuration(return_all=True)
+        '''
         collection = 'scenario.RunManager.Configurations'
         if new_value is None:
             if return_all:
@@ -572,16 +751,28 @@ class VeneerNetworkElementActions(object):
         return ns
 
     def get_models(self,**kwargs):
+        '''
+        Return the models used in a particular context
+        '''
         return self.get_param_values('GetType().FullName',**kwargs)
 
     def get_param_values(self,parameter,**kwargs):
+        '''
+        Return the values of a particular parameter used in a particular context
+        '''
         accessor = self._build_accessor(parameter,**kwargs)
         return self._ironpy.get(accessor,kwargs.get('namespace',self._ns))
 
     def set_models(self,models,fromList=False,**kwargs):
+        '''
+        Assign computation models.
+        '''
         return self.set_param_values(None,models,fromList=fromList,instantiate=True,**kwargs)
 
     def set_param_values(self,parameter,values,literal=False,fromList=False,instantiate=False,**kwargs):
+        '''
+        Set the values of a particular parameter used in a particular context
+        '''
         accessor = self._build_accessor(parameter,**kwargs)
         ns = self._ns
         if instantiate:
@@ -614,6 +805,15 @@ class VeneerFunctionalUnitActions(VeneerNetworkElementActions):
         return accessor
 
 class VeneerCatchmentActions(VeneerFunctionalUnitActions):
+    '''
+    Helpers for querying/modifying the catchment model setup
+
+    Specific helpers exist under:
+
+    * .runoff       (rainfall runoff in functional units)
+    * .generation   (constituent generation in functional units)
+    * .subcatchment (subcatchment level models)
+    '''
     def __init__(self,ironpython):
         self._ironpy = ironpython
         self.runoff = VeneerRunoffActions(self)
@@ -625,15 +825,41 @@ class VeneerCatchmentActions(VeneerFunctionalUnitActions):
         return self._ironpy.get('scenario.Network.Catchments.*characteristics.areaInSquareMeters')
 
     def get_functional_unit_areas(self,catchments=None,fus=None):
+        '''
+        Return the area of each functional unit in each catchment:
+
+        Parameters:
+
+        catchments: Restrict to particular catchments by passing a list of catchment names
+
+        fus: Restrict to particular functional unit types by passing a list of FU names
+        '''
         return self.get_param_values('areaInSquareMeters',catchments=catchments,fus=fus)
 
     def set_functional_unit_areas(self,values,catchments=None,fus=None):
+        '''
+        Set the area of each functional unit in each catchment:
+
+        Parameters:
+
+        values: List of functional unit areas to apply.
+
+        catchments: Restrict to particular catchments by passing a list of catchment names
+
+        fus: Restrict to particular functional unit types by passing a list of FU names
+        '''
         return self.set_param_values('areaInSquareMeters',values,fromList=True,catchments=catchments,fus=fus)
 
     def get_functional_unit_types(self,catchments=None,fus=None):
+        '''
+        Return a list of all functional unit types in the model
+        '''
         return self.get_param_values('definition.Name')
 
 class VeneerRunoffActions(VeneerFunctionalUnitActions):
+    '''
+    Helpers for querying/modifying the rainfall runoff model setup
+    '''
     def __init__(self,catchment):
         super(VeneerRunoffActions,self).__init__(catchment)
 
@@ -654,6 +880,9 @@ class VeneerRunoffActions(VeneerFunctionalUnitActions):
 
     def assign_time_series(self,parameter,values,data_group,column=0,
                            catchments=None,fus=None,literal=True,fromList=False):
+        '''
+        Assign an input time series to a rainfall runoff input
+        '''
         accessor = self._build_accessor(parameter,catchments,fus)
         return self._ironpy.assign_time_series(accessor,values,from_list=fromList,
                                                literal=literal,column=column,
@@ -784,6 +1013,28 @@ class VeneerLinkRoutingActions(VeneerNetworkElementActions):
                                        post_assignment=post_assignment)
 
 class SearchableList(object):
+    '''
+    SearchableList of objects
+
+    Use
+      * find_by_X(Y) to find all entries in the list where property X is equal to Y
+      * group_by_X() to return a Python dictionary with keys being the unique values of property X and entries
+                     being a list of original list entries with matching X values
+      * _unique_values(X) return a set of unique values of property X
+      * _all_values(X) return a list of all values of property X (a simple select)
+      * _select(['X','Y']) to select particular properties
+    For example:
+
+    v = Veneer()
+    network = v.network()
+    the_list = network['features']  # A searchable list of network features
+    links = the_list.find_by_feature_type('link')   # All features have a 'feature_type' property
+
+    grouped = the_list.group_by_feature_type()
+    grouped['link'] is a list of links
+    grouped['node'] is a list of nodes
+    grouped['catchment'] is a list of catchments
+    '''
     def __init__(self,the_list,nested=[]):
         self._list = the_list
         self._nested = nested
@@ -866,6 +1117,11 @@ def to_source_date(the_date):
     return the_date
 
 class VeneerRetriever(object):
+    '''
+    Retrieve all information from a Veneer web service and write it out to disk in the same path structure.
+
+    Typically used for creating/archiving static dashboards from an existing Veneer web application.
+    '''
     def __init__(self,destination,port=9876,host='localhost',protocol='http',
                  retrieve_daily=True,retreive_monthly=True,retrieve_annual=True,
                  retrieve_slim_ts=True,retrieve_single_ts=True,
