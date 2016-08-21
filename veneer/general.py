@@ -1164,7 +1164,12 @@ class VeneerRetriever(object):
         if self.print_urls:
             print("*** %s ***" % (url))
     
-        text = urlopen(self.base_url + quote(url)).read().decode('utf-8')
+        try:
+            text = urlopen(self.base_url + quote(url)).read().decode('utf-8')
+        except:
+            log("Couldn't retrieve %s"%url)
+            return None
+
         self.save_data(url[1:],bytes(text,'utf-8'),"json")
     
         if self.print_all:
