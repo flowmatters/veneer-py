@@ -7,7 +7,7 @@ You'll need Python 3, a compatible version of eWater Source along with the [Vene
 
 I expect most users of veneer-py will install [Anaconda Python](https://www.continuum.io/downloads). Anaconda will provide most of the analytics libraries you're likely to want, along with the Jupyter Notebook system.
 
-Instructions for installing Veneer can be found on [its homepage](https://github.com/flowmatters/veneer). Download  the most [Veneer release](https://github.com/flowmatters/Veneer/releases) that is compatible with your version of eWater Source. Note that certain veneer-py features may not work with older versions of Source/Veneer.
+Instructions for installing Veneer can be found on [its homepage](https://github.com/flowmatters/veneer). Download  the most recent [Veneer release](https://github.com/flowmatters/Veneer/releases) that is compatible with your version of eWater Source. Note that certain veneer-py features may not work with older versions of Source/Veneer.
 
 veneer-py can be installed using `pip` from an Anaconda command prompt:
 
