@@ -36,7 +36,7 @@ python setup.py develop
 2. Start Source, load a project and then start the Veneer service from within Source.
 3. Within Python (eg within a notebook), initialise a Veneer client object and run a query. For example
 
-```
+```python
 from veneer import Veneer
 v = Veneer()    # uses default port number of 9876
 # Alternatively, for a different port
