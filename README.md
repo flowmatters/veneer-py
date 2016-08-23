@@ -24,7 +24,7 @@ pip uninstall veneer-py
 pip install https://github.com/flowmatters/veneer-py/archive/master.zip
 ```
 
-Alternatively, clone the git repository and to a develop install
+Alternatively, clone the git repository and do a develop install to allow you to easily modify the veneer-py code as you use it.
 
 ```
 python setup.py develop
