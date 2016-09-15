@@ -430,10 +430,18 @@ class VeneerIronPython(object):
         script += "clr.ImportExtensions(System.Linq)\n"
         return script
 
+    def clean_script(self,script):
+        indent = len(script)-len(script.lstrip())
+        if indent>0:
+            lines = [l[(indent-1):] for l in script.splitlines()]
+            return '\n'.join(lines)
+        return script
+
     def runScript(self,script,async=False):
         return self.run_script(script,async)
 
     def run_script(self,script,async=False):
+        script = self.clean_script(script)
         return self._veneer.run_server_side_script(script,async)
 
     def sourceHelp(self,theThing='scenario',namespace=None):
@@ -706,6 +714,31 @@ class VeneerIronPython(object):
         else:
             script = 'scenario.RunManager.CurrentConfiguration = [conf for conf in %s if conf.Name.lower()=="%s".lower()][0]'
             script = script%(collection,new_value)
+        return self._safe_run(script)
+
+    def save(self,fn=None):
+        if fn:
+            fn = "'%s'"%fn
+        else:
+            fn = 'ph.ProjectMetaStructure.OutputFile'
+        script = '''
+                 from RiverSystem.ApplicationLayer.Consumers import DefaultCallback
+                 from RiverSystem.ApplicationLayer.Creation import ProjectHandlerFactory
+                 from RiverSystem import RiverSystemProject
+
+                 ph = project_handler
+                 cb = DefaultCallback()
+                 cb.OutputFileName=%s
+                 saved_cb = ph.CallBackHandler
+                 try:
+                     ph.CallBackHandler = cb
+                     ph.ProjectMetaStructure.Project = scenario.Project
+                     ph.ProjectMetaStructure.OutputFile = ''
+                     ph.ProjectMetaStructure.SaveProjectToFile = True
+                     ph.SaveProject()
+                 finally:
+                     ph.CallBackHandler = saved_cb
+                 '''%fn
         return self._safe_run(script)
 
 class VeneerScriptGenerators(object):
