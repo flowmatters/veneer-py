@@ -411,6 +411,11 @@ class VeneerNetworkElementActions(object):
             ns += ','+self._ns
         return ns
 
+    def help(self,param=None,**kwargs):
+        if not param:
+            param = '__init__.__self__'
+        return self._ironpy.sourceHelp(self._build_accessor(param,**kwargs))
+
     def get_models(self,**kwargs):
         '''
         Return the models used in a particular context
