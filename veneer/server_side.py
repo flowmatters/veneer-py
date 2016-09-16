@@ -196,6 +196,32 @@ class VeneerIronPython(object):
             return [d['Value'] for d in data]
         return data
 
+    def get_data_sources(self,theThing,namespace=None):
+        '''
+        Get references (Veneer URLs) to the 
+        '''
+        script = self._initScript(namespace)
+        script += ''
+        listQuery = theThing.find(".*") != -1
+        if listQuery:
+            script += 'result = []\n'
+            innerLoop = "ignoreExceptions=False\n"
+            innerLoop += 'result.append(H.FindDataSource(scenario,%s__init__.__self__,"%s"))'
+            script += self._generateLoop(theThing,innerLoop)
+        else:
+            obj = '.'.join(theThing.split('.')[0:-1])
+            prop = theThing.split('.')[-1]
+            script += "result = H.FindDataSourcer(%s,%s)\n"%(obj,prop)
+#       return script
+
+        resp = self.run_script(script)
+        if not resp['Exception'] is None:
+            raise Exception(resp['Exception'])
+        data = resp['Response']['Value']
+        if listQuery:
+            return [d['Value'] for d in data]
+        return data
+
     def _assignment(self,theThing,theValue,namespace=None,literal=False,
                     fromList=False,instantiate=False,
                     assignment="",post_assignment="",
@@ -415,6 +441,13 @@ class VeneerNetworkElementActions(object):
             ns = self._instantiation_namespace(values)
             fromList = True
         return self._ironpy.set(accessor,values,ns,literal=literal,fromList=fromList,instantiate=instantiate)
+
+    def get_data_sources(self,parameter,**kwargs):
+        '''
+        Return pointers (veneer URLs) to the data sources used as input to a particular parameter
+        '''
+        accessor = self._build_accessor(parameter,**kwargs)
+        return self._ironpy.get_data_sources(accessor,kwargs.get('namespace',self._ns))
 
 class VeneerFunctionalUnitActions(VeneerNetworkElementActions):
     def __init__(self,catchment):

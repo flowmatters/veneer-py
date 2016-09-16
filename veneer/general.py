@@ -346,7 +346,10 @@ class Veneer(object):
 
         Note: Will include the each time series associated with the data source IN FULL
         '''
-        result = self.retrieve_json('/dataSources/'+name)
+        prefix = '/dataSources/'
+        if not name.startswith(prefix):
+            name = prefix+name
+        result = self.retrieve_json(name)
 
         def _transform_details(details):
             data_dict = {d['Name']:d['TimeSeries']['Events'] for d in details}
@@ -357,6 +360,20 @@ class Veneer(object):
             return item
 
         result['Items'] = [_transform_data_source_item(i) for i in result['Items']]
+        return result
+
+    def data_source_item(self,source,name=None,input_set='__all__'):        
+        if name:
+            source = '/'.join([source,input_set,name])
+
+        prefix = '/dataSources/'
+        if not source.startswith(prefix):
+            source = prefix+source
+        result = self.retrieve_json(source)
+
+        if 'TimeSeries' in result:
+            import pandas as pd
+            return pd.DataFrame(result['TimeSeries']['Events']).set_index('Date').rename({'Value':result['Name']})
         return result
 
     def result_matches_criteria(self,result,criteria):
