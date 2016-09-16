@@ -328,6 +328,35 @@ class Veneer(object):
         '''
         return SearchableList(self.retrieve_json('/variables'))
 
+    def data_sources(self):
+        '''
+        Return a SearchableList of the data sources in the Source model
+
+        Note: Returns a summary (min,max,mean,etc) of individual time series - NOT the full record.
+
+        You can get the time series by retrieving individual data sources (`data_source` method)
+        '''
+        return SearchableList(self.retrieve_json('/dataSources'))
+
+    def data_source(self,name):
+        '''
+        Return an individual data source, by name.
+
+        Note: Will include the each time series associated with the data source IN FULL
+        '''
+        result = self.retrieve_json('/dataSources/'+name)
+
+        def _transform_details(details):
+            data_dict = {d['Name']:d['TimeSeries']['Events'] for d in details}
+            return self._create_timeseries_dataframe(data_dict,common_index=False)
+
+        def _transform_data_source_item(item):
+            item['Details'] = _transform_details(item['Details'])
+            return item
+
+        result['Items'] = [_transform_data_source_item(i) for i in result['Items']]
+        return result
+
     def result_matches_criteria(self,result,criteria):
         import re
 #        MATCH_ALL='__all__'
@@ -375,8 +404,6 @@ class Veneer(object):
 
         timestep should be one of 'daily' (default), 'monthly', 'annual'
         """
-        from pandas import DataFrame, datetime
-
         if timestep=="daily":
             suffix = ""
         else:
@@ -391,12 +418,27 @@ class Veneer(object):
             if self.result_matches_criteria(result,criteria):
                 retrieved[name_fn(result)] = self.retrieve_json(result['TimeSeriesUrl']+suffix)['Events']
 
-        if len(retrieved) == 0:
+        return self._create_timeseries_dataframe(retrieved)
+
+    def parse_veneer_date(self,txt):
+        from pandas import datetime
+        return datetime.strptime(txt,'%m/%d/%Y %H:%M:%S')
+
+    def convert_dates(self,events):
+        return [{'Date':self.parse_veneer_date(e['Date']),'Value':e['Value']} for e in events]
+
+    def _create_timeseries_dataframe(self,data_dict,common_index=True):
+        from pandas import DataFrame
+        if len(data_dict) == 0:
             return DataFrame()
-        else:
-            index = [datetime.strptime(event['Date'],'%m/%d/%Y %H:%M:%S') for event in list(retrieved.values())[0]]
-            data = {k:[event['Value'] for event in result] for k,result in retrieved.items()}
+        elif common_index:
+            index = [self.parse_veneer_date(event['Date']) for event in list(data_dict.values())[0]]
+            data = {k:[event['Value'] for event in result] for k,result in data_dict.items()}
             return DataFrame(data=data,index=index)
+        else:
+            from functools import reduce
+            dataFrames = [DataFrame(self.convert_dates(ts)).set_index('Date').rename(columns={'Value':k}) for k,ts in data_dict.items()]
+            return reduce(lambda l,r: l.join(r,how='outer'),dataFrames)
 
 class VeneerIronPython(object):
     """
