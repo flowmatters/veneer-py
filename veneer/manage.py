@@ -81,37 +81,45 @@ def start(project_fn,n_instances=1,ports=9876,debug=False,veneer_exe=None):
 	actual_ports = ports[:]
 	while not (all_ready or any_failed):
 		for i in range(n_instances):
-			try:
-				line = std_err_queues[i].get_nowait().decode('utf-8')
-			except Empty:
-				pass
-			else:
-				print('ERROR[%d] %s'%(i,line))
+			end=False
+			while not end:
+				try:
+					line = std_err_queues[i].get_nowait().decode('utf-8')
+				except Empty:
+					end = True
+					pass
+				else:
+					print('ERROR[%d] %s'%(i,line))
 
 			if ready[i]:
 				continue
 
-			try:
-				line = std_out_queues[i].get_nowait().decode('utf-8')
-			except Empty:
-				sleep(0.05)
-#				print('.')
-#				sys.stdout.flush()
-			else:
-				if line.startswith('Started Source RESTful Service on port'):
-					actual_ports[i] = int(line.split(':')[-1])
+			end = False
+			while not end:
+				try:
+					line = std_out_queues[i].get_nowait().decode('utf-8')
+				except Empty:
+					end = True
+					sleep(0.05)
+	#				print('.')
+	#				sys.stdout.flush()
+				else:
+					if line.startswith('Started Source RESTful Service on port'):
+						actual_ports[i] = int(line.split(':')[-1])
 
-				if line.startswith('Server started. Ctrl-C to exit'):
-					ready[i] = True
-					print('Server %d on port %d is ready'%(i,ports[i]))
-					sys.stdout.flush()
-				elif line.startswith('Cannot find project') or line.startswith('Unhandled exception'):
-					failed[i] = True
-					print('Server %d on port %d failed to start'%(i,ports[i]))
-					sys.stdout.flush()
-				if debug and not line.startswith('Unable to delete'):
-					print("[%d] %s"%(i,line))
-					sys.stdout.flush()
+					if line.startswith('Server started. Ctrl-C to exit'):
+						ready[i] = True
+						end = True
+						print('Server %d on port %d is ready'%(i,ports[i]))
+						sys.stdout.flush()
+					elif line.startswith('Cannot find project') or line.startswith('Unhandled exception'):
+						end = True
+						failed[i] = True
+						print('Server %d on port %d failed to start'%(i,ports[i]))
+						sys.stdout.flush()
+					if debug and not line.startswith('Unable to delete'):
+						print("[%d] %s"%(i,line))
+						sys.stdout.flush()
 		all_ready = len([r for r in ready if not r])==0
 		any_failed = len([f for f in failed if f])>0
 
