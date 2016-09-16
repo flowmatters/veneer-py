@@ -10,6 +10,7 @@ from .bulk import VeneerRetriever
 from .server_side import VeneerIronPython
 from .utils import SearchableList
 # Source
+from . import extensions
 
 PRINT_URLS=True
 PRINT_ALL=False
@@ -314,8 +315,9 @@ class Veneer(object):
         nodes = network['features'].find_by_feature_type('node')
         node_names = nodes._unique_values('name')
         '''
-        result = self.retrieve_json('/network')
+        result = utils.objdict(self.retrieve_json('/network'))
         result['features'] = SearchableList(result['features'],['geometry','properties'])
+        extensions.add_network_methods(result)
         return result
 
     def functions(self):
