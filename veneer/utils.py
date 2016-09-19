@@ -1,13 +1,14 @@
 
+try:
+    from collections import UserDict
+except ImportError:
+    from UserDict import UserDict
+
 
 def read_veneer_csv(text):
     return text
 
 def objdict(orig):
-    try:
-        from collections import UserDict
-    except ImportError:
-        from UserDict import UserDict
     return UserDict(orig)
 
 #class objdict(dict):
@@ -29,6 +30,14 @@ def objdict(orig):
 #            del self[name]
 #        else:
 #            raise AttributeError("No such attribute: " + name)
+
+class GroupedDictionary(UserDict):
+    def __init__(self,initial={}):
+        super(GroupedDictionary,self).__init__()
+        self.update(initial)
+
+    def count(self):
+        return {k:len(self[k]) for k in self}
 
 class SearchableList(object):
     '''
@@ -134,5 +143,5 @@ class SearchableList(object):
         GROUP_PREFIX='group_by_'
         if name.startswith(GROUP_PREFIX):
             field_name = name[len(GROUP_PREFIX):]
-            return lambda: {k:self.__getattr__(FIND_PREFIX+field_name)(k) for k in self._unique_values(field_name)}
+            return lambda: GroupedDictionary({k:self.__getattr__(FIND_PREFIX+field_name)(k) for k in self._unique_values(field_name)})
         raise AttributeError(name + ' not allowed')
