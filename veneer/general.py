@@ -8,7 +8,7 @@ import http.client as hc
 from . import utils
 from .bulk import VeneerRetriever
 from .server_side import VeneerIronPython
-from .utils import SearchableList
+from .utils import SearchableList,_stringToList
 # Source
 from . import extensions
 
@@ -43,10 +43,6 @@ def name_for_location(result):
     '''
     return result['NetworkElement']
 
-def _stringToList(string_or_list):
-    if isinstance(string_or_list,str):
-        return [string_or_list]
-    return string_or_list
 
 def log(text):
     import sys

@@ -1,4 +1,6 @@
 
+from .utils import _stringToList
+
 class VeneerIronPython(object):
     """
     Helper functions for manipulating the internals of the Source model itself.

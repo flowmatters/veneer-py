@@ -11,6 +11,7 @@ def read_veneer_csv(text):
 def objdict(orig):
     return UserDict(orig)
 
+
 #class objdict(dict):
 #    def __init__(self,initial={}):
 #        for k,v in initial.items():
@@ -145,3 +146,8 @@ class SearchableList(object):
             field_name = name[len(GROUP_PREFIX):]
             return lambda: GroupedDictionary({k:self.__getattr__(FIND_PREFIX+field_name)(k) for k in self._unique_values(field_name)})
         raise AttributeError(name + ' not allowed')
+
+def _stringToList(string_or_list):
+    if isinstance(string_or_list,str):
+        return [string_or_list]
+    return string_or_list
