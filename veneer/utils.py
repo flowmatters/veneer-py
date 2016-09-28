@@ -98,6 +98,8 @@ class SearchableList(object):
             return entry>test
         if op=='<=':
             return entry<=test
+        if op=='LIKE':
+            return entry.find(test)>=0
         raise Exception('Unknown operation')
 
     def _search_all(self,key,val,entry,op):
@@ -145,7 +147,13 @@ class SearchableList(object):
         if name.startswith(GROUP_PREFIX):
             field_name = name[len(GROUP_PREFIX):]
             return lambda: GroupedDictionary({k:self.__getattr__(FIND_PREFIX+field_name)(k) for k in self._unique_values(field_name)})
+
+        LIKE_SUFFIX='_like'
+        if name.endswith(LIKE_SUFFIX):
+            field_name = name[0:-len(LIKE_SUFFIX)]
+            return lambda x: SearchableList(list(filter(lambda y: self._search_all(field_name,x,y,'LIKE'),self._list)),self._nested)
         raise AttributeError(name + ' not allowed')
+
 
 def _stringToList(string_or_list):
     if isinstance(string_or_list,str):
