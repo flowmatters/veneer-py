@@ -23,6 +23,7 @@ class VeneerIronPython(object):
         self._generator = VeneerScriptGenerators(self)
         self.catchment = VeneerCatchmentActions(self)
         self.link = VeneerLinkActions(self)
+        self.node = VeneerNodeActions(self)
 
     def _initScript(self,namespace=None):
         script = "# Generated Script\n"
@@ -375,14 +376,18 @@ class VeneerScriptGenerators(object):
     def __init__(self,ironpython):
         self._ironpy = ironpython
 
-    def find_feature_by_name(self,name):
+    def find_feature_by_name(self):
         script = self._ironpy._initScript()
-        script += "def find_feature_by_name(searchTerm):\n"
+        script += "def find_feature_by_name(searchTerm,exact=False):\n"
         script += "  for n in scenario.Network.Nodes:\n"
-        script += "    if n.Name.startswith(searchTerm):\n"
+        script += "    if n.Name == searchTerm:\n"
+        script += "      return n\n"
+        script += "    if not exact and n.Name.startswith(searchTerm):\n"
         script += "      return n\n"
         script += "  for l in scenario.Network.Links:\n"
-        script += "    if l.Name.startswith(searchTerm):\n"
+        script += "    if l.Name == searchTerm:\n"
+        script += "      return l\n"
+        script += "    if not exact and l.Name.startswith(searchTerm):\n"
         script += "      return l\n"
         script += "  return None\n\n"
         return script
@@ -393,7 +398,7 @@ class VeneerSourceUIHelpers(object):
 
     def open_editor(self,name_of_element):
         script = self._ironpy._initScript(namespace="RiverSystem.Controls.Controllers.FeatureEditorController as FeatureEditorController")
-        script += self._ironpy._generator.find_feature_by_name(name_of_element)
+        script += self._ironpy._generator.find_feature_by_name()
         script += "f = find_feature_by_name('%s')\n"%name_of_element
         script += "if not f is None:\n"
         script += "  ctrl = FeatureEditorController(f)\n"
@@ -625,6 +630,16 @@ class VeneerLinkActions(object):
         self.constituents = VeneerLinkConstituentActions(self)
         self.routing = VeneerLinkRoutingActions(self)
 
+    def create(self,from_node,to_node,name=None):
+        script = self._ironpy._initScript()
+        script += self._ironpy._generator.find_feature_by_name()
+        script += 'n1 = find_feature_by_name("%s",exact=True)\n'%from_node
+        script += 'n2 = find_feature_by_name("%s",exact=True)\n'%to_node
+        script += 'result = scenario.Network.Connect(n1,n2)\n'
+        if name:
+            script += 'result.Name = "%s"'%name
+        return self._ironpy._safe_run(script)
+
 class VeneerLinkConstituentActions(VeneerNetworkElementActions):
     def __init__(self,link):
         self._link = link
@@ -686,3 +701,31 @@ class VeneerLinkRoutingActions(VeneerNetworkElementActions):
                                        instantiate=False,
                                        assignment=assignment,
                                        post_assignment=post_assignment)
+
+class VeneerNodeActions(object):
+    def __init__(self,ironpython):
+        self._ironpy = ironpython
+
+    def create(self,name,node_type,location=None,schematic_location=None):
+        script = self._ironpy._initScript('.'.join(node_type.split('.')[:-1]))
+        script += 'network = scenario.Network\n'
+        script += 'new_node = RiverSystem.Node()\n'
+        if location:
+            script += 'new_node.location.E = %f\n'%location[0]
+            script += 'new_node.location.N = %f\n'%location[1]
+
+        script += 'new_node.Name = "%s"\n'%name
+        script += 'new_node.NodeModel = %s()\n'%node_type
+        script += 'network.Add.Overloads[RiverSystem.INetworkElement](new_node)\n'
+        script += 'result = new_node\n'
+        return self._ironpy._safe_run(script)
+        # schematic_location???
+
+    def remove(self,name):
+        script = self._ironpy._initScript('RiverSystem')
+        script += self._ironpy._generator.find_feature_by_name()
+        script += 'network = scenario.Network\n'
+        script += 'node = find_feature_by_name("%s",exact=True)\n'%name
+        script += 'if node:\n'
+        script += '    network.Delete.Overloads[RiverSystem.Node](node)\n'
+        return self._ironpy._safe_run(script)
