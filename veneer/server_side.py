@@ -423,18 +423,24 @@ class VeneerNetworkElementActions(object):
             param = '__init__.__self__'
         return self._ironpy.sourceHelp(self._build_accessor(param,**kwargs))
 
-    def get_models(self,**kwargs):
+    def get_models(self,by_name=False,**kwargs):
         '''
         Return the models used in a particular context
         '''
-        return self.get_param_values('GetType().FullName',**kwargs)
+        resp = self.get_param_values('GetType().FullName',**kwargs)
+        if by_name:
+            return dict(zip(self.names(**kwargs),resp))
+        return resp
 
-    def get_param_values(self,parameter,**kwargs):
+    def get_param_values(self,parameter,by_name=False,**kwargs):
         '''
         Return the values of a particular parameter used in a particular context
         '''
         accessor = self._build_accessor(parameter,**kwargs)
-        return self._ironpy.get(accessor,kwargs.get('namespace',self._ns))
+        resp = self._ironpy.get(accessor,kwargs.get('namespace',self._ns))
+        if by_name:
+            return dict(zip(self.names(**kwargs),resp))
+        return resp
 
     def set_models(self,models,fromList=False,**kwargs):
         '''
@@ -454,12 +460,21 @@ class VeneerNetworkElementActions(object):
             fromList = True
         return self._ironpy.set(accessor,values,ns,literal=literal,fromList=fromList,instantiate=instantiate)
 
-    def get_data_sources(self,parameter,**kwargs):
+    def get_data_sources(self,parameter,by_name=False,**kwargs):
         '''
         Return pointers (veneer URLs) to the data sources used as input to a particular parameter
         '''
         accessor = self._build_accessor(parameter,**kwargs)
-        return self._ironpy.get_data_sources(accessor,kwargs.get('namespace',self._ns))
+        resp = self._ironpy.get_data_sources(accessor,kwargs.get('namespace',self._ns))
+        if by_name:
+            return dict(zip(self.names(**kwargs),resp))
+        return resp
+
+    def names(self,**kwargs):
+        '''
+        Return the names of the network elements
+        '''
+        return self.get_param_values(self._name_accessor,**kwargs)
 
 class VeneerFunctionalUnitActions(VeneerNetworkElementActions):
     def __init__(self,catchment):
@@ -597,6 +612,7 @@ class VeneerCatchmentGenerationActions(VeneerFunctionalUnitActions):
 class VeneerSubcatchmentActions(VeneerNetworkElementActions):
     def __init__(self,catchment):
         self._catchment = catchment
+        self._name_accessor = 'Catchment.DisplayName'
         super(VeneerSubcatchmentActions,self).__init__(catchment._ironpy)
 
     def _build_accessor(self,parameter,**kwargs):
@@ -629,6 +645,7 @@ class VeneerLinkActions(object):
         self._ironpy = ironpython
         self.constituents = VeneerLinkConstituentActions(self)
         self.routing = VeneerLinkRoutingActions(self)
+        self._name_accessor = '.DisplayName'
 
     def create(self,from_node,to_node,name=None):
         script = self._ironpy._initScript()
@@ -643,6 +660,7 @@ class VeneerLinkActions(object):
 class VeneerLinkConstituentActions(VeneerNetworkElementActions):
     def __init__(self,link):
         self._link = link
+        self._name_accessor = 'Element.DisplayName'
         super(VeneerLinkConstituentActions,self).__init__(link._ironpy)
         self._ns = 'RiverSystem.Constituents.LinkElementConstituentData as LinkElementConstituentData'
 
@@ -670,6 +688,7 @@ class VeneerLinkConstituentActions(VeneerNetworkElementActions):
 class VeneerLinkRoutingActions(VeneerNetworkElementActions):
     def __init__(self,link):
         self._link = link
+        self._name_accessor = 'link.DisplayName'
         super(VeneerLinkRoutingActions,self).__init__(link._ironpy)
 
     def _build_accessor(self,parameter=None,links=None):
