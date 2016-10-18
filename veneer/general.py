@@ -287,6 +287,7 @@ class Veneer(object):
 
         run: Run to retrieve. Either 'latest' (default) or an integer run number from 1
         '''
+        run = run.split('/')[-1]
         if run=='latest' and not self.live_source:
             all_runs = self.retrieve_json('/runs')
             result = self.retrieve_json(all_runs[-1]['RunUrl'])
