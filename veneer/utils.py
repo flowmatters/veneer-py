@@ -143,6 +143,11 @@ class SearchableList(object):
             field_name = name[len(FIND_PREFIX):]
             return lambda x,op='=': SearchableList(list(filter(lambda y: self._search_all(field_name,x,y,op),self._list)),self._nested)
 
+        FIND_ONE_PREFIX='find_one_by_'
+        if name.startswith(FIND_ONE_PREFIX):
+            field_name = name[len(FIND_ONE_PREFIX):]
+            return lambda x,op='=': list(filter(lambda y: self._search_all(field_name,x,y,op),self._list))[0]
+
         GROUP_PREFIX='group_by_'
         if name.startswith(GROUP_PREFIX):
             field_name = name[len(GROUP_PREFIX):]
@@ -154,6 +159,10 @@ class SearchableList(object):
             return lambda x: SearchableList(list(filter(lambda y: self._search_all(field_name,x,y,'LIKE'),self._list)),self._nested)
         raise AttributeError(name + ' not allowed')
 
+
+    def as_dataframe(self):
+        import pandas as pd        
+        return pd.DataFrame(self._list)
 
 def _stringToList(string_or_list):
     if isinstance(string_or_list,str):
