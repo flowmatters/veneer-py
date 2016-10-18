@@ -449,13 +449,28 @@ class Veneer(object):
 
         Return all time series in a single Pandas DataFrame with date time index.
 
-        Crtieria should be regexps for the fields in a Veneer time series record:
+        you can an index of run results via run_data. If you don't the method will first retrieve an
+        index based on the value of the run parameter (default='latest')
+
+        criteria should be regexps for the fields in a Veneer time series record:
+          * NetworkElement
           * RecordingElement
           * RecordingVariable
           * TimeSeriesName
           * TimeSeriesUrl
 
+        These criteria are used to identify which time series to retrieve.
+
         timestep should be one of 'daily' (default), 'monthly', 'annual'
+
+        All retrieved time series are returned in a single Data Frame.
+
+        You can specify a function for naming the columns of the Data Frame using name_fn. This function should take
+        the results summary (from the index) and return a string. Example functions include:
+          * veneer.name_time_series (uses the full name of the time series, as provided by Source)
+          * veneer.name_element_variable (DEFAULT: users the name of the network element and the name of the variable)
+          * veneer.name_for_location (just use the name of the network element)
+          * veneer.name_for_variable (just use the name of the variable)
         """
         if timestep=="daily":
             suffix = ""
