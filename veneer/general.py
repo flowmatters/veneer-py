@@ -328,6 +328,33 @@ class Veneer(object):
         '''
         return SearchableList(self.retrieve_json('/variables'))
 
+    def variable(self,name):
+        '''
+        Returns details of a particular variable
+        '''
+        name = name.replace('$','')
+        return self.retrieve_json('/variables/%s'%name)
+
+    def variable_time_series(self,name):
+        '''
+        Returns time series for a particular variable
+        '''
+        name = name.replace('$','')
+        url = '/variables/%s/TimeSeries'%name
+        result = self.retrieve_json(url)
+        import pandas as pd
+        return pd.DataFrame(result['Events']).set_index('Date').rename({'Value':result['Name']})
+
+    def variable_piecewise(self,name):
+        '''
+        Returns piecewise linear function for a particular variable
+        '''
+        name = name.replace('$','')
+        url = '/variables/%s/Piecewise'%name
+        result = self.retrieve_json(url)
+        import pandas as pd
+        return pd.DataFrame(result['Entries'],columns=[result[c] for c in ['XName','YName']])
+
     def data_sources(self):
         '''
         Return a SearchableList of the data sources in the Source model
