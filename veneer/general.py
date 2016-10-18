@@ -385,7 +385,7 @@ class Veneer(object):
             item['Details'] = _transform_details(item['Details'])
             return item
 
-        result['Items'] = [_transform_data_source_item(i) for i in result['Items']]
+        result['Items'] = SearchableList([_transform_data_source_item(i) for i in result['Items']])
         return result
 
     def data_source_item(self,source,name=None,input_set='__all__'):        
@@ -397,10 +397,18 @@ class Veneer(object):
             source = prefix+source
         result = self.retrieve_json(source)
 
-        if 'TimeSeries' in result:
-            import pandas as pd
-            return pd.DataFrame(result['TimeSeries']['Events']).set_index('Date').rename({'Value':result['Name']})
-        return result
+        def _transform(res):
+            if 'TimeSeries' in res:
+                import pandas as pd
+                return pd.DataFrame(res['TimeSeries']['Events']).set_index('Date').rename(columns={'Value':res['Name']})
+            return res
+
+        if isinstance(result,list):
+            if len(result)==1:
+                result = result[0]
+            else:
+                return [_transform(r) for r in result]
+        return _transform(result)
 
     def result_matches_criteria(self,result,criteria):
         import re
