@@ -279,11 +279,10 @@ class VeneerIronPython(object):
         return self._assignment(theThing,theValue,namespace,literal,fromList,instantiate,assignment,")")
 
     def assign_time_series(self,theThing,theValue,column=0,from_list=False,literal=True,
-                           data_group=None):
-        ns = None
+                           data_group=None,namespace=None):
         assignment = "H.AssignTimeSeries(scenario,%s__init__.__self__,'%s','"+data_group+"',newVal"
         post_assignment = ",%d)"%column
-        return self._assignment(theThing,theValue,ns,literal,from_list,False,assignment,post_assignment)
+        return self._assignment(theThing,theValue,namespace,literal,from_list,False,assignment,post_assignment)
 
     def sourceScenarioOptions(self,optionType,option=None,newVal = None):
         return self.source_scenario_options(optionType,option,newVal)
@@ -417,7 +416,7 @@ class VeneerNetworkElementActions(object):
     def _instantiation_namespace(self,types):
         ns = ','.join(set(types))
         if not self._ns is None:
-            ns += ','+self._ns
+            ns += ','+(','.join(_stringToList(self._ns)))
         return ns
 
     def help(self,param=None,**kwargs):
@@ -659,33 +658,93 @@ class VeneerLinkActions(object):
             script += 'result.Name = "%s"'%name
         return self._ironpy._safe_run(script)
 
-class VeneerLinkConstituentActions(VeneerNetworkElementActions):
-    def __init__(self,link):
-        self._link = link
-        self._name_accessor = 'Element.DisplayName'
-        super(VeneerLinkConstituentActions,self).__init__(link._ironpy)
-        self._ns = 'RiverSystem.Constituents.LinkElementConstituentData as LinkElementConstituentData'
 
-    def _build_accessor(self,parameter=None,links=None,constituents=None):
-        accessor = 'scenario.Network.ConstituentsManagement.Elements' + \
-                    '.OfType[LinkElementConstituentData]()'
+class VeneerNetworkElementConstituentActions(VeneerNetworkElementActions):
+    def __init__(self,ironpy):
+        super(VeneerNetworkElementConstituentActions,self).__init__(ironpy)
+        self._aspect_pre_modifer = {
+            '':'',
+            'played':'Data.ConstituentPlayedValues',
+            'model':'Data.ProcessingModels'
+        }
+        self._aspect_post_modifer = {
+            'model':'.*Model',
+            'played':'.*',
+            '':''
+        }
 
-        if not links is None:
-            links = _stringToList(links)
-            accessor += '.Where(lambda lecd: lecd.Element.DisplayName in %s)'%links
+    def assign_time_series(self,parameter,values,data_group,column=0,
+                           literal=True,fromList=False,aspect='played',**kwargs):
+        '''
+        Assign an input time series to a rainfall runoff input
+        '''
+        accessor = self._build_accessor(parameter,aspect=aspect,**kwargs)
+        return self._ironpy.assign_time_series(accessor,values,from_list=fromList,
+                                               literal=literal,column=column,
+                                               data_group=data_group,namespace=self._ns)
 
-        accessor += '.*Data' + \
-                    '.ProcessingModels'
+    def _build_accessor(self,parameter=None,constituents=None,aspect=None,**kwargs):
+        aspect = self._default_aspect if aspect is None else aspect
+        accessor = 'scenario.Network.ConstituentsManagement.Elements'
+        accessor += self._filter_constituent_data_types()                   
+        accessor += self._filter_by_query(**kwargs)
+        accessor += '.*%s'%self._aspect_pre_modifer[aspect]
 
         if not constituents is None:
             constituents = _stringToList(constituents)
-            accessor += '.Where(lambda c: c.Constituent.Name in %s)'%constituents
+            if accessor[-1]!='*':
+                accessor +='.'
+            accessor += 'Where(lambda c: c.Constituent.Name in %s)'%constituents
 
-        accessor += '.*Model'
+        accessor += self._aspect_post_modifer[aspect]
 
         if not parameter is None:
-            accessor += '.%s'%parameter
+            if accessor[-1]!='*':
+                accessor+='.'
+            accessor += parameter
         return accessor
+
+    def initialise_played_constituents(self,**kwargs):
+        accessor = self._build_accessor(aspect='',**kwargs)
+        script = self._ironpy._initScript(self._ns)
+        script += 'from RiverSystem.Constituents.ConstituentPlayedValue import ConstituentPlayedType as ConstituentPlayedType\n'
+        script += "from RiverSystem.Constituents import ConstituentPlayedValue as ConstituentPlayedValue\n"
+        script += 'playType = ConstituentPlayedType.varConcentration\n'
+        script += 'constituents = scenario.Network.ConstituentsManagement.Config.Constituents\n'
+        script += '\n'
+        script += '\n'
+        script += '\n'
+        innerLoop = [
+            "ignoreExceptions=False",
+            "the_mod = %s%sData",
+            "for constituent in constituents:",
+            "  if not the_mod.ConstituentPlayedValues.Any(lambda cpv: (cpv.Constituent==constituent) and (cpv.PlayedType==playType)):",
+            "    new_cpv = ConstituentPlayedValue(constituent)",
+            "    new_cpv.PlayedType = playType",
+            "    the_mod.ConstituentPlayedValues.Add(new_cpv)"
+        ]
+        innerLoop = '\n'.join(innerLoop)
+        script += self._ironpy._generateLoop(accessor,innerLoop,first=False)
+
+        return self._ironpy._safe_run(script)
+
+class VeneerLinkConstituentActions(VeneerNetworkElementConstituentActions):
+    def __init__(self,link):
+        self._link = link
+        self._name_accessor = 'Link.DisplayName'
+        super(VeneerLinkConstituentActions,self).__init__(link._ironpy)
+        self._ns = 'RiverSystem.Constituents.LinkElementConstituentData as LinkElementConstituentData'
+        self._default_aspect = 'model'
+
+    def _filter_constituent_data_types(self):
+        return '.OfType[LinkElementConstituentData]()'
+
+    def _filter_by_query(self,links=None):
+        if links is None:
+            return ''
+
+        links = _stringToList(links)
+        return '.Where(lambda lecd: lecd.Element.DisplayName in %s)'%links
 
 class VeneerLinkRoutingActions(VeneerNetworkElementActions):
     def __init__(self,link):
@@ -697,7 +756,7 @@ class VeneerLinkRoutingActions(VeneerNetworkElementActions):
         accessor = 'scenario.Network.Links'
         if not links is None:
             links = _stringToList(links)
-            accessor += '.Where(lambda l:l.DisplayName in %s'%links
+            accessor += '.Where(lambda l:l.DisplayName in %s)'%links
         accessor += '.*FlowRouting'
 
         if not parameter is None:
@@ -723,9 +782,31 @@ class VeneerLinkRoutingActions(VeneerNetworkElementActions):
                                        assignment=assignment,
                                        post_assignment=post_assignment)
 
-class VeneerNodeActions(object):
+class VeneerNodeActions(VeneerNetworkElementActions):
     def __init__(self,ironpython):
-        self._ironpy = ironpython
+        super(VeneerNodeActions,self).__init__(ironpython)
+        self._name_accessor = 'Node.Name'
+        self.constituents = VeneerNodeConstituentActions(self)
+
+    def _refine_accessor(self,node_access='',nodes=None,node_types=None):
+        accessor = ""
+        if not nodes is None:
+            nodes = _stringToList(nodes)
+            accessor += '.Where(lambda n:n%s.Name in %s)'%(node_access,nodes)
+        if not node_types is None:
+            node_types = _stringToList(node_types)
+            accessor += '.Where(lambda n:n%s.NodeModel and n%s.NodeModel.GetType().Name.Split(".").Last() in %s)'%(node_access,node_access,node_types)
+        return accessor
+
+    def _build_accessor(self,parameter=None,nodes=None,node_types=None):
+        accessor = 'scenario.Network.Nodes'
+        accessor += self._refine_accessor(nodes=nodes,node_types=node_types)
+
+        accessor += '.*NodeModel'
+        if not parameter is None:
+            accessor += '.%s'%parameter
+
+        return accessor
 
     def create(self,name,node_type,location=None,schematic_location=None):
         script = self._ironpy._initScript('.'.join(node_type.split('.')[:-1]))
@@ -750,3 +831,25 @@ class VeneerNodeActions(object):
         script += 'if node:\n'
         script += '    network.Delete.Overloads[RiverSystem.Node](node)\n'
         return self._ironpy._safe_run(script)
+
+class VeneerNodeConstituentActions(VeneerNetworkElementConstituentActions):
+    def __init__(self,node):
+        self._node = node
+        self._name_accessor = 'Element.Name'
+        super(VeneerNodeConstituentActions,self).__init__(self._node._ironpy)
+        self._ns = ['RiverSystem.Node as Node',
+                    'RiverSystem.Constituents.NetworkElementConstituentData as NetworkElementConstituentData']
+        self._default_aspect = '' #'Data.ConstituentPlayedValues'
+
+    def _filter_constituent_data_types(self):
+        return '.OfType[NetworkElementConstituentData]().Where(lambda d: isinstance(d.Element,Node))'
+
+    def _filter_by_query(self,**kwargs):
+        return self._node._refine_accessor(node_access='.Element',**kwargs)
+
+#    def _build_accessor(self,parameter,nodes=None,node_types=None)
+#        accessor = 'scenario.Network.ConstituentsManagement.Elements' + \
+#        accessor += self._node._refine_accessor(nodes,node_types)
+
+
+
