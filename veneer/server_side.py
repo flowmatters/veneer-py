@@ -198,7 +198,7 @@ class VeneerIronPython(object):
             raise Exception(resp['Exception'])
         data = resp['Response']['Value']
         if listQuery:
-            return [d['Value'] for d in data]
+            return [d['Value'] if d else d for d in data]
         return data
 
     def get_data_sources(self,theThing,namespace=None):
