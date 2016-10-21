@@ -28,7 +28,9 @@ class VeneerIronPython(object):
     def _initScript(self,namespace=None):
         script = "# Generated Script\n"
         if not namespace is None:
-            script += "import %s\n"%namespace
+            namespace = _stringToList(namespace)
+
+            script += '\n'.join(["import %s\n"%ns for ns in namespace])
         script += "import clr\n"
         script += "import System\n"
         script += "import FlowMatters.Source.Veneer.RemoteScripting.ScriptHelpers as H\n"
