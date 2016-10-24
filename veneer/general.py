@@ -496,12 +496,22 @@ class Veneer(object):
             run_data = self.retrieve_run(run)
 
         retrieved={}
-
+        units_store = {}
         for result in run_data['Results']:
             if self.result_matches_criteria(result,criteria):
-                retrieved[name_fn(result)] = self.retrieve_json(result['TimeSeriesUrl']+suffix)['Events']
+                d = self.retrieve_json(result['TimeSeriesUrl']+suffix)
+                result.update(d)
+                col_name = name_fn(result)
+                if col_name in retrieved:
+                    raise Exception("Duplicate column name: %s"%col_name)
+                retrieved[col_name] = d['Events']
+                units_store[col_name] = result['Units']
 
-        return self._create_timeseries_dataframe(retrieved)
+        result = self._create_timeseries_dataframe(retrieved)
+        for k,u in units_store.items():
+            result[k].units = u
+
+        return result
 
     def parse_veneer_date(self,txt):
         from pandas import datetime
