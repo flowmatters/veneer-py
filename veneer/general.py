@@ -12,7 +12,7 @@ from .utils import SearchableList,_stringToList
 # Source
 from . import extensions
 
-PRINT_URLS=True
+PRINT_URLS=False
 PRINT_ALL=False
 PRINT_SCRIPTS=False
 
@@ -25,6 +25,8 @@ def name_time_series(result):
 def name_element_variable(result):
     element = result['NetworkElement']
     variable = result['RecordingVariable'].split(' - ')[-1]
+    if variable=='Flow':
+        variable = result['RecordingElement'].split(' - ')[-1]
     return '%s:%s'%(element,variable)
 
 def name_for_variable(result):
@@ -213,7 +215,7 @@ class Veneer(object):
                     'RecordAll':[translate(r) for r in enable]}
         self.update_json('/recorders',modifier)
 
-    def run_model(self,params={},start=None,end=None,async=False):
+    def run_model(self,params={},start=None,end=None,async=False,**kwargs):
         '''
         Trigger a run of the Source model
 
@@ -227,10 +229,14 @@ class Veneer(object):
                Useful for triggering parallel runs. Method will return a connection object that can then be queried to know
                when the run has finished.
 
+        kwargs: optional named parameters to be used to update the params dictionary
+
         In the default behaviour (async=False), this method will return once the Source simulation has finished, and will return
         the URL of the results set in the Veneer service
         '''
         conn = hc.HTTPConnection(self.host,port=self.port)
+
+        params.update(kwargs)
 
         if not start is None:
             params['StartDate'] = to_source_date(start)
@@ -322,6 +328,15 @@ class Veneer(object):
         Return a SearchableList of the functions in the Source model.
         '''
         return SearchableList(self.retrieve_json('/functions'))
+
+    def update_function(self,fn,value):
+        fn = fn.split('/')[-1]
+        url = '/functions/' + fn.replace('$','')
+        payload = {
+            'Name':fn,
+            'Expression':str(value)
+        }
+        return self.update_json(url,payload)
 
     def variables(self):
         '''
