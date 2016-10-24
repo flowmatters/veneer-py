@@ -58,6 +58,25 @@ def configure_non_blocking_io(processes,stream):
 	return queues,threads
 
 def start(project_fn,n_instances=1,ports=9876,debug=False,veneer_exe=None):
+	"""
+	Start one or more copies of the Veneer command line progeram with a given project file
+
+	Parameters:
+
+	- project_fn - Path to a Source project file (.rsproj)
+
+	- n_instances - Number of copies of the Veneer command line to start (default: 1)
+
+	- ports - A single port number, indicating the port number of the first copy of the Veneer command line,
+	          OR a list of ports, in which case len(ports)==n_instances  (default: 9876)
+
+	- debug - Set to True to echo all output from Veneer Command Line during startup
+
+	- veneer_exe - Optional (but often required) path to the Veneer Command Line. If not provided,
+	               veneer-py will attempt to identify the version of Veneer Command Line to invoke.
+	               If there is a source_version.txt file in the same directory as the project file,
+	               this text file will be consulted to identify the version of Source. 
+	"""
 	if not hasattr(ports,'__len__'):
 		ports = list(range(ports,ports+n_instances))
 
