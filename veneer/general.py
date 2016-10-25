@@ -359,7 +359,22 @@ class Veneer(object):
         url = '/variables/%s/TimeSeries'%name
         result = self.retrieve_json(url)
         import pandas as pd
-        return pd.DataFrame(result['Events']).set_index('Date').rename({'Value':result['Name']})
+        return pd.DataFrame(self.convert_dates(result['Events'])).set_index('Date').rename({'Value':result['Name']})
+
+    def update_variable_time_series(self,name,timeseries):
+        name = name.replace('$','')
+        url = '/variables/%s/TimeSeries'%name
+
+        if hasattr(timeseries,'columns'):
+            date_format = '%m/%d/%Y'
+            payload = {}
+            events = zip(timeseries.index,timeseries[timeseries.columns[0]])
+            payload['Events'] = [{'Date':d.strftime(date_format),'Value':v} for d,v in events]
+            payload['StartDate'] = timeseries.index[0].strftime(date_format)
+            payload['EndDate'] = timeseries.index[-1].strftime(date_format)
+            timeseries = payload
+
+        return self.update_json(url,timeseries)
 
     def variable_piecewise(self,name):
         '''
@@ -370,6 +385,21 @@ class Veneer(object):
         result = self.retrieve_json(url)
         import pandas as pd
         return pd.DataFrame(result['Entries'],columns=[result[c] for c in ['XName','YName']])
+
+    def update_variable_piecewise(self,name,values):
+        name = name.replace('$','')
+        url = '/variables/%s/Piecewise'%name
+        if hasattr(values,'columns'):
+            payload = {}
+            entries = list(zip(values[values.columns[0]],values[values.columns[1]]))
+            payload['Entries'] = [[float(x),float(y)] for (x,y) in entries]
+            payload['XName'] = values.columns[0]
+            payload['YName'] = values.columns[1]
+            values = payload
+
+        print(values)
+        return self.update_json(url,values)
+
 
     def data_sources(self):
         '''
