@@ -113,7 +113,6 @@ class VeneerIronPython(object):
             if first:
                 script += indentText + "if have_succeeded: break\n"
             indent -= 1     
-
         return script
 
     def find_model_type(self,model_type):
@@ -555,6 +554,12 @@ class VeneerCatchmentActions(VeneerFunctionalUnitActions):
 class VeneerRunoffActions(VeneerFunctionalUnitActions):
     '''
     Helpers for querying/modifying the rainfall runoff model setup
+
+    Query options:
+
+    * catchments - the name(s) of catchments to match when querying/configuring.
+
+    * fus - the type(s) of functional units to match when querying/configuring
     '''
     def __init__(self,catchment):
         super(VeneerRunoffActions,self).__init__(catchment)
@@ -585,6 +590,15 @@ class VeneerRunoffActions(VeneerFunctionalUnitActions):
                                                data_group=data_group)
 
 class VeneerCatchmentGenerationActions(VeneerFunctionalUnitActions):
+    '''
+    Helpers for querying/modifying the constituent generation model setup
+
+    Query options:
+
+    * catchments - the name(s) of catchments to match when querying/configuring.
+
+    * fus - the type(s) of functional units to match when querying/configuring
+    '''
     def __init__(self,catchment):
         super(VeneerCatchmentGenerationActions,self).__init__(catchment)
         self._ns = 'RiverSystem.Constituents.CatchmentElementConstituentData as CatchmentElementConstituentData'
@@ -611,6 +625,13 @@ class VeneerCatchmentGenerationActions(VeneerFunctionalUnitActions):
         return accessor
 
 class VeneerSubcatchmentActions(VeneerNetworkElementActions):
+    '''
+    Helpers for querying/modifying the subcatchment-level models
+
+    Query options:
+
+    * catchments - the name(s) of catchments to match when querying/configuring.
+    '''
     def __init__(self,catchment):
         self._catchment = catchment
         self._name_accessor = 'Catchment.DisplayName'
@@ -747,6 +768,17 @@ class VeneerLinkConstituentActions(VeneerNetworkElementConstituentActions):
         return '.Where(lambda lecd: lecd.Element.DisplayName in %s)'%links
 
 class VeneerLinkRoutingActions(VeneerNetworkElementActions):
+    '''
+    Queries and actions relating to streamflow routing models.
+
+    Query options:
+
+    * links - the name(s) of links to match when querying/configuring.
+
+    For example:
+
+    v.model.links.routing.get_models(links=['Link #1','Link #2'])
+    '''
     def __init__(self,link):
         self._link = link
         self._name_accessor = 'link.DisplayName'
@@ -783,6 +815,19 @@ class VeneerLinkRoutingActions(VeneerNetworkElementActions):
                                        post_assignment=post_assignment)
 
 class VeneerNodeActions(VeneerNetworkElementActions):
+    '''
+    Queries and actions relating to nodes (incuding node models).
+
+    Query options:
+
+    * nodes - the name(s) of nodes to match when querying/configuring.
+
+    * node_types - the type(s) of nodes to match when querying/configuring
+
+    For example:
+
+    v.model.nodes.get_models(nodes='Fish River')
+    '''
     def __init__(self,ironpython):
         super(VeneerNodeActions,self).__init__(ironpython)
         self._name_accessor = 'Node.Name'
@@ -833,6 +878,19 @@ class VeneerNodeActions(VeneerNetworkElementActions):
         return self._ironpy._safe_run(script)
 
 class VeneerNodeConstituentActions(VeneerNetworkElementConstituentActions):
+    '''
+    Queries and actions relating to nodes (incuding node models).
+
+    Query options:
+
+    * nodes - the name(s) of nodes to match when querying/configuring.
+
+    * node_types - the type(s) of nodes to match when querying/configuring
+
+    For example:
+
+    v.model.nodes.constituents.get_models(nodes='Fish River')
+    '''
     def __init__(self,node):
         self._node = node
         self._name_accessor = 'Element.Name'
