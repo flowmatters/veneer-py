@@ -135,19 +135,23 @@ class VeneerIronPython(object):
 
     def _find_members_with_attribute_in_type(self,model_type,attribute):
         script = self._initScript(model_type)
-        script += 'from TIME.Core.Metadata import %s\n'%attribute
+        if attribute:
+            script += 'from TIME.Core.Metadata import %s\n'%attribute
         script += 'result = []\n'
         script += 'tmp = %s()\n'%model_type
         script += 'typeObject = tmp.GetType()\n'
         script += 'for member in dir(tmp):\n'
         script += '  try:\n'
-        script += '    if typeObject.GetMember(member)[0].IsDefined(%s,True):\n'%attribute
-        script += '      result.append(member)\n'
+        if attribute:
+            script += '    if typeObject.GetMember(member)[0].IsDefined(%s,True):\n'%attribute
+            script += '      result.append(member)\n'
+        else:
+            script += '    result.append(member)\n'
         script += '  except: pass'
         res = self._safe_run(script)
         return [v['Value'] for v in res['Response']['Value']]
 
-    def _find_members_with_attribute_for_types(self,model_types,attribute):
+    def _find_members_with_attribute_for_types(self,model_types,attribute=None):
         model_types = list(set(_stringToList(model_types)))
         result = {}
         for t in model_types:
@@ -155,6 +159,40 @@ class VeneerIronPython(object):
         if len(model_types)==1:
             return result[model_types[0]]
         return result
+
+    def _find_fields_and_properties_for_type(self,model_type):
+        script = self._initScript(model_type)
+        script += 'from System.Reflection import PropertyInfo,FieldInfo\n'
+        script += 'result = []\n'
+        script += 'tmp = %s()\n'%model_type
+        script += 'typeObject = tmp.GetType()\n'
+        script += 'for member in dir(tmp):\n'
+        script += '  try:\n'
+        script += '    member_info = typeObject.GetMember(member)[0]\n'
+        script += '    if isinstance(member_info,PropertyInfo):\n'
+        script += '      result.append("%s %s"%(member,member_info.PropertyType.Name))\n'
+        script += '    if isinstance(member_info,FieldInfo):\n'
+        script += '      result.append("%s %s"%(member,member_info.FieldType.Name))\n'
+        script += '  except: pass'
+        res = self._safe_run(script)
+        return dict([v['Value'].split(' ') for v in res['Response']['Value']])
+
+    def find_properties(self,model_types):
+        """
+        Find all fields and properties for a given model type or list of model types
+
+        Returns:
+         * A list of fields and properties (if a single model type is provided)
+         * A dictionary model type name -> list of fields and properties (if more than model type)
+        """
+        model_types = list(set(_stringToList(model_types)))
+        result = {}
+        for t in model_types:
+            result[t] = self._find_fields_and_properties_for_type(t)
+        if len(model_types)==1:
+            return result[model_types[0]]
+        return result
+
 
     def find_parameters(self,model_types):
         """
