@@ -115,7 +115,7 @@ class VeneerIronPython(object):
             indent -= 1     
         return script
 
-    def find_model_type(self,model_type):
+    def find_model_type(self,model_type,must_be_model=True):
         '''
         Search for model types matching a given string pattern
 
@@ -124,8 +124,12 @@ class VeneerIronPython(object):
         v.model.find_model_type('emc')
         '''
         script = self._initScript('TIME.Management.Finder as Finder')
-        script += 'import TIME.Core.Model as Model\n'
-        script += 'f = Finder(Model)\n'
+        if must_be_model:
+            script += 'import TIME.Core.Model as Model\n'
+            script += 'f = Finder(Model)\n'
+        else:
+            script += 'import System.Object as Object\n'
+            script += 'f = Finder(Object)\n'
         script += 'types = f.types()\n'
         script += 's = "%s"\n'%model_type
         script += 'result = types.Where(lambda t:t.Name.ToLower().Contains(s.ToLower()))'
@@ -233,7 +237,7 @@ class VeneerIronPython(object):
         resp = self.run_script(script)
         if not resp['Exception'] is None:
             raise Exception(resp['Exception'])
-        data = resp['Response']['Value']
+        data = resp['Response']['Value'] if resp['Response'] else resp['Response']
         if listQuery:
             return [d['Value'] if d else d for d in data]
         return data
@@ -319,6 +323,9 @@ class VeneerIronPython(object):
                            data_group=None,namespace=None):
         assignment = "H.AssignTimeSeries(scenario,%s__init__.__self__,'%s','"+data_group+"',newVal"
         post_assignment = ",%d)"%column
+        theValue = [fn.replace('\\','/') for fn in _stringToList(theValue)]
+        if len(theValue)==1:
+            theValue=theValue[0]
         return self._assignment(theThing,theValue,namespace,literal,from_list,False,assignment,post_assignment)
 
     def sourceScenarioOptions(self,optionType,option=None,newVal = None):
@@ -513,6 +520,16 @@ class VeneerNetworkElementActions(object):
         Return the names of the network elements
         '''
         return self.get_param_values(self._name_accessor,**kwargs)
+
+    def assign_time_series(self,parameter,values,data_group,column=0,
+                           literal=True,fromList=False,**kwargs):
+        '''
+        Assign an input time series to a model input input
+        '''
+        accessor = self._build_accessor(parameter,**kwargs)
+        return self._ironpy.assign_time_series(accessor,values,from_list=fromList,
+                                               literal=literal,column=column,
+                                               data_group=data_group)
 
 class VeneerFunctionalUnitActions(VeneerNetworkElementActions):
     def __init__(self,catchment):
@@ -893,6 +910,7 @@ class VeneerNodeActions(VeneerNetworkElementActions):
 
     def create(self,name,node_type,location=None,schematic_location=None):
         script = self._ironpy._initScript('.'.join(node_type.split('.')[:-1]))
+        script += 'import RiverSystem.E2ShapeProperties as E2ShapeProperties\n'
         script += 'network = scenario.Network\n'
         script += 'new_node = RiverSystem.Node()\n'
         if location:
@@ -902,6 +920,16 @@ class VeneerNodeActions(VeneerNetworkElementActions):
         script += 'new_node.Name = "%s"\n'%name
         script += 'new_node.NodeModel = %s()\n'%node_type
         script += 'network.Add.Overloads[RiverSystem.INetworkElement](new_node)\n'
+
+        if(schematic_location):
+            script += 'schematic = H.GetSchematic(scenario)\n'
+            script += 'if schematic:\n'
+            script += '  shp = E2ShapeProperties()\n'
+            script += '  shp.Feature = new_node\n'
+            script += '  shp.Location.X = %f\n'%schematic_location[0]
+            script += '  shp.Location.Y = %f\n'%schematic_location[1]
+            script += '  schematic.ExistingFeatureShapeProperties.Add(shp)\n'
+            script += '  print("Set location")\n'
         script += 'result = new_node\n'
         return self._ironpy._safe_run(script)
         # schematic_location???
