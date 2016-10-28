@@ -533,9 +533,19 @@ class Veneer(object):
                 result.update(d)
                 col_name = name_fn(result)
                 if col_name in retrieved:
-                    raise Exception("Duplicate column name: %s"%col_name)
-                retrieved[col_name] = d['Events']
-                units_store[col_name] = result['Units']
+                    i = 1
+                    alt_col_name = '%s %d'%(col_name,i)
+                    while alt_col_name in retrieved:
+                        i += 1
+                        alt_col_name = '%s %d'%(col_name,i)
+                    col_name = alt_col_name
+#                    raise Exception("Duplicate column name: %s"%col_name)
+                if 'Events' in d:
+                    retrieved[col_name] = d['Events']
+                    units_store[col_name] = result['Units']
+                else:
+                    pass
+                    # Multi Time Series!
 
         result = self._create_timeseries_dataframe(retrieved)
         for k,u in units_store.items():
