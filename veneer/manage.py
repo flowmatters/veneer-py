@@ -57,7 +57,7 @@ def configure_non_blocking_io(processes,stream):
 		t.start()
 	return queues,threads
 
-def start(project_fn,n_instances=1,ports=9876,debug=False,veneer_exe=None):
+def start(project_fn,n_instances=1,ports=9876,debug=False,remote=True,script=True, veneer_exe=None):
 	"""
 	Start one or more copies of the Veneer command line progeram with a given project file
 
@@ -72,6 +72,10 @@ def start(project_fn,n_instances=1,ports=9876,debug=False,veneer_exe=None):
 
 	- debug - Set to True to echo all output from Veneer Command Line during startup
 
+	- remote - Allow remote connections (requires registration)
+
+	- script - Allow IronPython scripts
+
 	- veneer_exe - Optional (but often required) path to the Veneer Command Line. If not provided,
 	               veneer-py will attempt to identify the version of Veneer Command Line to invoke.
 	               If there is a source_version.txt file in the same directory as the project file,
@@ -83,7 +87,12 @@ def start(project_fn,n_instances=1,ports=9876,debug=False,veneer_exe=None):
 	if not veneer_exe:
 		veneer_exe = find_veneer_cmd_line_exe(project_fn)
 
-	cmd_line = '%s -p %%d -rs %s'%(veneer_exe,project_fn)
+	project_fn = os.path.abspath(project_fn)
+	extras = ''
+	if remote: extras += '-r '
+	if script: extras += '-s '
+
+	cmd_line = '%s -p %%d %s %s'%(veneer_exe,extras,project_fn)
 	cmd_lines = [cmd_line%port for port in ports]
 	if debug:
 		for cmd in cmd_lines:
