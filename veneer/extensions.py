@@ -40,6 +40,7 @@ def network_models(self):
     for n in nodes:
         node_elements.append(n.split('/')[-1])
 
+    return SearchableList(node_elements)
 
 def find_network_node(self, model_name):
     '''
