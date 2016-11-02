@@ -31,6 +31,12 @@ def network_upstream_links(self,node):
 def network_node_names(self):
     '''
     Return a list of node names as found within the network.
+
+    Example:
+
+    v = Veneer()
+    network = v.network()
+    node_names = network.node_names()
     '''
     return self['features'].find_by_feature_type('node')._all_values('name')
 
@@ -39,6 +45,12 @@ def network_models(self):
     Return a list of models within the network.
 
     Extracts this information through the icon resource attribute.
+
+    Example:
+
+    v = Veneer()
+    network = v.network()
+    node_models = network.models()
     '''
     nodes = self['features'].find_by_feature_type('node')._unique_values('icon')
 
@@ -53,6 +65,12 @@ def find_network_model(self, model_name):
     Find information about a node type by its resource name
 
     model_name: str, name of node type
+
+    Example:
+
+    v = Veneer()
+    network = v.network()
+    waterusers = network.find_network_model('WaterUserNodeModel')
     '''
     return self['features'].find_by_icon('/resources/'+model_name)
 
