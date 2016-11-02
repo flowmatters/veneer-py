@@ -1,3 +1,4 @@
+import pandas as pd
 
 try:
     from collections import UserDict
@@ -161,7 +162,6 @@ class SearchableList(object):
 
 
     def as_dataframe(self):
-        import pandas as pd        
         return pd.DataFrame(self._list)
 
 def _stringToList(string_or_list):
