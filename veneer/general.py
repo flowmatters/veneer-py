@@ -9,6 +9,7 @@ from . import utils
 from .bulk import VeneerRetriever
 from .server_side import VeneerIronPython
 from .utils import SearchableList,_stringToList
+import pandas as pd
 # Source
 from . import extensions
 
@@ -358,7 +359,6 @@ class Veneer(object):
         name = name.replace('$','')
         url = '/variables/%s/TimeSeries'%name
         result = self.retrieve_json(url)
-        import pandas as pd
         return pd.DataFrame(self.convert_dates(result['Events'])).set_index('Date').rename({'Value':result['Name']})
 
     def update_variable_time_series(self,name,timeseries):
@@ -383,7 +383,6 @@ class Veneer(object):
         name = name.replace('$','')
         url = '/variables/%s/Piecewise'%name
         result = self.retrieve_json(url)
-        import pandas as pd
         return pd.DataFrame(result['Entries'],columns=[result[c] for c in ['XName','YName']])
 
     def update_variable_piecewise(self,name,values):
@@ -444,7 +443,6 @@ class Veneer(object):
 
         def _transform(res):
             if 'TimeSeries' in res:
-                import pandas as pd
                 return pd.DataFrame(res['TimeSeries']['Events']).set_index('Date').rename(columns={'Value':res['Name']})
             return res
 
@@ -554,28 +552,25 @@ class Veneer(object):
         return result
 
     def parse_veneer_date(self,txt):
-        from pandas import datetime
-        return datetime.strptime(txt,'%m/%d/%Y %H:%M:%S')
+        return pd.datetime.strptime(txt,'%m/%d/%Y %H:%M:%S')
 
     def convert_dates(self,events):
         return [{'Date':self.parse_veneer_date(e['Date']),'Value':e['Value']} for e in events]
 
     def _create_timeseries_dataframe(self,data_dict,common_index=True):
-        from pandas import DataFrame
         if len(data_dict) == 0:
-            return DataFrame()
+            return pd.DataFrame()
         elif common_index:
             index = [self.parse_veneer_date(event['Date']) for event in list(data_dict.values())[0]]
             data = {k:[event['Value'] for event in result] for k,result in data_dict.items()}
-            return DataFrame(data=data,index=index)
+            return pd.DataFrame(data=data,index=index)
         else:
             from functools import reduce
-            dataFrames = [DataFrame(self.convert_dates(ts)).set_index('Date').rename(columns={'Value':k}) for k,ts in data_dict.items()]
+            dataFrames = [pd.DataFrame(self.convert_dates(ts)).set_index('Date').rename(columns={'Value':k}) for k,ts in data_dict.items()]
             return reduce(lambda l,r: l.join(r,how='outer'),dataFrames)
 
 
 def read_sdt(fn):
-    import pandas as pd
     ts = pd.read_table(fn,sep=' +',engine='python',names=['Year','Month','Day','Val'])
     ts['Date'] = ts.apply(lambda row: pd.datetime(int(row.Year),int(row.Month),int(row.Day)),axis=1)
     ts = ts.set_index(ts.Date)
