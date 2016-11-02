@@ -81,4 +81,6 @@ def add_network_methods(target):
 
     # Assign functions to target
     for f_name, f in funcs.items():
+        if f_name.startswith('network_'):
+            f_name = f_name.replace('network_', '')
         setattr(target, f_name, MethodType(f, target))
