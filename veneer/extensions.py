@@ -28,6 +28,12 @@ def network_upstream_links(self,node):
     links = features.find_by_feature_type('link')
     return links.find_by_to_node(node['id'])
 
+def network_node_names(self):
+    '''
+    Return a list of node names as found within the network.
+    '''
+    return self['features'].find_by_feature_type('node')._all_values('name')
+
 def network_models(self):
     '''
     Return a list of models within the network.
@@ -50,7 +56,7 @@ def find_network_model(self, model_name):
     '''
     return self['features'].find_by_icon('/resources/'+model_name)
 
-def network_find_outlets(self):
+def network_outlet_nodes(self):
     '''
     Find all the nodes in the network that are outlets - ie have no downstream nodes.
 
