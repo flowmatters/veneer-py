@@ -42,7 +42,7 @@ def network_models(self):
 
     return SearchableList(node_elements)
 
-def find_network_node(self, model_name):
+def find_network_model(self, model_name):
     '''
     Find information about a node type by its resource name
 
