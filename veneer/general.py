@@ -90,7 +90,7 @@ class Veneer(object):
             print("*** %s ***" % (url))
 
         text = urlopen(self.base_url + quote(url+self.data_ext)).read().decode('utf-8')
-        
+
         if PRINT_ALL:
             print(json.loads(text))
             print("")
@@ -109,7 +109,7 @@ class Veneer(object):
 
         req = Request(self.base_url + quote(url+self.data_ext),headers={"Accept":"text/csv"})
         text = urlopen(req).read().decode('utf-8')
-        
+
         result = utils.read_veneer_csv(text)
         if PRINT_ALL:
             print(result)
@@ -189,17 +189,17 @@ class Veneer(object):
           * RecordingVariable
 
         These are used to match time series available from the Source model. A given selector may match
-        multiple time series. For example, a selector of {'RecordingVariable':'Downstream Flow Volume'} 
+        multiple time series. For example, a selector of {'RecordingVariable':'Downstream Flow Volume'}
         will match Downstream Flow Volume from all nodes and links.
 
         Any empty dictionary {} will match ALL time series in the model.
 
         So, for example, you could disable ALL recording in the model with
-    
+
         v = Veneer()
         v.configure_recording(disable=[{}])
 
-        Note, the time series selectors in enable and disable may both match the same time series in some cases. 
+        Note, the time series selectors in enable and disable may both match the same time series in some cases.
         In this case, the 'enable' will take effect.
         '''
         def get_many(src,keys,default):
@@ -331,6 +331,11 @@ class Veneer(object):
         return SearchableList(self.retrieve_json('/functions'))
 
     def update_function(self,fn,value):
+        '''
+        Update a function within Source
+
+        fn: str, name of function to update.
+        '''
         fn = fn.split('/')[-1]
         url = '/functions/' + fn.replace('$','')
         payload = {
@@ -386,6 +391,11 @@ class Veneer(object):
         return pd.DataFrame(result['Entries'],columns=[result[c] for c in ['XName','YName']])
 
     def update_variable_piecewise(self,name,values):
+        '''
+        Update piecewise linear function for a given variable.
+
+        name: str, variable name to update.
+        '''
         name = name.replace('$','')
         url = '/variables/%s/Piecewise'%name
         if hasattr(values,'columns'):
@@ -432,7 +442,7 @@ class Veneer(object):
         result['Items'] = SearchableList([_transform_data_source_item(i) for i in result['Items']])
         return result
 
-    def data_source_item(self,source,name=None,input_set='__all__'):        
+    def data_source_item(self,source,name=None,input_set='__all__'):
         if name:
             source = '/'.join([source,input_set,name])
 
@@ -474,6 +484,7 @@ class Veneer(object):
         '''
         Modify the input set and send to Source.
 
+        name: str, name of input set
         input_set: A Python dictionary representing the updated input set. Should contain the same fields as the input set
                    returned from the input_sets method.
         '''
