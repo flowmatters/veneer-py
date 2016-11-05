@@ -94,16 +94,22 @@ def network_as_dataframe(self):
     return result
 
 def add_network_methods(target):
+    '''
+    Attach extension methods to an object that represents a Veneer network.
+    Note: The 'network_' prefix will be removed from method names.
+
+    target: Veneer network object to attach extension methods to.
+    '''
     import veneer.extensions as extensions # Import self to inspect available functions
 
-    # Generate dict of {function name: function}
+    # Generate dict of {function name: function}, skipping this function
     this_func_name = sys._getframe().f_code.co_name
     funcs = inspect.getmembers(extensions, inspect.isfunction)
     funcs = dict((func_name, func) for func_name, func in funcs
                   if func_name != this_func_name
             )
 
-    # Assign functions to target
+    # Assign functions to target, removing the 'network_' prefix
     for f_name, f in funcs.items():
         if f_name.startswith('network_'):
             f_name = f_name.replace('network_', '')
