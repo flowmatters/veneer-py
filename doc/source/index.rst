@@ -1,9 +1,9 @@
 Welcome to veneer-py's documentation!
 =====================================
 
-.. include:: tmp/veneer.rst
+.. include:: veneer.rst
 
-.. include:: tmp/modules.rst
+.. include:: modules.rst
 
 Indices and tables
 ==================

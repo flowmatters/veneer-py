@@ -2,7 +2,9 @@
 
 REM Command file for Sphinx documentation
 
-sphinx-apidoc -o source/tmp ../veneer
+del source\modules.rst
+del source\veneer.rst
+sphinx-apidoc -o source ..\veneer
 
 if "%SPHINXBUILD%" == "" (
 	set SPHINXBUILD=sphinx-build
