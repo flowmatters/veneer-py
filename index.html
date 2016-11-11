@@ -1,0 +1,1484 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Welcome to veneer-py’s documentation! &mdash; veneer-py 0.1 documentation</title>
+    
+    <link rel="stylesheet" href="_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '0.1',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="top" title="veneer-py 0.1 documentation" href="#" />
+    <link rel="next" title="veneer package" href="veneer.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="veneer.html" title="veneer package"
+             accesskey="N">next</a> |</li>
+        <li class="nav-item nav-item-0"><a href="#">veneer-py 0.1 documentation</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="welcome-to-veneer-py-s-documentation">
+<h1>Welcome to veneer-py&#8217;s documentation!<a class="headerlink" href="#welcome-to-veneer-py-s-documentation" title="Permalink to this headline">¶</a></h1>
+</div>
+<div class="section" id="veneer-package">
+<h1>veneer package<a class="headerlink" href="#veneer-package" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Permalink to this headline">¶</a></h2>
+</div>
+<div class="section" id="module-veneer.bulk">
+<span id="veneer-bulk-module"></span><h2>veneer.bulk module<a class="headerlink" href="#module-veneer.bulk" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="veneer.bulk.VeneerRetriever">
+<em class="property">class </em><code class="descclassname">veneer.bulk.</code><code class="descname">VeneerRetriever</code><span class="sig-paren">(</span><em>destination</em>, <em>port=9876</em>, <em>host='localhost'</em>, <em>protocol='http'</em>, <em>retrieve_daily=True</em>, <em>retreive_monthly=True</em>, <em>retrieve_annual=True</em>, <em>retrieve_slim_ts=True</em>, <em>retrieve_single_ts=True</em>, <em>retrieve_single_runs=True</em>, <em>retrieve_daily_for=[]</em>, <em>retrieve_ts_json=True</em>, <em>retrieve_ts_csv=False</em>, <em>print_all=False</em>, <em>print_urls=True</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.bulk.VeneerRetriever" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">object</span></code></p>
+<p>Retrieve all information from a Veneer web service and write it out to disk in the same path structure.</p>
+<p>Typically used for creating/archiving static dashboards from an existing Veneer web application.</p>
+<dl class="method">
+<dt id="veneer.bulk.VeneerRetriever.mkdirs">
+<code class="descname">mkdirs</code><span class="sig-paren">(</span><em>directory</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.bulk.VeneerRetriever.mkdirs" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.bulk.VeneerRetriever.retrieve_across_runs">
+<code class="descname">retrieve_across_runs</code><span class="sig-paren">(</span><em>results_set</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.bulk.VeneerRetriever.retrieve_across_runs" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.bulk.VeneerRetriever.retrieve_all">
+<code class="descname">retrieve_all</code><span class="sig-paren">(</span><em>destination</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.bulk.VeneerRetriever.retrieve_all" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.bulk.VeneerRetriever.retrieve_csv">
+<code class="descname">retrieve_csv</code><span class="sig-paren">(</span><em>url</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.bulk.VeneerRetriever.retrieve_csv" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.bulk.VeneerRetriever.retrieve_json">
+<code class="descname">retrieve_json</code><span class="sig-paren">(</span><em>url</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.bulk.VeneerRetriever.retrieve_json" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.bulk.VeneerRetriever.retrieve_multi_ts">
+<code class="descname">retrieve_multi_ts</code><span class="sig-paren">(</span><em>ts_results</em>, <em>run=None</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.bulk.VeneerRetriever.retrieve_multi_ts" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.bulk.VeneerRetriever.retrieve_resource">
+<code class="descname">retrieve_resource</code><span class="sig-paren">(</span><em>url</em>, <em>ext</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.bulk.VeneerRetriever.retrieve_resource" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.bulk.VeneerRetriever.retrieve_runs">
+<code class="descname">retrieve_runs</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#veneer.bulk.VeneerRetriever.retrieve_runs" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.bulk.VeneerRetriever.retrieve_this_daily">
+<code class="descname">retrieve_this_daily</code><span class="sig-paren">(</span><em>ts_url</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.bulk.VeneerRetriever.retrieve_this_daily" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.bulk.VeneerRetriever.retrieve_ts">
+<code class="descname">retrieve_ts</code><span class="sig-paren">(</span><em>ts_url</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.bulk.VeneerRetriever.retrieve_ts" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.bulk.VeneerRetriever.retrieve_variables">
+<code class="descname">retrieve_variables</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#veneer.bulk.VeneerRetriever.retrieve_variables" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.bulk.VeneerRetriever.save_data">
+<code class="descname">save_data</code><span class="sig-paren">(</span><em>base_name</em>, <em>data</em>, <em>ext</em>, <em>mode='b'</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.bulk.VeneerRetriever.save_data" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.bulk.VeneerRetriever.translate_url">
+<code class="descname">translate_url</code><span class="sig-paren">(</span><em>orig</em>, <em>run=None</em>, <em>loc=None</em>, <em>elem=None</em>, <em>var=None</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.bulk.VeneerRetriever.translate_url" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.bulk.VeneerRetriever.unique_results_across_runs">
+<code class="descname">unique_results_across_runs</code><span class="sig-paren">(</span><em>all_results</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.bulk.VeneerRetriever.unique_results_across_runs" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-veneer.extensions">
+<span id="veneer-extensions-module"></span><h2>veneer.extensions module<a class="headerlink" href="#module-veneer.extensions" title="Permalink to this headline">¶</a></h2>
+<dl class="function">
+<dt id="veneer.extensions.add_network_methods">
+<code class="descclassname">veneer.extensions.</code><code class="descname">add_network_methods</code><span class="sig-paren">(</span><em>target</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.extensions.add_network_methods" title="Permalink to this definition">¶</a></dt>
+<dd><p>Attach extension methods to an object that represents a Veneer network.
+Note: The &#8216;<a href="#id1"><span class="problematic" id="id2">network_</span></a>&#8216; prefix will be removed from method names.</p>
+<p>target: Veneer network object to attach extension methods to.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="veneer.extensions.find_network_model">
+<code class="descclassname">veneer.extensions.</code><code class="descname">find_network_model</code><span class="sig-paren">(</span><em>self</em>, <em>model_name</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.extensions.find_network_model" title="Permalink to this definition">¶</a></dt>
+<dd><p>Find information about a node type by its resource name</p>
+<p>model_name: str, name of node type</p>
+<p>Example:</p>
+<p>v = Veneer()
+network = v.network()
+waterusers = network.find_network_model(&#8216;WaterUserNodeModel&#8217;)</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="veneer.extensions.network_as_dataframe">
+<code class="descclassname">veneer.extensions.</code><code class="descname">network_as_dataframe</code><span class="sig-paren">(</span><em>self</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.extensions.network_as_dataframe" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="veneer.extensions.network_downstream_links">
+<code class="descclassname">veneer.extensions.</code><code class="descname">network_downstream_links</code><span class="sig-paren">(</span><em>self</em>, <em>node</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.extensions.network_downstream_links" title="Permalink to this definition">¶</a></dt>
+<dd><p>Find all the links in the network that are immediately downstream of a given node.</p>
+<p>Parameters:</p>
+<ul class="simple">
+<li>node  - the node to search on. Expects the node feature object</li>
+</ul>
+</dd></dl>
+
+<dl class="function">
+<dt id="veneer.extensions.network_models">
+<code class="descclassname">veneer.extensions.</code><code class="descname">network_models</code><span class="sig-paren">(</span><em>self</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.extensions.network_models" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return a list of models within the network.</p>
+<p>Extracts this information through the icon resource attribute.</p>
+<p>Example:</p>
+<p>v = Veneer()
+network = v.network()
+node_models = network.models()</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="veneer.extensions.network_node_names">
+<code class="descclassname">veneer.extensions.</code><code class="descname">network_node_names</code><span class="sig-paren">(</span><em>self</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.extensions.network_node_names" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return a list of node names as found within the network.</p>
+<p>Example:</p>
+<p>v = Veneer()
+network = v.network()
+node_names = network.node_names()</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="veneer.extensions.network_outlet_nodes">
+<code class="descclassname">veneer.extensions.</code><code class="descname">network_outlet_nodes</code><span class="sig-paren">(</span><em>self</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.extensions.network_outlet_nodes" title="Permalink to this definition">¶</a></dt>
+<dd><p>Find all the nodes in the network that are outlets - ie have no downstream nodes.</p>
+<p>Note: Filters out Water User Nodes</p>
+<p>Returns each node as a feature (ie with fields &#8216;geometry&#8217; and &#8216;properties&#8217;)</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="veneer.extensions.network_upstream_links">
+<code class="descclassname">veneer.extensions.</code><code class="descname">network_upstream_links</code><span class="sig-paren">(</span><em>self</em>, <em>node</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.extensions.network_upstream_links" title="Permalink to this definition">¶</a></dt>
+<dd><p>Find all the links in the network that are immediately upstream of a given node.</p>
+<p>Parameters:</p>
+<ul class="simple">
+<li>node  - the node to search on. Expects the node feature object</li>
+</ul>
+</dd></dl>
+
+</div>
+<div class="section" id="module-veneer.general">
+<span id="veneer-general-module"></span><h2>veneer.general module<a class="headerlink" href="#module-veneer.general" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="veneer.general.Veneer">
+<em class="property">class </em><code class="descclassname">veneer.general.</code><code class="descname">Veneer</code><span class="sig-paren">(</span><em>port=9876</em>, <em>host='localhost'</em>, <em>protocol='http'</em>, <em>prefix=''</em>, <em>live=True</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.general.Veneer" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">object</span></code></p>
+<p>Acts as a high level client to the Veneer web service within eWater Source.</p>
+<dl class="method">
+<dt id="veneer.general.Veneer.apply_input_set">
+<code class="descname">apply_input_set</code><span class="sig-paren">(</span><em>name</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.general.Veneer.apply_input_set" title="Permalink to this definition">¶</a></dt>
+<dd><p>Have Source apply a given input set</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="veneer.general.Veneer.configure_recording">
+<code class="descname">configure_recording</code><span class="sig-paren">(</span><em>enable=[]</em>, <em>disable=[]</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.general.Veneer.configure_recording" title="Permalink to this definition">¶</a></dt>
+<dd><p>Enabled and disable time series recording in the Source model.</p>
+<p>enable: List of time series selectors to enable,</p>
+<p>disable: List of time series selectors to disable</p>
+<dl class="docutils">
+<dt>Note: Each time series selector is a python dictionary object with up to three keys:</dt>
+<dd><ul class="first last simple">
+<li>NetworkElement</li>
+<li>RecordingElement</li>
+<li>RecordingVariable</li>
+</ul>
+</dd>
+</dl>
+<p>These are used to match time series available from the Source model. A given selector may match
+multiple time series. For example, a selector of {&#8216;RecordingVariable&#8217;:&#8217;Downstream Flow Volume&#8217;}
+will match Downstream Flow Volume from all nodes and links.</p>
+<p>Any empty dictionary {} will match ALL time series in the model.</p>
+<p>So, for example, you could disable ALL recording in the model with</p>
+<p>v = Veneer()
+v.configure_recording(disable=[{}])</p>
+<p>Note, the time series selectors in enable and disable may both match the same time series in some cases.
+In this case, the &#8216;enable&#8217; will take effect.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="veneer.general.Veneer.convert_dates">
+<code class="descname">convert_dates</code><span class="sig-paren">(</span><em>events</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.general.Veneer.convert_dates" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.general.Veneer.data_source">
+<code class="descname">data_source</code><span class="sig-paren">(</span><em>name</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.general.Veneer.data_source" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return an individual data source, by name.</p>
+<p>Note: Will include the each time series associated with the data source IN FULL</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="veneer.general.Veneer.data_source_item">
+<code class="descname">data_source_item</code><span class="sig-paren">(</span><em>source</em>, <em>name=None</em>, <em>input_set='__all__'</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.general.Veneer.data_source_item" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.general.Veneer.data_sources">
+<code class="descname">data_sources</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#veneer.general.Veneer.data_sources" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return a SearchableList of the data sources in the Source model</p>
+<p>Note: Returns a summary (min,max,mean,etc) of individual time series - NOT the full record.</p>
+<p>You can get the time series by retrieving individual data sources (<cite>data_source</cite> method)</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="veneer.general.Veneer.drop_all_runs">
+<code class="descname">drop_all_runs</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#veneer.general.Veneer.drop_all_runs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Tell Source to drop/delete ALL current run results from memory</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="veneer.general.Veneer.drop_run">
+<code class="descname">drop_run</code><span class="sig-paren">(</span><em>run='latest'</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.general.Veneer.drop_run" title="Permalink to this definition">¶</a></dt>
+<dd><p>Tell Source to drop/delete a specific set of results from memory.</p>
+<p>run: Run number to delete. Default =&#8217;latest&#8217;. Valid values are &#8216;latest&#8217; and integers from 1</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="veneer.general.Veneer.functions">
+<code class="descname">functions</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#veneer.general.Veneer.functions" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return a SearchableList of the functions in the Source model.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="veneer.general.Veneer.input_sets">
+<code class="descname">input_sets</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#veneer.general.Veneer.input_sets" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return a SearchableList of the input sets in the Source model</p>
+<p>Each input set will be a Python dictionary representing the different information in the input set</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="veneer.general.Veneer.network">
+<code class="descname">network</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#veneer.general.Veneer.network" title="Permalink to this definition">¶</a></dt>
+<dd><p>Retrieve the network from Veneer.</p>
+<p>The result will be a Python dictionary in GeoJSON conventions.</p>
+<p>The &#8216;features&#8217; key of the returned dictionary will be a SearchableList, suitable for querying for
+different properties - eg to filter out just nodes, or links, or catchments.</p>
+<p>Example: Find all the node names in the current Source model</p>
+<p>v = Veneer()
+network = v.network()
+nodes = network[&#8216;features&#8217;].find_by_feature_type(&#8216;node&#8217;)
+node_names = nodes._unique_values(&#8216;name&#8217;)</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="veneer.general.Veneer.parse_veneer_date">
+<code class="descname">parse_veneer_date</code><span class="sig-paren">(</span><em>txt</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.general.Veneer.parse_veneer_date" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.general.Veneer.post_json">
+<code class="descname">post_json</code><span class="sig-paren">(</span><em>url</em>, <em>data=None</em>, <em>async=False</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.general.Veneer.post_json" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.general.Veneer.result_matches_criteria">
+<code class="descname">result_matches_criteria</code><span class="sig-paren">(</span><em>result</em>, <em>criteria</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.general.Veneer.result_matches_criteria" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.general.Veneer.retrieve_csv">
+<code class="descname">retrieve_csv</code><span class="sig-paren">(</span><em>url</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.general.Veneer.retrieve_csv" title="Permalink to this definition">¶</a></dt>
+<dd><p>Retrieve data from the Veneer service, at the given url path, in CSV format.</p>
+<p>url: Path to required resource, relative to the root of the Veneer service.</p>
+<p>NOTE: CSV responses are currently only available for time series results</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="veneer.general.Veneer.retrieve_json">
+<code class="descname">retrieve_json</code><span class="sig-paren">(</span><em>url</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.general.Veneer.retrieve_json" title="Permalink to this definition">¶</a></dt>
+<dd><p>Retrieve data from the Veneer service at the given url path.</p>
+<p>url: Path to required resource, relative to the root of the Veneer service.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="veneer.general.Veneer.retrieve_multiple_time_series">
+<code class="descname">retrieve_multiple_time_series</code><span class="sig-paren">(</span><em>run='latest'</em>, <em>run_data=None</em>, <em>criteria={}</em>, <em>timestep='daily'</em>, <em>name_fn=&lt;function name_element_variable at 0x0000000007F068C8&gt;</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.general.Veneer.retrieve_multiple_time_series" title="Permalink to this definition">¶</a></dt>
+<dd><p>Retrieve multiple time series from a run according to some criteria.</p>
+<p>Return all time series in a single Pandas DataFrame with date time index.</p>
+<p>you can an index of run results via run_data. If you don&#8217;t the method will first retrieve an
+index based on the value of the run parameter (default=&#8217;latest&#8217;)</p>
+<dl class="docutils">
+<dt>criteria should be regexps for the fields in a Veneer time series record:</dt>
+<dd><ul class="first last simple">
+<li>NetworkElement</li>
+<li>RecordingElement</li>
+<li>RecordingVariable</li>
+<li>TimeSeriesName</li>
+<li>TimeSeriesUrl</li>
+</ul>
+</dd>
+</dl>
+<p>These criteria are used to identify which time series to retrieve.</p>
+<p>timestep should be one of &#8216;daily&#8217; (default), &#8216;monthly&#8217;, &#8216;annual&#8217;</p>
+<p>All retrieved time series are returned in a single Data Frame.</p>
+<p>You can specify a function for naming the columns of the Data Frame using name_fn. This function should take
+the results summary (from the index) and return a string. Example functions include:</p>
+<blockquote>
+<div><ul class="simple">
+<li>veneer.name_time_series (uses the full name of the time series, as provided by Source)</li>
+<li>veneer.name_element_variable (DEFAULT: users the name of the network element and the name of the variable)</li>
+<li>veneer.name_for_location (just use the name of the network element)</li>
+<li>veneer.name_for_variable (just use the name of the variable)</li>
+</ul>
+</div></blockquote>
+</dd></dl>
+
+<dl class="method">
+<dt id="veneer.general.Veneer.retrieve_run">
+<code class="descname">retrieve_run</code><span class="sig-paren">(</span><em>run='latest'</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.general.Veneer.retrieve_run" title="Permalink to this definition">¶</a></dt>
+<dd><p>Retrieve a results summary for a particular run.</p>
+<p>This will include references to all of the time series results available for the run.</p>
+<p>run: Run to retrieve. Either &#8216;latest&#8217; (default) or an integer run number from 1</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="veneer.general.Veneer.retrieve_runs">
+<code class="descname">retrieve_runs</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#veneer.general.Veneer.retrieve_runs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Retrieve the list of available runs.</p>
+<p>Individual runs can be used with retrieve_run to retrieve a summary of results</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="veneer.general.Veneer.run_model">
+<code class="descname">run_model</code><span class="sig-paren">(</span><em>params={}</em>, <em>start=None</em>, <em>end=None</em>, <em>async=False</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.general.Veneer.run_model" title="Permalink to this definition">¶</a></dt>
+<dd><p>Trigger a run of the Source model</p>
+<dl class="docutils">
+<dt>params: Python dictionary of parameters to pass to Source. Should match the parameters expected</dt>
+<dd>of the running configuration. (If you just want to set the start and end date of the simulation,
+use the start and end parameters</dd>
+</dl>
+<p>start, end: The start and end date of the simulation. Should be provided as Date objects or as text in the dd/mm/yyyy format</p>
+<dl class="docutils">
+<dt>async: (default False). If True, the method will return immediately rather than waiting for the simulation to finish.</dt>
+<dd>Useful for triggering parallel runs. Method will return a connection object that can then be queried to know
+when the run has finished.</dd>
+</dl>
+<p>kwargs: optional named parameters to be used to update the params dictionary</p>
+<p>In the default behaviour (async=False), this method will return once the Source simulation has finished, and will return
+the URL of the results set in the Veneer service</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="veneer.general.Veneer.run_server_side_script">
+<code class="descname">run_server_side_script</code><span class="sig-paren">(</span><em>script</em>, <em>async=False</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.general.Veneer.run_server_side_script" title="Permalink to this definition">¶</a></dt>
+<dd><p>Run an IronPython script within Source.</p>
+<p>Requires Veneer to be running with &#8216;Allow Scripts&#8217; option.</p>
+<p>script: the full text of an IronPython script to execute from within Source.</p>
+<p>NOTE: In many cases, it is possible (and desirable) to call helper methods within Veneer.model,
+rather than write your own IronPython script.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="veneer.general.Veneer.send">
+<code class="descname">send</code><span class="sig-paren">(</span><em>url</em>, <em>method</em>, <em>payload=None</em>, <em>headers={}</em>, <em>async=False</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.general.Veneer.send" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.general.Veneer.send_json">
+<code class="descname">send_json</code><span class="sig-paren">(</span><em>url</em>, <em>data</em>, <em>method</em>, <em>async=False</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.general.Veneer.send_json" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.general.Veneer.update_function">
+<code class="descname">update_function</code><span class="sig-paren">(</span><em>fn</em>, <em>value</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.general.Veneer.update_function" title="Permalink to this definition">¶</a></dt>
+<dd><p>Update a function within Source</p>
+<p>fn: str, name of function to update.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="veneer.general.Veneer.update_input_set">
+<code class="descname">update_input_set</code><span class="sig-paren">(</span><em>name</em>, <em>input_set</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.general.Veneer.update_input_set" title="Permalink to this definition">¶</a></dt>
+<dd><p>Modify the input set and send to Source.</p>
+<p>name: str, name of input set
+input_set: A Python dictionary representing the updated input set. Should contain the same fields as the input set</p>
+<blockquote>
+<div>returned from the input_sets method.</div></blockquote>
+</dd></dl>
+
+<dl class="method">
+<dt id="veneer.general.Veneer.update_json">
+<code class="descname">update_json</code><span class="sig-paren">(</span><em>url</em>, <em>data</em>, <em>async=False</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.general.Veneer.update_json" title="Permalink to this definition">¶</a></dt>
+<dd><p>Issue a PUT request to the Veneer service to update the data held at url</p>
+<p>url: Path to required resource, relative to the root of the Veneer service.</p>
+<p>data: Data to update.</p>
+<p>NOTE: This method will typically be used internally, by other Veneer methods.
+Usually, you will want to call one of these other methods to update something specific.
+For example, configure_recording to enable and disable time series recorders in the model.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="veneer.general.Veneer.update_variable_piecewise">
+<code class="descname">update_variable_piecewise</code><span class="sig-paren">(</span><em>name</em>, <em>values</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.general.Veneer.update_variable_piecewise" title="Permalink to this definition">¶</a></dt>
+<dd><p>Update piecewise linear function for a given variable.</p>
+<p>name: str, variable name to update.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="veneer.general.Veneer.update_variable_time_series">
+<code class="descname">update_variable_time_series</code><span class="sig-paren">(</span><em>name</em>, <em>timeseries</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.general.Veneer.update_variable_time_series" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.general.Veneer.variable">
+<code class="descname">variable</code><span class="sig-paren">(</span><em>name</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.general.Veneer.variable" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns details of a particular variable</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="veneer.general.Veneer.variable_piecewise">
+<code class="descname">variable_piecewise</code><span class="sig-paren">(</span><em>name</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.general.Veneer.variable_piecewise" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns piecewise linear function for a particular variable</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="veneer.general.Veneer.variable_time_series">
+<code class="descname">variable_time_series</code><span class="sig-paren">(</span><em>name</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.general.Veneer.variable_time_series" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns time series for a particular variable</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="veneer.general.Veneer.variables">
+<code class="descname">variables</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#veneer.general.Veneer.variables" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return a SearchableList of the function variables in the Source model</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="function">
+<dt id="veneer.general.log">
+<code class="descclassname">veneer.general.</code><code class="descname">log</code><span class="sig-paren">(</span><em>text</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.general.log" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="veneer.general.name_element_variable">
+<code class="descclassname">veneer.general.</code><code class="descname">name_element_variable</code><span class="sig-paren">(</span><em>result</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.general.name_element_variable" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="veneer.general.name_for_location">
+<code class="descclassname">veneer.general.</code><code class="descname">name_for_location</code><span class="sig-paren">(</span><em>result</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.general.name_for_location" title="Permalink to this definition">¶</a></dt>
+<dd><p>Name the retrieved time series based on the network location only.</p>
+<p>Useful when retrieving the same variable from multiple locations.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="veneer.general.name_for_variable">
+<code class="descclassname">veneer.general.</code><code class="descname">name_for_variable</code><span class="sig-paren">(</span><em>result</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.general.name_for_variable" title="Permalink to this definition">¶</a></dt>
+<dd><p>Name the retrieved time series based on the variable only.</p>
+<p>Useful when retrieving multiple time series from one network location.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="veneer.general.name_time_series">
+<code class="descclassname">veneer.general.</code><code class="descname">name_time_series</code><span class="sig-paren">(</span><em>result</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.general.name_time_series" title="Permalink to this definition">¶</a></dt>
+<dd><p>Name the retrieved time series based on the full name of the time series (including variable and location)</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="veneer.general.read_sdt">
+<code class="descclassname">veneer.general.</code><code class="descname">read_sdt</code><span class="sig-paren">(</span><em>fn</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.general.read_sdt" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="veneer.general.to_source_date">
+<code class="descclassname">veneer.general.</code><code class="descname">to_source_date</code><span class="sig-paren">(</span><em>the_date</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.general.to_source_date" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</div>
+<div class="section" id="module-veneer.manage">
+<span id="veneer-manage-module"></span><h2>veneer.manage module<a class="headerlink" href="#module-veneer.manage" title="Permalink to this headline">¶</a></h2>
+<dl class="function">
+<dt id="veneer.manage.configure_non_blocking_io">
+<code class="descclassname">veneer.manage.</code><code class="descname">configure_non_blocking_io</code><span class="sig-paren">(</span><em>processes</em>, <em>stream</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.manage.configure_non_blocking_io" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="veneer.manage.find_veneer_cmd_line_exe">
+<code class="descclassname">veneer.manage.</code><code class="descname">find_veneer_cmd_line_exe</code><span class="sig-paren">(</span><em>project_fn=None</em>, <em>source_version=None</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.manage.find_veneer_cmd_line_exe" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="veneer.manage.kill_all_on_exit">
+<code class="descclassname">veneer.manage.</code><code class="descname">kill_all_on_exit</code><span class="sig-paren">(</span><em>processes</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.manage.kill_all_on_exit" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="veneer.manage.start">
+<code class="descclassname">veneer.manage.</code><code class="descname">start</code><span class="sig-paren">(</span><em>project_fn</em>, <em>n_instances=1</em>, <em>ports=9876</em>, <em>debug=False</em>, <em>remote=True</em>, <em>script=True</em>, <em>veneer_exe=None</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.manage.start" title="Permalink to this definition">¶</a></dt>
+<dd><p>Start one or more copies of the Veneer command line progeram with a given project file</p>
+<p>Parameters:</p>
+<ul>
+<li><p class="first">project_fn - Path to a Source project file (.rsproj)</p>
+</li>
+<li><p class="first">n_instances - Number of copies of the Veneer command line to start (default: 1)</p>
+</li>
+<li><dl class="first docutils">
+<dt>ports - A single port number, indicating the port number of the first copy of the Veneer command line,</dt>
+<dd><p class="first last">OR a list of ports, in which case len(ports)==n_instances  (default: 9876)</p>
+</dd>
+</dl>
+</li>
+<li><p class="first">debug - Set to True to echo all output from Veneer Command Line during startup</p>
+</li>
+<li><p class="first">remote - Allow remote connections (requires registration)</p>
+</li>
+<li><p class="first">script - Allow IronPython scripts</p>
+</li>
+<li><dl class="first docutils">
+<dt>veneer_exe - Optional (but often required) path to the Veneer Command Line. If not provided,</dt>
+<dd><p class="first last">veneer-py will attempt to identify the version of Veneer Command Line to invoke.
+If there is a source_version.txt file in the same directory as the project file,
+this text file will be consulted to identify the version of Source.</p>
+</dd>
+</dl>
+</li>
+</ul>
+</dd></dl>
+
+</div>
+<div class="section" id="module-veneer.pest">
+<span id="veneer-pest-module"></span><h2>veneer.pest module<a class="headerlink" href="#module-veneer.pest" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="veneer.pest.CalibrationObservations">
+<em class="property">class </em><code class="descclassname">veneer.pest.</code><code class="descname">CalibrationObservations</code><span class="sig-paren">(</span><em>veneer_prefix</em>, <em>delimiter</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest.CalibrationObservations" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="veneer.html#veneer.pest.ConfigItemCollection" title="veneer.pest.ConfigItemCollection"><code class="xref py py-class docutils literal"><span class="pre">veneer.pest.ConfigItemCollection</span></code></a></p>
+<dl class="method">
+<dt id="veneer.pest.CalibrationObservations.compare">
+<code class="descname">compare</code><span class="sig-paren">(</span><em>ts_name</em>, <em>mod_ref</em>, <em>stat=&lt;function nse at 0x0000000008286BF8&gt;</em>, <em>target=None</em>, <em>aggregation=None</em>, <em>time_period=None</em>, <em>obsnme=None</em>, <em>mod_scale=1</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest.CalibrationObservations.compare" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.pest.CalibrationObservations.pif_line">
+<code class="descname">pif_line</code><span class="sig-paren">(</span><em>obs</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest.CalibrationObservations.pif_line" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.pest.CalibrationObservations.pif_text">
+<code class="descname">pif_text</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest.CalibrationObservations.pif_text" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.pest.CalibrationObservations.script">
+<code class="descname">script</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest.CalibrationObservations.script" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="veneer.pest.CalibrationParameters">
+<em class="property">class </em><code class="descclassname">veneer.pest.</code><code class="descname">CalibrationParameters</code><span class="sig-paren">(</span><em>delimiter='$'</em>, <em>instruction_prefix='v.'</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest.CalibrationParameters" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="veneer.html#veneer.pest.DeferredActionCollection" title="veneer.pest.DeferredActionCollection"><code class="xref py py-class docutils literal"><span class="pre">veneer.pest.DeferredActionCollection</span></code></a></p>
+<dl class="method">
+<dt id="veneer.pest.CalibrationParameters.declarations">
+<code class="descname">declarations</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest.CalibrationParameters.declarations" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.pest.CalibrationParameters.describe">
+<code class="descname">describe</code><span class="sig-paren">(</span><em>parnme</em>, <em>parval1</em>, <em>parlbnd</em>, <em>parubnd</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest.CalibrationParameters.describe" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.pest.CalibrationParameters.referenced_parameters">
+<code class="descname">referenced_parameters</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest.CalibrationParameters.referenced_parameters" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="veneer.pest.Case">
+<em class="property">class </em><code class="descclassname">veneer.pest.</code><code class="descname">Case</code><span class="sig-paren">(</span><em>name, optimiser='pest', model_servers=[9876], random_seed=1111</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest.Case" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">object</span></code></p>
+<dl class="method">
+<dt id="veneer.pest.Case.outputs_fn">
+<code class="descname">outputs_fn</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest.Case.outputs_fn" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.pest.Case.pcf_fn">
+<code class="descname">pcf_fn</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest.Case.pcf_fn" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.pest.Case.pcf_text">
+<code class="descname">pcf_text</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest.Case.pcf_text" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.pest.Case.pif_fn">
+<code class="descname">pif_fn</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest.Case.pif_fn" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.pest.Case.pif_text">
+<code class="descname">pif_text</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest.Case.pif_text" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.pest.Case.prf_fn">
+<code class="descname">prf_fn</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest.Case.prf_fn" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.pest.Case.prf_text">
+<code class="descname">prf_text</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest.Case.prf_text" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.pest.Case.ptf_fn">
+<code class="descname">ptf_fn</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest.Case.ptf_fn" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.pest.Case.ptf_text">
+<code class="descname">ptf_text</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest.Case.ptf_text" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.pest.Case.run">
+<code class="descname">run</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest.Case.run" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.pest.Case.runner_fn">
+<code class="descname">runner_fn</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest.Case.runner_fn" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.pest.Case.slave_name">
+<code class="descname">slave_name</code><span class="sig-paren">(</span><em>p</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest.Case.slave_name" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.pest.Case.stdio_params">
+<code class="descname">stdio_params</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest.Case.stdio_params" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.pest.Case.write_connection_file">
+<code class="descname">write_connection_file</code><span class="sig-paren">(</span><em>wd</em>, <em>port</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest.Case.write_connection_file" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="veneer.pest.ConfigItemCollection">
+<em class="property">class </em><code class="descclassname">veneer.pest.</code><code class="descname">ConfigItemCollection</code><span class="sig-paren">(</span><em>template</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest.ConfigItemCollection" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">object</span></code></p>
+<dl class="method">
+<dt id="veneer.pest.ConfigItemCollection.add">
+<code class="descname">add</code><span class="sig-paren">(</span><em>*pargs</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest.ConfigItemCollection.add" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.pest.ConfigItemCollection.declarations">
+<code class="descname">declarations</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest.ConfigItemCollection.declarations" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.pest.ConfigItemCollection.validate">
+<code class="descname">validate</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest.ConfigItemCollection.validate" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="veneer.pest.DeferredActionCollection">
+<em class="property">class </em><code class="descclassname">veneer.pest.</code><code class="descname">DeferredActionCollection</code><span class="sig-paren">(</span><em>delimiter</em>, <em>instruction_prefix</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest.DeferredActionCollection" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">object</span></code></p>
+<dl class="method">
+<dt id="veneer.pest.DeferredActionCollection.script">
+<code class="descname">script</code><span class="sig-paren">(</span><em>transform=None</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest.DeferredActionCollection.script" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.pest.DeferredActionCollection.script_line">
+<code class="descname">script_line</code><span class="sig-paren">(</span><em>instruction</em>, <em>transform=None</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest.DeferredActionCollection.script_line" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="veneer.pest.DeferredCall">
+<em class="property">class </em><code class="descclassname">veneer.pest.</code><code class="descname">DeferredCall</code><span class="sig-paren">(</span><em>parameter</em>, <em>delimiter</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest.DeferredCall" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">object</span></code></p>
+<dl class="method">
+<dt id="veneer.pest.DeferredCall.argstring">
+<code class="descname">argstring</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest.DeferredCall.argstring" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.pest.DeferredCall.is_cal_param">
+<code class="descname">is_cal_param</code><span class="sig-paren">(</span><em>val</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest.DeferredCall.is_cal_param" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.pest.DeferredCall.to_arg">
+<code class="descname">to_arg</code><span class="sig-paren">(</span><em>val</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest.DeferredCall.to_arg" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="veneer.pest.ObservedData">
+<em class="property">class </em><code class="descclassname">veneer.pest.</code><code class="descname">ObservedData</code><a class="headerlink" href="#veneer.pest.ObservedData" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="veneer.html#veneer.pest.DeferredActionCollection" title="veneer.pest.DeferredActionCollection"><code class="xref py py-class docutils literal"><span class="pre">veneer.pest.DeferredActionCollection</span></code></a></p>
+<dl class="method">
+<dt id="veneer.pest.ObservedData.all_files">
+<code class="descname">all_files</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest.ObservedData.all_files" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.pest.ObservedData.copy_to">
+<code class="descname">copy_to</code><span class="sig-paren">(</span><em>slave_dir</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest.ObservedData.copy_to" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="veneer.pest.PestParameter">
+<em class="property">class </em><code class="descclassname">veneer.pest.</code><code class="descname">PestParameter</code><span class="sig-paren">(</span><em>parnme</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest.PestParameter" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">object</span></code></p>
+<dl class="method">
+<dt id="veneer.pest.PestParameter.declaration">
+<code class="descname">declaration</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest.PestParameter.declaration" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="function">
+<dt id="veneer.pest.validate_dict">
+<code class="descclassname">veneer.pest.</code><code class="descname">validate_dict</code><span class="sig-paren">(</span><em>the_dict</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest.validate_dict" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</div>
+<div class="section" id="module-veneer.pest_runtime">
+<span id="veneer-pest-runtime-module"></span><h2>veneer.pest_runtime module<a class="headerlink" href="#module-veneer.pest_runtime" title="Permalink to this headline">¶</a></h2>
+<dl class="function">
+<dt id="veneer.pest_runtime.find_port">
+<code class="descclassname">veneer.pest_runtime.</code><code class="descname">find_port</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest_runtime.find_port" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="veneer.pest_runtime.write_outputs">
+<code class="descclassname">veneer.pest_runtime.</code><code class="descname">write_outputs</code><span class="sig-paren">(</span><em>outputs</em>, <em>fn</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.pest_runtime.write_outputs" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</div>
+<div class="section" id="module-veneer.server_side">
+<span id="veneer-server-side-module"></span><h2>veneer.server_side module<a class="headerlink" href="#module-veneer.server_side" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="veneer.server_side.VeneerCatchmentActions">
+<em class="property">class </em><code class="descclassname">veneer.server_side.</code><code class="descname">VeneerCatchmentActions</code><span class="sig-paren">(</span><em>ironpython</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerCatchmentActions" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="veneer.html#veneer.server_side.VeneerFunctionalUnitActions" title="veneer.server_side.VeneerFunctionalUnitActions"><code class="xref py py-class docutils literal"><span class="pre">veneer.server_side.VeneerFunctionalUnitActions</span></code></a></p>
+<p>Helpers for querying/modifying the catchment model setup</p>
+<p>Specific helpers exist under:</p>
+<ul class="simple">
+<li>.runoff       (rainfall runoff in functional units)</li>
+<li>.generation   (constituent generation in functional units)</li>
+<li>.subcatchment (subcatchment level models)</li>
+</ul>
+<dl class="method">
+<dt id="veneer.server_side.VeneerCatchmentActions.get_areas">
+<code class="descname">get_areas</code><span class="sig-paren">(</span><em>catchments=None</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerCatchmentActions.get_areas" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.server_side.VeneerCatchmentActions.get_functional_unit_areas">
+<code class="descname">get_functional_unit_areas</code><span class="sig-paren">(</span><em>catchments=None</em>, <em>fus=None</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerCatchmentActions.get_functional_unit_areas" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return the area of each functional unit in each catchment:</p>
+<p>Parameters:</p>
+<p>catchments: Restrict to particular catchments by passing a list of catchment names</p>
+<p>fus: Restrict to particular functional unit types by passing a list of FU names</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="veneer.server_side.VeneerCatchmentActions.get_functional_unit_types">
+<code class="descname">get_functional_unit_types</code><span class="sig-paren">(</span><em>catchments=None</em>, <em>fus=None</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerCatchmentActions.get_functional_unit_types" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return a list of all functional unit types in the model</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="veneer.server_side.VeneerCatchmentActions.set_functional_unit_areas">
+<code class="descname">set_functional_unit_areas</code><span class="sig-paren">(</span><em>values</em>, <em>catchments=None</em>, <em>fus=None</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerCatchmentActions.set_functional_unit_areas" title="Permalink to this definition">¶</a></dt>
+<dd><p>Set the area of each functional unit in each catchment:</p>
+<p>Parameters:</p>
+<p>values: List of functional unit areas to apply.</p>
+<p>catchments: Restrict to particular catchments by passing a list of catchment names</p>
+<p>fus: Restrict to particular functional unit types by passing a list of FU names</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="veneer.server_side.VeneerCatchmentGenerationActions">
+<em class="property">class </em><code class="descclassname">veneer.server_side.</code><code class="descname">VeneerCatchmentGenerationActions</code><span class="sig-paren">(</span><em>catchment</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerCatchmentGenerationActions" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="veneer.html#veneer.server_side.VeneerFunctionalUnitActions" title="veneer.server_side.VeneerFunctionalUnitActions"><code class="xref py py-class docutils literal"><span class="pre">veneer.server_side.VeneerFunctionalUnitActions</span></code></a></p>
+<p>Helpers for querying/modifying the constituent generation model setup</p>
+<p>Query options:</p>
+<ul class="simple">
+<li>catchments - the name(s) of catchments to match when querying/configuring.</li>
+<li>fus - the type(s) of functional units to match when querying/configuring</li>
+</ul>
+</dd></dl>
+
+<dl class="class">
+<dt id="veneer.server_side.VeneerFunctionalUnitActions">
+<em class="property">class </em><code class="descclassname">veneer.server_side.</code><code class="descname">VeneerFunctionalUnitActions</code><span class="sig-paren">(</span><em>catchment</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerFunctionalUnitActions" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="veneer.html#veneer.server_side.VeneerNetworkElementActions" title="veneer.server_side.VeneerNetworkElementActions"><code class="xref py py-class docutils literal"><span class="pre">veneer.server_side.VeneerNetworkElementActions</span></code></a></p>
+</dd></dl>
+
+<dl class="class">
+<dt id="veneer.server_side.VeneerIronPython">
+<em class="property">class </em><code class="descclassname">veneer.server_side.</code><code class="descname">VeneerIronPython</code><span class="sig-paren">(</span><em>veneer</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerIronPython" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">object</span></code></p>
+<p>Helper functions for manipulating the internals of the Source model itself.</p>
+<p>These features rely on &#8216;Allow Scripting&#8217; being enabled in Veneer in order to
+post custom IronPython scripts to Source.</p>
+<p>Specific helpers for querying and modifying the catchment components and instream components exist under
+.catchment and .link, respectively.</p>
+<p>eg</p>
+<p>v = Veneer()
+v.model.catchment?
+v.model.link?</p>
+<dl class="method">
+<dt id="veneer.server_side.VeneerIronPython.add_constituent">
+<code class="descname">add_constituent</code><span class="sig-paren">(</span><em>new_constituent</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerIronPython.add_constituent" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.server_side.VeneerIronPython.add_to_list">
+<code class="descname">add_to_list</code><span class="sig-paren">(</span><em>theThing</em>, <em>theValue</em>, <em>namespace=None</em>, <em>literal=False</em>, <em>fromList=False</em>, <em>instantiate=False</em>, <em>allow_duplicates=False</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerIronPython.add_to_list" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.server_side.VeneerIronPython.assign_time_series">
+<code class="descname">assign_time_series</code><span class="sig-paren">(</span><em>theThing</em>, <em>theValue</em>, <em>column=0</em>, <em>from_list=False</em>, <em>literal=True</em>, <em>data_group=None</em>, <em>namespace=None</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerIronPython.assign_time_series" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.server_side.VeneerIronPython.call">
+<code class="descname">call</code><span class="sig-paren">(</span><em>theThing</em>, <em>namespace=None</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerIronPython.call" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.server_side.VeneerIronPython.clean_script">
+<code class="descname">clean_script</code><span class="sig-paren">(</span><em>script</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerIronPython.clean_script" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.server_side.VeneerIronPython.find_inputs">
+<code class="descname">find_inputs</code><span class="sig-paren">(</span><em>model_types</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerIronPython.find_inputs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Find the input names for a given model type or list of model types</p>
+<dl class="docutils">
+<dt>Returns:</dt>
+<dd><ul class="first last simple">
+<li>A list of inputs (if a single model type is provided)</li>
+<li>A dictionary model type name -&gt; list of inputs (if more than model type)</li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="veneer.server_side.VeneerIronPython.find_model_type">
+<code class="descname">find_model_type</code><span class="sig-paren">(</span><em>model_type</em>, <em>must_be_model=True</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerIronPython.find_model_type" title="Permalink to this definition">¶</a></dt>
+<dd><p>Search for model types matching a given string pattern</p>
+<p>eg</p>
+<p>v.model.find_model_type(&#8216;emc&#8217;)</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="veneer.server_side.VeneerIronPython.find_parameters">
+<code class="descname">find_parameters</code><span class="sig-paren">(</span><em>model_types</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerIronPython.find_parameters" title="Permalink to this definition">¶</a></dt>
+<dd><p>Find the parameter names for a given model type or list of model types</p>
+<dl class="docutils">
+<dt>Returns:</dt>
+<dd><ul class="first last simple">
+<li>A list of parameters (if a single model type is provided)</li>
+<li>A dictionary model type name -&gt; list of parameters (if more than model type)</li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="veneer.server_side.VeneerIronPython.find_properties">
+<code class="descname">find_properties</code><span class="sig-paren">(</span><em>model_types</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerIronPython.find_properties" title="Permalink to this definition">¶</a></dt>
+<dd><p>Find all fields and properties for a given model type or list of model types</p>
+<dl class="docutils">
+<dt>Returns:</dt>
+<dd><ul class="first last simple">
+<li>A list of fields and properties (if a single model type is provided)</li>
+<li>A dictionary model type name -&gt; list of fields and properties (if more than model type)</li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="veneer.server_side.VeneerIronPython.get">
+<code class="descname">get</code><span class="sig-paren">(</span><em>theThing</em>, <em>namespace=None</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerIronPython.get" title="Permalink to this definition">¶</a></dt>
+<dd><p>Retrieve a value, or list of values from Source using theThing as a query string.</p>
+<p>Query should either start with <cite>scenario</cite> OR from a class imported using <cite>namespace</cite></p>
+</dd></dl>
+
+<dl class="method">
+<dt id="veneer.server_side.VeneerIronPython.get_constituents">
+<code class="descname">get_constituents</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerIronPython.get_constituents" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.server_side.VeneerIronPython.get_data_sources">
+<code class="descname">get_data_sources</code><span class="sig-paren">(</span><em>theThing</em>, <em>namespace=None</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerIronPython.get_data_sources" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get references (Veneer URLs) to the</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="veneer.server_side.VeneerIronPython.runScript">
+<code class="descname">runScript</code><span class="sig-paren">(</span><em>script</em>, <em>async=False</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerIronPython.runScript" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.server_side.VeneerIronPython.run_script">
+<code class="descname">run_script</code><span class="sig-paren">(</span><em>script</em>, <em>async=False</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerIronPython.run_script" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.server_side.VeneerIronPython.running_configuration">
+<code class="descname">running_configuration</code><span class="sig-paren">(</span><em>new_value=None</em>, <em>return_all=False</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerIronPython.running_configuration" title="Permalink to this definition">¶</a></dt>
+<dd><p>Set or get the current running configuration for the Source model (eg Single Simulation), or
+get a list of all available running configurations</p>
+<p>eg:</p>
+<p>current = v.model.running_configuration()</p>
+<p>v.model.running_configuration(&#8216;Single Simulation&#8217;)</p>
+<p>all_available = v.model.running_configuration(return_all=True)</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="veneer.server_side.VeneerIronPython.save">
+<code class="descname">save</code><span class="sig-paren">(</span><em>fn=None</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerIronPython.save" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.server_side.VeneerIronPython.set">
+<code class="descname">set</code><span class="sig-paren">(</span><em>theThing</em>, <em>theValue</em>, <em>namespace=None</em>, <em>literal=False</em>, <em>fromList=False</em>, <em>instantiate=False</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerIronPython.set" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.server_side.VeneerIronPython.sourceHelp">
+<code class="descname">sourceHelp</code><span class="sig-paren">(</span><em>theThing='scenario'</em>, <em>namespace=None</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerIronPython.sourceHelp" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get some help on what you can do with theThing,
+where theThing is something you can access from a scenario, or the scenario itself.</p>
+<p>If theThing is a method, returns details on how to call the method
+If theThing is an object, returns a list of public methods and properties</p>
+<p>eg
+v.model.sourceHelp() # returns help on the scenario object
+v.model.sourceHelp(&#8216;scenario.CurrentConfiguration&#8217;)</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="veneer.server_side.VeneerIronPython.sourceScenarioOptions">
+<code class="descname">sourceScenarioOptions</code><span class="sig-paren">(</span><em>optionType</em>, <em>option=None</em>, <em>newVal=None</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerIronPython.sourceScenarioOptions" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.server_side.VeneerIronPython.source_scenario_options">
+<code class="descname">source_scenario_options</code><span class="sig-paren">(</span><em>optionType</em>, <em>option=None</em>, <em>newVal=None</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerIronPython.source_scenario_options" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="veneer.server_side.VeneerLinkActions">
+<em class="property">class </em><code class="descclassname">veneer.server_side.</code><code class="descname">VeneerLinkActions</code><span class="sig-paren">(</span><em>ironpython</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerLinkActions" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">object</span></code></p>
+<dl class="method">
+<dt id="veneer.server_side.VeneerLinkActions.create">
+<code class="descname">create</code><span class="sig-paren">(</span><em>from_node</em>, <em>to_node</em>, <em>name=None</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerLinkActions.create" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="veneer.server_side.VeneerLinkConstituentActions">
+<em class="property">class </em><code class="descclassname">veneer.server_side.</code><code class="descname">VeneerLinkConstituentActions</code><span class="sig-paren">(</span><em>link</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerLinkConstituentActions" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="veneer.html#veneer.server_side.VeneerNetworkElementConstituentActions" title="veneer.server_side.VeneerNetworkElementConstituentActions"><code class="xref py py-class docutils literal"><span class="pre">veneer.server_side.VeneerNetworkElementConstituentActions</span></code></a></p>
+</dd></dl>
+
+<dl class="class">
+<dt id="veneer.server_side.VeneerLinkRoutingActions">
+<em class="property">class </em><code class="descclassname">veneer.server_side.</code><code class="descname">VeneerLinkRoutingActions</code><span class="sig-paren">(</span><em>link</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerLinkRoutingActions" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="veneer.html#veneer.server_side.VeneerNetworkElementActions" title="veneer.server_side.VeneerNetworkElementActions"><code class="xref py py-class docutils literal"><span class="pre">veneer.server_side.VeneerNetworkElementActions</span></code></a></p>
+<p>Queries and actions relating to streamflow routing models.</p>
+<p>Query options:</p>
+<ul class="simple">
+<li>links - the name(s) of links to match when querying/configuring.</li>
+</ul>
+<p>For example:</p>
+<p>v.model.links.routing.get_models(links=[&#8216;Link #1&#8217;,&#8217;Link #2&#8217;])</p>
+<dl class="method">
+<dt id="veneer.server_side.VeneerLinkRoutingActions.set_models">
+<code class="descname">set_models</code><span class="sig-paren">(</span><em>models</em>, <em>fromList=False</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerLinkRoutingActions.set_models" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="veneer.server_side.VeneerNetworkElementActions">
+<em class="property">class </em><code class="descclassname">veneer.server_side.</code><code class="descname">VeneerNetworkElementActions</code><span class="sig-paren">(</span><em>ironpython</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerNetworkElementActions" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">object</span></code></p>
+<dl class="method">
+<dt id="veneer.server_side.VeneerNetworkElementActions.assign_time_series">
+<code class="descname">assign_time_series</code><span class="sig-paren">(</span><em>parameter</em>, <em>values</em>, <em>data_group</em>, <em>column=0</em>, <em>literal=True</em>, <em>fromList=False</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerNetworkElementActions.assign_time_series" title="Permalink to this definition">¶</a></dt>
+<dd><p>Assign an input time series to a model input input</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="veneer.server_side.VeneerNetworkElementActions.get_data_sources">
+<code class="descname">get_data_sources</code><span class="sig-paren">(</span><em>parameter</em>, <em>by_name=False</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerNetworkElementActions.get_data_sources" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return pointers (veneer URLs) to the data sources used as input to a particular parameter</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="veneer.server_side.VeneerNetworkElementActions.get_models">
+<code class="descname">get_models</code><span class="sig-paren">(</span><em>by_name=False</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerNetworkElementActions.get_models" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return the models used in a particular context</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="veneer.server_side.VeneerNetworkElementActions.get_param_values">
+<code class="descname">get_param_values</code><span class="sig-paren">(</span><em>parameter</em>, <em>by_name=False</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerNetworkElementActions.get_param_values" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return the values of a particular parameter used in a particular context</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="veneer.server_side.VeneerNetworkElementActions.help">
+<code class="descname">help</code><span class="sig-paren">(</span><em>param=None</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerNetworkElementActions.help" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.server_side.VeneerNetworkElementActions.names">
+<code class="descname">names</code><span class="sig-paren">(</span><em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerNetworkElementActions.names" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return the names of the network elements</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="veneer.server_side.VeneerNetworkElementActions.set_models">
+<code class="descname">set_models</code><span class="sig-paren">(</span><em>models</em>, <em>fromList=False</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerNetworkElementActions.set_models" title="Permalink to this definition">¶</a></dt>
+<dd><p>Assign computation models.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="veneer.server_side.VeneerNetworkElementActions.set_param_values">
+<code class="descname">set_param_values</code><span class="sig-paren">(</span><em>parameter</em>, <em>values</em>, <em>literal=False</em>, <em>fromList=False</em>, <em>instantiate=False</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerNetworkElementActions.set_param_values" title="Permalink to this definition">¶</a></dt>
+<dd><p>Set the values of a particular parameter used in a particular context</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="veneer.server_side.VeneerNetworkElementConstituentActions">
+<em class="property">class </em><code class="descclassname">veneer.server_side.</code><code class="descname">VeneerNetworkElementConstituentActions</code><span class="sig-paren">(</span><em>ironpy</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerNetworkElementConstituentActions" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="veneer.html#veneer.server_side.VeneerNetworkElementActions" title="veneer.server_side.VeneerNetworkElementActions"><code class="xref py py-class docutils literal"><span class="pre">veneer.server_side.VeneerNetworkElementActions</span></code></a></p>
+<dl class="method">
+<dt id="veneer.server_side.VeneerNetworkElementConstituentActions.assign_time_series">
+<code class="descname">assign_time_series</code><span class="sig-paren">(</span><em>parameter</em>, <em>values</em>, <em>data_group</em>, <em>column=0</em>, <em>literal=True</em>, <em>fromList=False</em>, <em>aspect='played'</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerNetworkElementConstituentActions.assign_time_series" title="Permalink to this definition">¶</a></dt>
+<dd><p>Assign an input time series to a rainfall runoff input</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="veneer.server_side.VeneerNetworkElementConstituentActions.initialise_played_constituents">
+<code class="descname">initialise_played_constituents</code><span class="sig-paren">(</span><em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerNetworkElementConstituentActions.initialise_played_constituents" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="veneer.server_side.VeneerNodeActions">
+<em class="property">class </em><code class="descclassname">veneer.server_side.</code><code class="descname">VeneerNodeActions</code><span class="sig-paren">(</span><em>ironpython</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerNodeActions" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="veneer.html#veneer.server_side.VeneerNetworkElementActions" title="veneer.server_side.VeneerNetworkElementActions"><code class="xref py py-class docutils literal"><span class="pre">veneer.server_side.VeneerNetworkElementActions</span></code></a></p>
+<p>Queries and actions relating to nodes (incuding node models).</p>
+<p>Query options:</p>
+<ul class="simple">
+<li>nodes - the name(s) of nodes to match when querying/configuring.</li>
+<li>node_types - the type(s) of nodes to match when querying/configuring</li>
+</ul>
+<p>For example:</p>
+<p>v.model.nodes.get_models(nodes=&#8217;Fish River&#8217;)</p>
+<dl class="method">
+<dt id="veneer.server_side.VeneerNodeActions.create">
+<code class="descname">create</code><span class="sig-paren">(</span><em>name</em>, <em>node_type</em>, <em>location=None</em>, <em>schematic_location=None</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerNodeActions.create" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.server_side.VeneerNodeActions.remove">
+<code class="descname">remove</code><span class="sig-paren">(</span><em>name</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerNodeActions.remove" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="veneer.server_side.VeneerNodeConstituentActions">
+<em class="property">class </em><code class="descclassname">veneer.server_side.</code><code class="descname">VeneerNodeConstituentActions</code><span class="sig-paren">(</span><em>node</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerNodeConstituentActions" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="veneer.html#veneer.server_side.VeneerNetworkElementConstituentActions" title="veneer.server_side.VeneerNetworkElementConstituentActions"><code class="xref py py-class docutils literal"><span class="pre">veneer.server_side.VeneerNetworkElementConstituentActions</span></code></a></p>
+<p>Queries and actions relating to nodes (incuding node models).</p>
+<p>Query options:</p>
+<ul class="simple">
+<li>nodes - the name(s) of nodes to match when querying/configuring.</li>
+<li>node_types - the type(s) of nodes to match when querying/configuring</li>
+</ul>
+<p>For example:</p>
+<p>v.model.nodes.constituents.get_models(nodes=&#8217;Fish River&#8217;)</p>
+</dd></dl>
+
+<dl class="class">
+<dt id="veneer.server_side.VeneerRunoffActions">
+<em class="property">class </em><code class="descclassname">veneer.server_side.</code><code class="descname">VeneerRunoffActions</code><span class="sig-paren">(</span><em>catchment</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerRunoffActions" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="veneer.html#veneer.server_side.VeneerFunctionalUnitActions" title="veneer.server_side.VeneerFunctionalUnitActions"><code class="xref py py-class docutils literal"><span class="pre">veneer.server_side.VeneerFunctionalUnitActions</span></code></a></p>
+<p>Helpers for querying/modifying the rainfall runoff model setup</p>
+<p>Query options:</p>
+<ul class="simple">
+<li>catchments - the name(s) of catchments to match when querying/configuring.</li>
+<li>fus - the type(s) of functional units to match when querying/configuring</li>
+</ul>
+<dl class="method">
+<dt id="veneer.server_side.VeneerRunoffActions.assign_time_series">
+<code class="descname">assign_time_series</code><span class="sig-paren">(</span><em>parameter</em>, <em>values</em>, <em>data_group</em>, <em>column=0</em>, <em>catchments=None</em>, <em>fus=None</em>, <em>literal=True</em>, <em>fromList=False</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerRunoffActions.assign_time_series" title="Permalink to this definition">¶</a></dt>
+<dd><p>Assign an input time series to a rainfall runoff input</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="veneer.server_side.VeneerScriptGenerators">
+<em class="property">class </em><code class="descclassname">veneer.server_side.</code><code class="descname">VeneerScriptGenerators</code><span class="sig-paren">(</span><em>ironpython</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerScriptGenerators" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">object</span></code></p>
+<dl class="method">
+<dt id="veneer.server_side.VeneerScriptGenerators.find_feature_by_name">
+<code class="descname">find_feature_by_name</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerScriptGenerators.find_feature_by_name" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="veneer.server_side.VeneerSourceUIHelpers">
+<em class="property">class </em><code class="descclassname">veneer.server_side.</code><code class="descname">VeneerSourceUIHelpers</code><span class="sig-paren">(</span><em>ironpython</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerSourceUIHelpers" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">object</span></code></p>
+<dl class="method">
+<dt id="veneer.server_side.VeneerSourceUIHelpers.open_editor">
+<code class="descname">open_editor</code><span class="sig-paren">(</span><em>name_of_element</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerSourceUIHelpers.open_editor" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="veneer.server_side.VeneerSubcatchmentActions">
+<em class="property">class </em><code class="descclassname">veneer.server_side.</code><code class="descname">VeneerSubcatchmentActions</code><span class="sig-paren">(</span><em>catchment</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerSubcatchmentActions" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="veneer.html#veneer.server_side.VeneerNetworkElementActions" title="veneer.server_side.VeneerNetworkElementActions"><code class="xref py py-class docutils literal"><span class="pre">veneer.server_side.VeneerNetworkElementActions</span></code></a></p>
+<p>Helpers for querying/modifying the subcatchment-level models</p>
+<p>Query options:</p>
+<ul class="simple">
+<li>catchments - the name(s) of catchments to match when querying/configuring.</li>
+</ul>
+<dl class="method">
+<dt id="veneer.server_side.VeneerSubcatchmentActions.add_model">
+<code class="descname">add_model</code><span class="sig-paren">(</span><em>model_type</em>, <em>add_if_existing=False</em>, <em>catchments=None</em>, <em>allow_duplicates=False</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerSubcatchmentActions.add_model" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="veneer.server_side.VeneerSubcatchmentActions.reset">
+<code class="descname">reset</code><span class="sig-paren">(</span><em>namespace=None</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.server_side.VeneerSubcatchmentActions.reset" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-veneer.stats">
+<span id="veneer-stats-module"></span><h2>veneer.stats module<a class="headerlink" href="#module-veneer.stats" title="Permalink to this headline">¶</a></h2>
+<p>Statistics Module</p>
+<p>Various bivariate statistics functions typically used as Goodness Of Fit measures for
+hydrologic models.</p>
+<p>Functions modules contained here are designed to be called on pairs of DataFrames,
+(observed and predicted) with equivalent columns.</p>
+<p>All functions should work in various scenarios, such as:</p>
+<ul class="simple">
+<li>Dataframes with columns for different constituents,</li>
+<li>Dataframes with columns for different sites</li>
+<li>Daily, monthly, annual time steps</li>
+<li>Other timeperiods, such data aggregated to water year</li>
+</ul>
+<p>Broadly speaking, these statistics will work with data that</p>
+<dl class="function">
+<dt id="veneer.stats.PBIAS">
+<code class="descclassname">veneer.stats.</code><code class="descname">PBIAS</code><span class="sig-paren">(</span><em>obs</em>, <em>pred</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.stats.PBIAS" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="veneer.stats.intersect">
+<code class="descclassname">veneer.stats.</code><code class="descname">intersect</code><span class="sig-paren">(</span><em>obs</em>, <em>pred</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.stats.intersect" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return the input pair of dataframes (obs,pred) with a common index made up of the intersection of
+the input indexes</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="veneer.stats.ioad">
+<code class="descclassname">veneer.stats.</code><code class="descname">ioad</code><span class="sig-paren">(</span><em>obs</em>, <em>pred</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.stats.ioad" title="Permalink to this definition">¶</a></dt>
+<dd><p>ioad - Index of Agreement</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="veneer.stats.nse">
+<code class="descclassname">veneer.stats.</code><code class="descname">nse</code><span class="sig-paren">(</span><em>obs</em>, <em>pred</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.stats.nse" title="Permalink to this definition">¶</a></dt>
+<dd><p>Nash-Sutcliffe Efficiency</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="veneer.stats.ppmc">
+<code class="descclassname">veneer.stats.</code><code class="descname">ppmc</code><span class="sig-paren">(</span><em>obs</em>, <em>pred</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.stats.ppmc" title="Permalink to this definition">¶</a></dt>
+<dd><p>Pearson Product Moment Correlation (PPMC)</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="veneer.stats.rae">
+<code class="descclassname">veneer.stats.</code><code class="descname">rae</code><span class="sig-paren">(</span><em>obs</em>, <em>pred</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.stats.rae" title="Permalink to this definition">¶</a></dt>
+<dd><p>Relative Absolute Error (RAE)</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="veneer.stats.rsr">
+<code class="descclassname">veneer.stats.</code><code class="descname">rsr</code><span class="sig-paren">(</span><em>obs</em>, <em>pred</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.stats.rsr" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</div>
+<div class="section" id="module-veneer.utils">
+<span id="veneer-utils-module"></span><h2>veneer.utils module<a class="headerlink" href="#module-veneer.utils" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="veneer.utils.GroupedDictionary">
+<em class="property">class </em><code class="descclassname">veneer.utils.</code><code class="descname">GroupedDictionary</code><span class="sig-paren">(</span><em>initial={}</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.utils.GroupedDictionary" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">collections.UserDict</span></code></p>
+<dl class="method">
+<dt id="veneer.utils.GroupedDictionary.count">
+<code class="descname">count</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#veneer.utils.GroupedDictionary.count" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="veneer.utils.SearchableList">
+<em class="property">class </em><code class="descclassname">veneer.utils.</code><code class="descname">SearchableList</code><span class="sig-paren">(</span><em>the_list</em>, <em>nested=[]</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.utils.SearchableList" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">object</span></code></p>
+<p>SearchableList of objects</p>
+<dl class="docutils">
+<dt>Use</dt>
+<dd><ul class="first last">
+<li><p class="first">find_by_X(Y) to find all entries in the list where property X is equal to Y</p>
+</li>
+<li><dl class="first docutils">
+<dt>group_by_X() to return a Python dictionary with keys being the unique values of property X and entries</dt>
+<dd><p class="first last">being a list of original list entries with matching X values</p>
+</dd>
+</dl>
+</li>
+<li><p class="first">_unique_values(X) return a set of unique values of property X</p>
+</li>
+<li><p class="first">_all_values(X) return a list of all values of property X (a simple select)</p>
+</li>
+<li><p class="first">_select([&#8216;X&#8217;,&#8217;Y&#8217;]) to select particular properties</p>
+</li>
+</ul>
+</dd>
+</dl>
+<p>For example:</p>
+<p>v = Veneer()
+network = v.network()
+the_list = network[&#8216;features&#8217;]  # A searchable list of network features
+links = the_list.find_by_feature_type(&#8216;link&#8217;)   # All features have a &#8216;feature_type&#8217; property</p>
+<p>grouped = the_list.group_by_feature_type()
+grouped[&#8216;link&#8217;] is a list of links
+grouped[&#8216;node&#8217;] is a list of nodes
+grouped[&#8216;catchment&#8217;] is a list of catchments</p>
+<dl class="method">
+<dt id="veneer.utils.SearchableList.as_dataframe">
+<code class="descname">as_dataframe</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#veneer.utils.SearchableList.as_dataframe" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="function">
+<dt id="veneer.utils.objdict">
+<code class="descclassname">veneer.utils.</code><code class="descname">objdict</code><span class="sig-paren">(</span><em>orig</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.utils.objdict" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="veneer.utils.read_veneer_csv">
+<code class="descclassname">veneer.utils.</code><code class="descname">read_veneer_csv</code><span class="sig-paren">(</span><em>text</em><span class="sig-paren">)</span><a class="headerlink" href="#veneer.utils.read_veneer_csv" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</div>
+<div class="section" id="module-veneer">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-veneer" title="Permalink to this headline">¶</a></h2>
+</div>
+</div>
+<div class="section" id="veneer">
+<h1>veneer<a class="headerlink" href="#veneer" title="Permalink to this headline">¶</a></h1>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="veneer.html">veneer package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="veneer.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="veneer.html#module-veneer.bulk">veneer.bulk module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="veneer.html#module-veneer.extensions">veneer.extensions module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="veneer.html#module-veneer.general">veneer.general module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="veneer.html#module-veneer.manage">veneer.manage module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="veneer.html#module-veneer.pest">veneer.pest module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="veneer.html#module-veneer.pest_runtime">veneer.pest_runtime module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="veneer.html#module-veneer.server_side">veneer.server_side module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="veneer.html#module-veneer.stats">veneer.stats module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="veneer.html#module-veneer.utils">veneer.utils module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="veneer.html#module-veneer">Module contents</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+<div class="section" id="indices-and-tables">
+<h1>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Permalink to this headline">¶</a></h1>
+<ul class="simple">
+<li><a class="reference internal" href="genindex.html"><span>Index</span></a></li>
+<li><a class="reference internal" href="py-modindex.html"><span>Module Index</span></a></li>
+<li><a class="reference internal" href="search.html"><span>Search Page</span></a></li>
+</ul>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="#">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Welcome to veneer-py&#8217;s documentation!</a></li>
+<li><a class="reference internal" href="#veneer-package">veneer package</a><ul>
+<li><a class="reference internal" href="#submodules">Submodules</a></li>
+<li><a class="reference internal" href="#module-veneer.bulk">veneer.bulk module</a></li>
+<li><a class="reference internal" href="#module-veneer.extensions">veneer.extensions module</a></li>
+<li><a class="reference internal" href="#module-veneer.general">veneer.general module</a></li>
+<li><a class="reference internal" href="#module-veneer.manage">veneer.manage module</a></li>
+<li><a class="reference internal" href="#module-veneer.pest">veneer.pest module</a></li>
+<li><a class="reference internal" href="#module-veneer.pest_runtime">veneer.pest_runtime module</a></li>
+<li><a class="reference internal" href="#module-veneer.server_side">veneer.server_side module</a></li>
+<li><a class="reference internal" href="#module-veneer.stats">veneer.stats module</a></li>
+<li><a class="reference internal" href="#module-veneer.utils">veneer.utils module</a></li>
+<li><a class="reference internal" href="#module-veneer">Module contents</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#veneer">veneer</a></li>
+<li><a class="reference internal" href="#indices-and-tables">Indices and tables</a></li>
+</ul>
+
+  <h4>Next topic</h4>
+  <p class="topless"><a href="veneer.html"
+                        title="next chapter">veneer package</a></p>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/index.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="veneer.html" title="veneer package"
+             >next</a> |</li>
+        <li class="nav-item nav-item-0"><a href="#">veneer-py 0.1 documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &copy; Copyright 2016, Joel Rahman.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.3.1.
+    </div>
+  </body>
+</html>
