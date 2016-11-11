@@ -328,6 +328,9 @@ class VeneerIronPython(object):
             theValue=theValue[0]
         return self._assignment(theThing,theValue,namespace,literal,from_list,False,assignment,post_assignment)
 
+    def call(self,theThing,namespace=None):
+        return self.get(theThing,namespace)
+
     def sourceScenarioOptions(self,optionType,option=None,newVal = None):
         return self.source_scenario_options(optionType,option,newVal)
 
@@ -530,6 +533,9 @@ class VeneerNetworkElementActions(object):
         return self._ironpy.assign_time_series(accessor,values,from_list=fromList,
                                                literal=literal,column=column,
                                                data_group=data_group)
+
+    def _call(self,accessor,namespace=None):
+        return self._ironpy.call(accessor,namespace)
 
 class VeneerFunctionalUnitActions(VeneerNetworkElementActions):
     def __init__(self,catchment):
