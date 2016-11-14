@@ -577,8 +577,27 @@ class VeneerCatchmentActions(VeneerFunctionalUnitActions):
         self.subcatchment = VeneerSubcatchmentActions(self)
         self._ns = None
 
+    def _build_accessor(self,parameter=None,catchments=None):
+        accessor = 'scenario.Network.Catchments'
+
+        if not catchments is None:
+            catchments = _stringToList(catchments)
+            accessor += '.Where(lambda c: c.DisplayName in %s)'%catchments
+
+        if not parameter is None:
+            accessor += '.*%s'%parameter
+
+        return accessor
+
     def get_areas(self,catchments=None):
-        return self._ironpy.get('scenario.Network.Catchments.*characteristics.areaInSquareMeters')
+        '''
+        Return catchment area in square metres
+        '''
+        return self.get_param_values('characteristics.areaInSquareMeters',catchments=catchments)
+#        return self._ironpy.get('scenario.Network.Catchments.*characteristics.areaInSquareMeters')
+
+    def names(self,catchments=None):
+        return self.get_param_values('Name',catchments=catchments)
 
     def get_functional_unit_areas(self,catchments=None,fus=None):
         '''
