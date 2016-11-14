@@ -589,11 +589,11 @@ class VeneerCatchmentActions(VeneerFunctionalUnitActions):
 
         return accessor
 
-    def get_areas(self,catchments=None):
+    def get_areas(self,by_name=False,catchments=None):
         '''
         Return catchment area in square metres
         '''
-        return self.get_param_values('characteristics.areaInSquareMeters',catchments=catchments)
+        return self.get_param_values('characteristics.areaInSquareMeters',by_name=by_name,catchments=catchments)
 #        return self._ironpy.get('scenario.Network.Catchments.*characteristics.areaInSquareMeters')
 
     def names(self,catchments=None):
