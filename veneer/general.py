@@ -445,6 +445,8 @@ class Veneer(object):
     def data_source_item(self,source,name=None,input_set='__all__'):
         if name:
             source = '/'.join([source,input_set,name])
+        else:
+            name = source
 
         prefix = '/dataSources/'
         if not source.startswith(prefix):
@@ -453,7 +455,20 @@ class Veneer(object):
 
         def _transform(res):
             if 'TimeSeries' in res:
-                return pd.DataFrame(res['TimeSeries']['Events']).set_index('Date').rename(columns={'Value':res['Name']})
+                return self._create_timeseries_dataframe({name:res['TimeSeries']['Events']},common_index=False)
+            elif 'Items' in res:
+                data_dict = {}
+                suffix = ''
+                for item in res['Items']:
+                    if len(res['Items'])>1:
+                        suffix = " (%s)"%item['Name']
+
+                    if 'Details' in item:
+                        update = {("%s%s"%(d['Name'],suffix)):d['TimeSeries']['Events'] for d in item['Details']}
+
+                        data_dict.update(update)
+
+                return self._create_timeseries_dataframe(data_dict,common_index=False)
             return res
 
         if isinstance(result,list):
