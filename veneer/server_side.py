@@ -542,7 +542,11 @@ class VeneerFunctionalUnitActions(VeneerNetworkElementActions):
         self._catchment = catchment
         super(VeneerFunctionalUnitActions,self).__init__(catchment._ironpy)
 
+
     def _build_accessor(self,parameter=None,catchments=None,fus=None):
+        return self._build_fu_accessor(parameter,catchments,fus)
+
+    def _build_fu_accessor(self,parameter=None,catchments=None,fus=None):
         accessor = 'scenario.Network.Catchments'
 
         if not catchments is None:
@@ -609,7 +613,8 @@ class VeneerCatchmentActions(VeneerFunctionalUnitActions):
 
         fus: Restrict to particular functional unit types by passing a list of FU names
         '''
-        return self.get_param_values('areaInSquareMeters',catchments=catchments,fus=fus)
+        accessor = self._build_fu_accessor('areaInSquareMeters',catchments,fus)
+        return self._ironpy.get(accessor)
 
     def set_functional_unit_areas(self,values,catchments=None,fus=None):
         '''
@@ -623,13 +628,15 @@ class VeneerCatchmentActions(VeneerFunctionalUnitActions):
 
         fus: Restrict to particular functional unit types by passing a list of FU names
         '''
-        return self.set_param_values('areaInSquareMeters',values,fromList=True,catchments=catchments,fus=fus)
+
+        accessor = self._build_fu_accessor('areaInSquareMeters',catchments,fus)
+        return self._ironpy.set(accessor,values,fromList=True)
 
     def get_functional_unit_types(self,catchments=None,fus=None):
         '''
         Return a list of all functional unit types in the model
         '''
-        return self.get_param_values('definition.Name')
+        return self.get_param_values('FunctionalUnits.*definition.Name')
 
 class VeneerRunoffActions(VeneerFunctionalUnitActions):
     '''
@@ -717,14 +724,15 @@ class VeneerSubcatchmentActions(VeneerNetworkElementActions):
         self._name_accessor = 'Catchment.DisplayName'
         super(VeneerSubcatchmentActions,self).__init__(catchment._ironpy)
 
-    def _build_accessor(self,parameter,**kwargs):
+    def _build_accessor(self,parameter,models=True,**kwargs):
         accessor = 'scenario.Network.Catchments'
 
         if not kwargs.get('catchments') is None:
             catchments = _stringToList(kwargs['catchments'])
             accessor += '.Where(lambda sc: sc.DisplayName in %s)'%catchments
 
-        accessor += '.*CatchmentModels'
+        if models:
+            accessor += '.*CatchmentModels'
 
         if not parameter is None:
             accessor += '.*%s'%parameter
@@ -741,6 +749,9 @@ class VeneerSubcatchmentActions(VeneerNetworkElementActions):
         accessor = self._build_accessor(parameter=None,catchments=catchments)
         return self._ironpy.add_to_list(accessor,model_type,model_type,
                                         instantiate=True,allow_duplicates=allow_duplicates)
+
+    def reset(self,namespace=None,**kwargs):
+        self._call(self._build_accessor('reset()',models=False,**kwargs),namespace)
 
 class VeneerLinkActions(object):
     def __init__(self,ironpython):
