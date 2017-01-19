@@ -474,7 +474,9 @@ class VeneerNetworkElementActions(object):
         self._ironpy = ironpython
         self._ns = None
 
-    def _instantiation_namespace(self,types):
+    def _instantiation_namespace(self,types,enum):
+        if enum:
+            types = ['.'.join(t.split('.')[:-1]) for t in types]
         ns = ','.join(set(types))
         if not self._ns is None:
             ns += ','+(','.join(_stringToList(self._ns)))
@@ -510,15 +512,15 @@ class VeneerNetworkElementActions(object):
         '''
         return self.set_param_values(None,models,fromList=fromList,instantiate=True,**kwargs)
 
-    def set_param_values(self,parameter,values,literal=False,fromList=False,instantiate=False,**kwargs):
+    def set_param_values(self,parameter,values,literal=False,fromList=False,instantiate=False,enum=False,**kwargs):
         '''
         Set the values of a particular parameter used in a particular context
         '''
         accessor = self._build_accessor(parameter,**kwargs)
         ns = self._ns
-        if instantiate:
+        if instantiate or enum:
             values = _stringToList(values)
-            ns = self._instantiation_namespace(values)
+            ns = self._instantiation_namespace(values,enum)
             fromList = True
         return self._ironpy.set(accessor,values,ns,literal=literal,fromList=fromList,instantiate=instantiate)
 
