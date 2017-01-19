@@ -474,7 +474,7 @@ class VeneerNetworkElementActions(object):
         self._ironpy = ironpython
         self._ns = None
 
-    def _instantiation_namespace(self,types,enum):
+    def _instantiation_namespace(self,types,enum=False):
         if enum:
             types = ['.'.join(t.split('.')[:-1]) for t in types]
         ns = ','.join(set(types))
