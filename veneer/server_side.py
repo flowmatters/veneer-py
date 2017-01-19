@@ -776,14 +776,18 @@ class VeneerLinkActions(object):
         self.routing = VeneerLinkRoutingActions(self)
         self._name_accessor = '.DisplayName'
 
-    def create(self,from_node,to_node,name=None):
+    def create(self,from_node,to_node,name=None,allow_duplicates=False):
         script = self._ironpy._initScript()
         script += self._ironpy._generator.find_feature_by_name()
         script += 'n1 = find_feature_by_name("%s",exact=True)\n'%from_node
         script += 'n2 = find_feature_by_name("%s",exact=True)\n'%to_node
-        script += 'result = scenario.Network.Connect(n1,n2)\n'
+        indent=''
+        if name and not allow_duplicates:
+            script += 'if not find_feature_by_name("%s",exact=True):\n'%name
+            indent='  '
+        script += indent+'result = scenario.Network.Connect(n1,n2)\n'
         if name:
-            script += 'result.Name = "%s"'%name
+            script += indent+'result.Name = "%s"'%name
         return self._ironpy._safe_run(script)
 
 
