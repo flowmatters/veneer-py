@@ -32,6 +32,7 @@ class VeneerIronPython(object):
 
             script += '\n'.join(["import %s\n"%ns for ns in namespace])
         script += "import clr\n"
+        script += "clr.AddReference('System.Core')\n"
         script += "import System\n"
         script += "import FlowMatters.Source.Veneer.RemoteScripting.ScriptHelpers as H\n"
         script += "clr.ImportExtensions(System.Linq)\n"
@@ -47,7 +48,9 @@ class VeneerIronPython(object):
     def runScript(self,script,async=False):
         return self.run_script(script,async)
 
-    def run_script(self,script,async=False):
+    def run_script(self,script,async=False,init=False):
+        if init:
+            script = self._initScript() + '\n'+ script
         script = self.clean_script(script)
         return self._veneer.run_server_side_script(script,async)
 
@@ -123,7 +126,18 @@ class VeneerIronPython(object):
 
         v.model.find_model_type('emc')
         '''
-        script = self._initScript('TIME.Management.Finder as Finder')
+        script = self._initScript()
+        script += 'try:\n'
+        script += '  import TIME.Management.Finder as Finder\n'
+        script += 'except:\n'
+        script += '  import TIME.Management.AssemblyManager as AssemblyManager\n'
+        script += '  def Finder(t):\n'
+        script += '    class _result: pass\n'
+        script += '    __result = _result()\n'
+        script += '    def tmpF(): return AssemblyManager.FindTypes(t).ToList()\n'
+        script += '    __result.types = tmpF\n'
+        script += '    return __result\n'
+
         if must_be_model:
             script += 'import TIME.Core.Model as Model\n'
             script += 'f = Finder(Model)\n'
