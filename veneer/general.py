@@ -52,6 +52,9 @@ def log(text):
     print('\n'.join(_stringToList(text)))
     sys.stdout.flush()
 
+def _veneer_url_safe_id_string(s):
+    return s.replace('#','').replace('/','%2F').replace(':','')
+
 class Veneer(object):
     '''
     Acts as a high level client to the Veneer web service within eWater Source.
@@ -77,6 +80,8 @@ class Veneer(object):
         if self.live_source:
             self.data_ext=''
         else:
+            if protocol=='file':
+                self.base_url = '%s://%s'%(protocol,prefix)
             self.data_ext='.json'
         self.model = VeneerIronPython(self)
 
@@ -89,7 +94,10 @@ class Veneer(object):
         if PRINT_URLS:
             print("*** %s ***" % (url))
 
-        text = urlopen(self.base_url + quote(url+self.data_ext)).read().decode('utf-8')
+        if self.protocol=='file':
+            text = open(self.prefix+url+self.data_ext).read()
+        else:
+            text = urlopen(self.base_url + quote(url+self.data_ext)).read().decode('utf-8')
 
         if PRINT_ALL:
             print(json.loads(text))
@@ -432,8 +440,18 @@ class Veneer(object):
         result = self.retrieve_json(name)
 
         def _transform_details(details):
-            data_dict = {d['Name']:d['TimeSeries']['Events'] for d in details}
-            return self._create_timeseries_dataframe(data_dict,common_index=False)
+            if 'Events' in details[0]['TimeSeries']:
+                data_dict = {d['Name']:d['TimeSeries']['Events'] for d in details}
+                return self._create_timeseries_dataframe(data_dict,common_index=False)
+
+            # Slim Time Series...
+            ts = details[0]['TimeSeries']
+            start_t = self.parse_veneer_date(ts['StartDate'])
+            end_t = self.parse_veneer_date(ts['EndDate'])
+            freq = ts['TimeStep'][0]
+            index = pd.date_range(start_t,end_t,freq=freq)
+            data_dict = {d['Name']:d['TimeSeries']['Values'] for d in details}
+            return pd.DataFrame(data_dict,index=index)
 
         def _transform_data_source_item(item):
             item['Details'] = _transform_details(item['Details'])
@@ -444,7 +462,7 @@ class Veneer(object):
 
     def data_source_item(self,source,name=None,input_set='__all__'):
         if name:
-            source = '/'.join([source,input_set,name])
+            source = '/'.join([source,input_set,_veneer_url_safe_id_string(name)])
         else:
             name = source
 
@@ -550,25 +568,44 @@ class Veneer(object):
             run_data = self.retrieve_run(run)
 
         retrieved={}
+        def name_column(result):
+            col_name = name_fn(result)
+            if col_name in retrieved:
+                i = 1
+                alt_col_name = '%s %d'%(col_name,i)
+                while alt_col_name in retrieved:
+                    i += 1
+                    alt_col_name = '%s %d'%(col_name,i)
+                col_name = alt_col_name
+            return col_name
+
         units_store = {}
         for result in run_data['Results']:
             if self.result_matches_criteria(result,criteria):
                 d = self.retrieve_json(result['TimeSeriesUrl']+suffix)
                 result.update(d)
-                col_name = name_fn(result)
-                if col_name in retrieved:
-                    i = 1
-                    alt_col_name = '%s %d'%(col_name,i)
-                    while alt_col_name in retrieved:
-                        i += 1
-                        alt_col_name = '%s %d'%(col_name,i)
-                    col_name = alt_col_name
+                col_name = name_column(result)
 #                    raise Exception("Duplicate column name: %s"%col_name)
                 if 'Events' in d:
                     retrieved[col_name] = d['Events']
                     units_store[col_name] = result['Units']
                 else:
-                    pass
+                    all_ts = d['TimeSeries']
+                    for ts in all_ts:
+                        col_name = name_column(ts)
+                        units_store[col_name] = ts['Units']
+
+                        vals = ts['Values']
+                        s = self.parse_veneer_date(ts['StartDate'])
+                        e = self.parse_veneer_date(ts['EndDate'])
+                        if ts['TimeStep']=='Daily':
+                            f='D'
+                        elif ts['TimeStep']=='Monthly':
+                            f='M'
+                        elif ts['TimeStep']=='Annual':
+                            f='A'
+                        dates = pd.date_range(s,e,freq=f)
+                        retrieved[col_name] = [{'Date':d,'Value':v} for d,v in zip(dates,vals)]
                     # Multi Time Series!
 
         result = self._create_timeseries_dataframe(retrieved)
@@ -578,6 +615,8 @@ class Veneer(object):
         return result
 
     def parse_veneer_date(self,txt):
+        if hasattr(txt,'strftime'):
+            return txt
         return pd.datetime.strptime(txt,'%m/%d/%Y %H:%M:%S')
 
     def convert_dates(self,events):
