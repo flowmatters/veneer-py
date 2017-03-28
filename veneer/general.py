@@ -21,7 +21,7 @@ def name_time_series(result):
     '''
     Name the retrieved time series based on the full name of the time series (including variable and location)
     '''
-    return result['TimeSeriesName']
+    return result.get('TimeSeriesName',result.get('Name','%s/%s/%s'%(result['NetworkElement'],result['RecordingElement'],result['RecordingVariable'])))
 
 def name_element_variable(result):
     element = result['NetworkElement']
