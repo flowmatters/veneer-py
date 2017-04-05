@@ -460,6 +460,27 @@ class Veneer(object):
         result['Items'] = SearchableList([_transform_data_source_item(i) for i in result['Items']])
         return result
 
+    def create_data_source(self,name,data,units='mm/day'):
+        '''
+        Create a new data source (name) using a Pandas dataframe (data)
+        '''
+        dummy_data_group = {}
+        dummy_data_group['Name']=name
+        dummy_item = {}
+        dummy_item['Name']='Item for %s'%name
+        dummy_item['InputSets']=['Default Input Set']
+
+        dummy_detail = {}
+        dummy_detail['Name'] = 'Details for %s'%name
+        dummy_detail['TimeSeries']={}
+
+        #dummy_item['Details'] = [dummy_detail]
+        dummy_item['DetailsAsCSV']=data.to_csv(float_format='%.3f')
+        dummy_item['UnitsForNewTS']=units
+        dummy_data_group['Items']=[dummy_item]
+
+        return self.post_json('/dataSources',data=dummy_data_group)
+
     def data_source_item(self,source,name=None,input_set='__all__'):
         if name:
             source = '/'.join([source,input_set,_veneer_url_safe_id_string(name)])
