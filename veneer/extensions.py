@@ -4,6 +4,11 @@ import inspect
 from types import MethodType
 from .utils import SearchableList
 
+def _node_id(node):
+    if hasattr(node,'keys'):
+        return node['id']
+    return node
+
 def network_downstream_links(self,node):
     '''
     Find all the links in the network that are immediately downstream of a given node.
@@ -14,7 +19,7 @@ def network_downstream_links(self,node):
     '''
     features = self['features']
     links = features.find_by_feature_type('link')
-    return links.find_by_from_node(node['id'])
+    return links.find_by_from_node(_node_id(node))
 
 def network_upstream_links(self,node):
     '''
@@ -26,7 +31,7 @@ def network_upstream_links(self,node):
     '''
     features = self['features']
     links = features.find_by_feature_type('link')
-    return links.find_by_to_node(node['id'])
+    return links.find_by_to_node(_node_id(node))
 
 def network_node_names(self):
     '''
