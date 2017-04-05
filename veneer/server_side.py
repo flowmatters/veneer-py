@@ -803,12 +803,14 @@ class VeneerNetworkElementConstituentActions(VeneerNetworkElementActions):
         self._aspect_pre_modifer = {
             '':'',
             'played':'Data.ConstituentPlayedValues',
-            'model':'Data.ProcessingModels'
+            'model':'Data.ProcessingModels',
+            'initial':'InitialConcentrations.Concentrations'
         }
         self._aspect_post_modifer = {
             'model':'.*Model',
             'played':'.*',
-            '':''
+            '':'',
+            'initial':'.*'
         }
 
     def assign_time_series(self,parameter,values,data_group,column=0,
