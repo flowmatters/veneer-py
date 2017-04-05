@@ -323,9 +323,10 @@ class VeneerIronPython(object):
         return self._assignment(theThing,theValue,namespace,literal,fromList,instantiate,"%s%s = newVal","")
 
     def add_to_list(self,theThing,theValue,namespace=None,literal=False,
-                    fromList=False,instantiate=False,allow_duplicates=False):
+                    fromList=False,instantiate=False,allow_duplicates=False,n=1):
         if allow_duplicates:
-            assignment = "%s%s.Add(newVal"
+            assignment = "for addCounter in range(%d):"%n
+            assignment += "%s%s.Add(newVal"
         else:
             assignment = "theList=%s%s\nif not H.ListContainsInstance(theList,newVal"
             if instantiate: assignment += "()"
@@ -523,6 +524,11 @@ class VeneerNetworkElementActions(object):
             ns = self._instantiation_namespace(values,enum)
             fromList = True
         return self._ironpy.set(accessor,values,ns,literal=literal,fromList=fromList,instantiate=instantiate)
+
+    def add_to_list(self,parameter,value,instantiate=False,n=1,**kwargs):
+        accessor = self._build_accessor(parameter,**kwargs)
+        ns = value if instantiate else None
+        return self._ironpy.add_to_list(accessor,value,namespace=ns,n=n,instantiate=True,allow_duplicates=True)
 
     def get_data_sources(self,parameter,by_name=False,**kwargs):
         '''
