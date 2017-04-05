@@ -1,4 +1,12 @@
 
+try:
+    from urllib2 import urlopen, quote
+except:
+    from urllib.request import urlopen, quote, Request
+import json
+import shutil
+import os
+
 class VeneerRetriever(object):
     '''
     Retrieve all information from a Veneer web service and write it out to disk in the same path structure.
@@ -6,17 +14,18 @@ class VeneerRetriever(object):
     Typically used for creating/archiving static dashboards from an existing Veneer web application.
     '''
     def __init__(self,destination,port=9876,host='localhost',protocol='http',
-                 retrieve_daily=True,retreive_monthly=True,retrieve_annual=True,
+                 retrieve_daily=True,retrieve_monthly=True,retrieve_annual=True,
                  retrieve_slim_ts=True,retrieve_single_ts=True,
                  retrieve_single_runs=True,retrieve_daily_for=[],
                  retrieve_ts_json=True,retrieve_ts_csv=False,
-                 print_all = False, print_urls = True):
+                 print_all = False, print_urls = False):
+        from .general import Veneer,log
         self.destination = destination
         self.port = port
         self.host = host
         self.protocol = protocol
         self.retrieve_daily = retrieve_daily
-        self.retreive_monthly = retreive_monthly
+        self.retrieve_monthly = retrieve_monthly
         self.retrieve_annual = retrieve_annual
         self.retrieve_slim_ts = retrieve_slim_ts
         self.retrieve_single_ts = retrieve_single_ts
@@ -28,6 +37,7 @@ class VeneerRetriever(object):
         self.print_urls = print_urls
         self.base_url = "%s://%s:%d" % (protocol,host,port)
         self._veneer = Veneer(host=self.host,port=self.port,protocol=self.protocol)
+        self.log = log
 
     def mkdirs(self,directory):
         import os
@@ -50,7 +60,7 @@ class VeneerRetriever(object):
         try:
             text = urlopen(self.base_url + quote(url)).read().decode('utf-8')
         except:
-            log("Couldn't retrieve %s"%url)
+            self.log("Couldn't retrieve %s"%url)
             return None
 
         self.save_data(url[1:],bytes(text,'utf-8'),"json")
@@ -157,7 +167,7 @@ class VeneerRetriever(object):
 
         if self.retrieve_this_daily(ts_url):
             urls.append(ts_url)
-        if self.retreive_monthly:
+        if self.retrieve_monthly:
             urls.append(ts_url + "/aggregated/monthly")
         if self.retrieve_annual:
             urls.append(ts_url + "/aggregated/annual")
@@ -174,7 +184,12 @@ class VeneerRetriever(object):
             if var['TimeSeries']: self.retrieve_json(var['TimeSeries'])
             if var['PiecewiseFunction']: self.retrieve_json(var['PiecewiseFunction'])
 
-    def retrieve_all(self,destination,**kwargs):
+    def retrieve_all(self,clean=False):
+        if os.path.exists(self.destination):
+            if clean:
+                shutil.rmtree(self.destination)
+            else:
+                raise Exception("Destination (%s) already exists. Use clean=True to overwrite"%self.destination)
         self.mkdirs(self.destination)
         self.retrieve_runs()
         self.retrieve_json("/functions")
