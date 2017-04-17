@@ -92,7 +92,7 @@ def start(project_fn,n_instances=1,ports=9876,debug=False,remote=True,script=Tru
     if remote: extras += '-r '
     if script: extras += '-s '
 
-    cmd_line = '%s -p %%d %s %s'%(veneer_exe,extras,project_fn)
+    cmd_line = '%s -p %%d %s "%s"'%(veneer_exe,extras,project_fn)
     cmd_lines = [cmd_line%port for port in ports]
     if debug:
         for cmd in cmd_lines:
