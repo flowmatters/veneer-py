@@ -975,6 +975,7 @@ class VeneerNodeActions(VeneerNetworkElementActions):
     def create(self,name,node_type,location=None,schematic_location=None):
         script = self._ironpy._initScript('.'.join(node_type.split('.')[:-1]))
         script += 'import RiverSystem.E2ShapeProperties as E2ShapeProperties\n'
+        script += 'import RiverSystem.Utils.RiverSystemUtils as rsutils\n'
         script += 'network = scenario.Network\n'
         script += 'new_node = RiverSystem.Node()\n'
         if location:
@@ -983,6 +984,7 @@ class VeneerNodeActions(VeneerNetworkElementActions):
 
         script += 'new_node.Name = "%s"\n'%name
         script += 'new_node.NodeModel = %s()\n'%node_type
+        script += 'rsutils.SeedEntityTarget(new_node.NodeModel,scenario)\n'
         script += 'network.Add.Overloads[RiverSystem.INetworkElement](new_node)\n'
 
         if(schematic_location):
