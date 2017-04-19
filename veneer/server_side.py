@@ -343,8 +343,20 @@ class VeneerIronPython(object):
             theValue=theValue[0]
         return self._assignment(theThing,theValue,namespace,literal,from_list,False,assignment,post_assignment)
 
-    def call(self,theThing,namespace=None):
+    def call(self,theThing,parameter_tuple=None,literal=False,from_list=False,namespace=None):
         return self.get(theThing,namespace)
+
+    def apply(self,accessor,code,name,namespace):
+        script = self._initScript(namespace)
+
+        inner_loop = name + '= %s%s\n' + code
+        script += self._generateLoop(accessor,inner_loop)
+        result = self.run_script(script)
+        if not result['Exception'] is None:
+            raise Exception(resp['Exception'])
+        data = result['Response']['Value'] if result['Response'] else result['Response']
+        return data
+
 
     def sourceScenarioOptions(self,optionType,option=None,newVal = None):
         return self.source_scenario_options(optionType,option,newVal)
@@ -555,6 +567,14 @@ class VeneerNetworkElementActions(object):
         return self._ironpy.assign_time_series(accessor,values,from_list=fromList,
                                                literal=literal,column=column,
                                                data_group=data_group)
+
+    def call(self,method,parameter_tuple=None,literal=False,fromList=False,**kwargs):
+        accessor = self._build_accessor(method,**kwargs)
+        return self._ironpy.call(accessor,parameter_tuple,literal=literal,from_list=fromList) 
+    
+    def apply(self,code,name='target',namespace=None,**kwargs):
+        accessor = self._build_accessor('',**kwargs)
+        return self._ironpy.apply(accessor[:-1],code,name,namespace)
 
     def _call(self,accessor,namespace=None):
         return self._ironpy.call(accessor,namespace)
