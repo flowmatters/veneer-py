@@ -102,7 +102,6 @@ class Veneer(object):
             conn.request('GET',quote(url+self.data_ext))
             resp = conn.getresponse()
             text = resp.read().decode('utf-8')
-            print(text)
             #text = urlopen(self.base_url + quote(url+self.data_ext)).read().decode('utf-8')
 
         if PRINT_ALL:
