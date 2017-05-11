@@ -1,10 +1,11 @@
 try:
     from urllib2 import urlopen, quote
+    import httplib as hc
 except:
     from urllib.request import urlopen, quote, Request
+    import http.client as hc
 
 import json
-import http.client as hc
 from . import utils
 from .bulk import VeneerRetriever
 from .server_side import VeneerIronPython
