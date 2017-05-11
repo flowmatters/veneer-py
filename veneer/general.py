@@ -98,7 +98,12 @@ class Veneer(object):
         if self.protocol=='file':
             text = open(self.prefix+url+self.data_ext).read()
         else:
-            text = urlopen(self.base_url + quote(url+self.data_ext)).read().decode('utf-8')
+            conn = hc.HTTPConnection(self.host,port=self.port)
+            conn.request('GET',quote(url+self.data_ext))
+            resp = conn.getresponse()
+            text = resp.read().decode('utf-8')
+            print(text)
+            #text = urlopen(self.base_url + quote(url+self.data_ext)).read().decode('utf-8')
 
         if PRINT_ALL:
             print(json.loads(text))
