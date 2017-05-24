@@ -1,6 +1,19 @@
 
 from .utils import _stringToList
 
+NODE_TYPES={
+    'inflow':'RiverSystem.Nodes.Inflow.InjectedFlow',
+    'gauge':'RiverSystem.Nodes.Gauge.GaugeNodeModel',
+    'confluence':'RiverSystem.Nodes.Confluence.ConfluenceNodeModel',
+    'loss':'RiverSystem.Nodes.Loss.LossNodeModel',
+    'water_user':'RiverSystem.Nodes.WaterUser.WaterUserNodeModel',
+    'storage':'RiverSystem.Nodes.StorageNodeModel',
+    'scenario_transfer':'RiverSystem.Nodes.ScenarioTransfer.ScenarioTransferNodeModel',
+    'transfer_ownership':'RiverSystem.Nodes.TransferOwnership.TransferOwnershipNodeModel',
+    'off_allocation':'RiverSystem.Nodes.OffAllocation.OffAllocationNodeModel',
+    'environmental_demand':'RiverSystem.Nodes.EnvironmentalDemand.EnvironmentalDemandNodeModel'
+}
+
 class VeneerIronPython(object):
     """
     Helper functions for manipulating the internals of the Source model itself.
@@ -1063,3 +1076,14 @@ class VeneerNodeConstituentActions(VeneerNetworkElementConstituentActions):
 
 
 
+def build_dynamic_methods():
+    def add_node_creator(name,klass):
+        def creator(self,node_name,location=None,schematic_location=None):
+            return self.create(node_name,klass,location,schematic_location)
+        creator.__name__ = "new_%s"%name
+        setattr(VeneerNodeActions,creator.__name__,creator)
+
+    for name,klass in NODE_TYPES.items():
+        add_node_creator(name,klass)
+
+build_dynamic_methods()
