@@ -314,6 +314,9 @@ class VeneerIronPython(object):
             if literal:
                 theValue = [("'"+v+"'") if isinstance(v,str) else v for v in theValue]
             theValue = '['+(','.join([str(s) for s in theValue]))+']'
+        elif type(theValue)==list:
+            theValue = 'tuple(%s)'%theValue
+
         script = self._initScript(namespace)
         script += 'origNewVal = %s\n'%theValue
         if fromList:
