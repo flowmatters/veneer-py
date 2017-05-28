@@ -245,6 +245,14 @@ class VeneerIronPython(object):
         """
         return self._find_members_with_attribute_for_types(model_types,'InputAttribute')
 
+    def simplify_response(self,response):
+        if hasattr(response,'__len__'):
+            if isinstance(response,str):
+                return response
+            return [self.simplify_response(r['Value']) for r in response]
+
+        return response
+
     def get(self,theThing,namespace=None):
         """
         Retrieve a value, or list of values from Source using theThing as a query string.
@@ -266,7 +274,7 @@ class VeneerIronPython(object):
             raise Exception(resp['Exception'])
         data = resp['Response']['Value'] if resp['Response'] else resp['Response']
         if listQuery:
-            return [d['Value'] if d else d for d in data]
+            return [self.simplify_response(d['Value']) if d else d for d in data]
         return data
 
     def get_data_sources(self,theThing,namespace=None):
