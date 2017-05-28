@@ -39,6 +39,12 @@ def name_for_variable(result):
     '''
     return result['RecordingVariable']
 
+def name_for_end_variable(result):
+    '''
+    Name the retrieved time series based on the final part of the RecordingVariable (eg after the last @)
+    '''
+    return name_for_variable(result).split('@')[-1]
+
 def name_for_location(result):
     '''
     Name the retrieved time series based on the network location only.
