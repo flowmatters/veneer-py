@@ -6,6 +6,7 @@ except:
     import http.client as hc
 
 import json
+import re
 from . import utils
 from .bulk import VeneerRetriever
 from .server_side import VeneerIronPython
@@ -92,6 +93,9 @@ class Veneer(object):
             self.data_ext='.json'
         self.model = VeneerIronPython(self)
 
+    def _replace_inf(self,text):
+        return re.sub('":(-?)INF','":\\1Infinity',text)
+
     def retrieve_json(self,url):
         '''
         Retrieve data from the Veneer service at the given url path.
@@ -110,6 +114,7 @@ class Veneer(object):
             text = resp.read().decode('utf-8')
             #text = urlopen(self.base_url + quote(url+self.data_ext)).read().decode('utf-8')
 
+        text = self._replace_inf(text)
         if PRINT_ALL:
             print(json.loads(text))
             print("")
