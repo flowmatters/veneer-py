@@ -996,27 +996,30 @@ class VeneerNodeActions(VeneerNetworkElementActions):
         self._name_accessor = 'Node.Name'
         self.constituents = VeneerNodeConstituentActions(self)
 
-    def _refine_accessor(self,node_access='',nodes=None,node_types=None):
+    def _refine_accessor(self,node_access='',nodes=None,node_types=None,splitter=False):
         accessor = ""
         if not nodes is None:
             nodes = _stringToList(nodes)
             accessor += '.Where(lambda n:n%s.Name in %s)'%(node_access,nodes)
         if not node_types is None:
             node_types = _stringToList(node_types)
-            accessor += '.Where(lambda n:n%s.NodeModel and n%s.NodeModel.GetType().Name.Split(".").Last() in %s)'%(node_access,node_access,node_types)
+            accessor += '.Where(lambda n:n%s.%s and n%s.%s.GetType().Name.Split(".").Last() in %s)'%(node_access,self._model_property(splitter),node_access,self._model_property(splitter),node_types)
         return accessor
 
-    def _build_accessor(self,parameter=None,nodes=None,node_types=None):
+    def _model_property(self,splitter):
+        return 'FlowPartitioning' if splitter else 'NodeModel'
+
+    def _build_accessor(self,parameter=None,nodes=None,node_types=None,splitter=False):
         accessor = 'scenario.Network.Nodes'
         accessor += self._refine_accessor(nodes=nodes,node_types=node_types)
 
-        accessor += '.*NodeModel'
+        accessor += '.*%s'%self._model_property(splitter)
         if not parameter is None:
             accessor += '.%s'%parameter
 
         return accessor
 
-    def create(self,name,node_type,location=None,schematic_location=None):
+    def create(self,name,node_type,location=None,schematic_location=None,splitter=False):
         script = self._ironpy._initScript('.'.join(node_type.split('.')[:-1]))
         script += 'import RiverSystem.E2ShapeProperties as E2ShapeProperties\n'
         script += 'import RiverSystem.Utils.RiverSystemUtils as rsutils\n'
@@ -1027,8 +1030,8 @@ class VeneerNodeActions(VeneerNetworkElementActions):
             script += 'new_node.location.N = %f\n'%location[1]
 
         script += 'new_node.Name = "%s"\n'%name
-        script += 'new_node.NodeModel = %s()\n'%node_type
-        script += 'rsutils.SeedEntityTarget(new_node.NodeModel,scenario)\n'
+        script += 'new_node.%s = %s()\n'%(self._model_property(splitter),node_type)
+        script += 'rsutils.SeedEntityTarget(new_node.%s,scenario)\n'%self._model_property(splitter)
         script += 'network.Add.Overloads[RiverSystem.INetworkElement](new_node)\n'
 
         if(schematic_location):
