@@ -245,13 +245,52 @@ class VeneerIronPython(object):
         """
         return self._find_members_with_attribute_for_types(model_types,'InputAttribute')
 
+    def find_outputs(self,model_types):
+        """
+        Find the output names for a given model type or list of model types
+
+        Returns:
+         * A list of outputs (if a single model type is provided)
+         * A dictionary model type name -> list of outputs (if more than model type)
+        """
+        return self._find_members_with_attribute_for_types(model_types,'OutputAttribute')
+
+    def find_default_parameters(self,model_type):
+        """
+        Find the default value of all parameters for a given model type.
+
+        Returns:
+         * A list of parameters (if a single model type is provided)
+         * A dictionary model type name -> list of parameters (if more than model type)
+        """
+        params = self.find_parameters(model_type)
+        script="""
+        import %s
+        model = %s()
+        result = {}
+        """%(model_type,model_type)
+        script = self.clean_script(script)
+        for p in params:
+            script += '\nresult["%s"]=model.%s'%(p,p)
+        return self.simplify_response(self._safe_run(script)['Response'])
+
     def simplify_response(self,response):
+        if response is None:
+            return response
+
+        if response['__type'].startswith('DictResponse'):
+            return self.process_response_dict(response)
+
+        response = response['Value']
         if hasattr(response,'__len__'):
             if isinstance(response,str):
                 return response
-            return [self.simplify_response(r['Value']) for r in response]
+            return [self.simplify_response(r) for r in response]
 
         return response
+
+    def process_response_dict(self,resp):
+        return {self.simplify_response(e['Key']):self.simplify_response(e['Value']) for e in resp['Entries']}
 
     def get(self,theThing,namespace=None):
         """
