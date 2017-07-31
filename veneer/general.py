@@ -240,7 +240,7 @@ class Veneer(object):
                     'RecordAll':[translate(r) for r in enable]}
         self.update_json('/recorders',modifier)
 
-    def run_model(self,params={},start=None,end=None,async=False,**kwargs):
+    def run_model(self,params=None,start=None,end=None,async=False,**kwargs):
         '''
         Trigger a run of the Source model
 
@@ -260,6 +260,9 @@ class Veneer(object):
         the URL of the results set in the Veneer service
         '''
         conn = hc.HTTPConnection(self.host,port=self.port)
+
+        if params is None:
+            params = {}
 
         params.update(kwargs)
 
