@@ -414,9 +414,10 @@ class VeneerIronPython(object):
 
         inner_loop = name + '= %s%s\n' + code
         script += self._generateLoop(accessor,inner_loop)
+        script += 'result = have_succeeded\n'
         result = self.run_script(script)
         if not result['Exception'] is None:
-            raise Exception(resp['Exception'])
+            raise Exception(result['Exception'])
         data = result['Response']['Value'] if result['Response'] else result['Response']
         return data
 
