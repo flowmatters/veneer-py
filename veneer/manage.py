@@ -6,6 +6,8 @@ from time import sleep
 from glob import glob
 import atexit
 import os
+import tempfile
+import shutil
 
 # Non blocking IO solution from http://stackoverflow.com/a/4896288
 ON_POSIX = 'posix' in sys.builtin_module_names
@@ -21,6 +23,9 @@ def kill_all_on_exit(processes):
             p.kill()
     atexit.register(end_processes)
 
+def kill_all_now(processes):
+    for p in processes:
+        p.kill()
 
 def _enqueue_output(out, queue):
     for line in iter(out.readline, b''):
@@ -48,6 +53,55 @@ def find_veneer_cmd_line_exe(project_fn=None,source_version=None):
                 if os.path.exists(path_in_many):
                     return path_in_many
     return VENEER_EXE
+
+def create_command_line(veneer_path,source_version="4.1.1",source_path='C:\\Program Files\\eWater',dest=None):
+    '''
+    Copy all Veneer related files and all files from the relevant Source distribution to a third directory,
+    for use as the veneer command line.
+
+    veneer_path: Directory containing the Veneer files
+
+    source_version: Version of Source to locate and copy
+
+    source_path: Base installation directory for eWater Source
+
+    dest: Destination to copy Source and Veneer to. If not provided, a temporary directory will be created.
+
+    Returns: Full path to FlowMatters.Source.VeneerCmd.exe for use with start()
+
+    Note: It is your responsibility to delete the copy of Source and Veneer from the destination directory
+    when you are finished with it! (Even if a temporary directory is used!)
+    '''
+    if dest is None:
+        dest = tempfile.mkdtemp(suffix='_veneer')
+
+    if not os.path.exists(dest):
+        os.makedirs(dest)
+
+    available = glob(os.path.join(source_path,'Source *'))
+    versions = [os.path.basename(ver).split(' ')[1] for ver in available]
+    chosen_one = [ver for ver in versions if ver.startswith(source_version)][0]
+    chosen_one_full = [product_ver for product_ver in available if chosen_one in product_ver][0]
+
+    for f in glob(os.path.join(source_path,chosen_one_full,'*.*')):
+        if not os.path.isfile(f):
+            continue
+        shutil.copyfile(f,os.path.join(dest,os.path.basename(f)))
+
+    for f in glob(os.path.join(veneer_path,'*.*')):
+        if not os.path.isfile(f):
+            continue
+        shutil.copyfile(f,os.path.join(dest,os.path.basename(f)))
+
+    exe_path = os.path.join(dest,'FlowMatters.Source.VeneerCmd.exe')
+    assert os.path.exists(exe_path)
+    return exe_path
+
+def clean_up_cmd_line_exe(path=None):
+    if path is None:
+        pass
+
+    shutil.rmtree(path)
 
 def configure_non_blocking_io(processes,stream):
     queues = [Queue() for p in range(len(processes))]
@@ -80,6 +134,10 @@ def start(project_fn,n_instances=1,ports=9876,debug=False,remote=True,script=Tru
                    veneer-py will attempt to identify the version of Veneer Command Line to invoke.
                    If there is a source_version.txt file in the same directory as the project file,
                    this text file will be consulted to identify the version of Source.
+
+    returns processes, ports
+       processes - list of process objects that can be used to terminate the servers
+       ports - the port numbers used for each copy of the server
     """
     if not hasattr(ports,'__len__'):
         ports = list(range(ports,ports+n_instances))
