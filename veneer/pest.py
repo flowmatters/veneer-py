@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import math
 import os
 
@@ -9,7 +10,7 @@ from shutil import copyfile
 
 from veneer import stats
 from .pest_runtime import CONNECTION_FN
-from .manage import kill_all_on_exit
+from .manage import kill_all_on_exit, kill_all_now
 
 dict = OrderedDict
 
@@ -104,7 +105,7 @@ CONTROL_DEFAULTS = OrderedDict([('NPAR',None),('NOBS',None),('NPARGP',1),('NPRIO
 
 SVD_DEFAULTS=OrderedDict([('SVDMODE',1),('MAXSING',None),('EIGTHRESH',5e-7),('EIGWRITE',0)])
 
-PARA_GROUP_DEFAULTS=OrderedDict([('PARGPNME',None),('INCTYP','relative'),('DERINC',0.01),('DERINCLB',0.001),('FORCEN','switch'),('DERINCMUL',1.5),('DERMTHD','parabolic'),('SPLITTHRESH',''),('SPLITRELDIFF',''),('SPLITACTION','')])
+PARA_GROUP_DEFAULTS=OrderedDict([('PARGPNME',None),('INCTYP','relative'),('DERINC',0.001),('DERINCLB',0.0001),('FORCEN','switch'),('DERINCMUL',1.5),('DERMTHD','parabolic'),('SPLITTHRESH',''),('SPLITRELDIFF',''),('SPLITACTION','')])
 
 PARA_DEFAULTS=OrderedDict([('PARNME',None),('PARTRANS',"none"),('PARCHGLIM','factor'),('PARVAL1',None),('PARLBND',None),('PARUBND',None),('PARGP',DEFAULT_PG),
 	('SCALE',1.0),('OFFSET',0.0),('DERCOM',1)])
@@ -368,6 +369,12 @@ class Case(object):
 	def prf_fn(self):
 		return "%s.rmf"%self.name
 
+	def rec_fn(self):
+		return "%s.rec"%self.name
+
+	def par_fn(self):
+		return "%s.par"%self.name
+
 	def pcf_text(self):
 		options = self.options.copy()
 		options['PARAMETER_LINES'] = self.parameters.declarations()
@@ -496,12 +503,30 @@ class Case(object):
 				slave_processes.append(slave_process)
 
 			kill_all_on_exit(slave_processes)
-			# create slave directories
-			# copy any required obs files
-			# write connection file
-			# start slaves with cwd
 
 		os.system('%s %s %s %s'%(opt_exe,self.pcf_fn(),opt_args,redirect))
+		kill_all_now(slave_processes)
+
+		return self.get_results()
+
+	def get_results(self):
+		result = {}
+		fn = self.rec_fn()
+		txt = open(fn).read()
+
+		params_txt = open(self.par_fn()).read().splitlines()
+		columns = ['parameter','value','scale','offset']
+		param_vals = [dict(zip(columns,line.strip().split())) for line in params_txt[1:]]
+		params = pd.DataFrame(param_vals)
+		params = params.set_index('parameter')
+		for col in columns[1:]:
+			params[col] = params[col].astype('f')
+
+		result['results_file']=fn
+		result['text']=txt
+		result['parameters'] = params
+
+		return result
 
 # TODO
 # Shutdown Veneer with POST /shutdown
