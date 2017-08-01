@@ -119,3 +119,60 @@ def add_network_methods(target):
         if f_name.startswith('network_'):
             f_name = f_name.replace('network_', '')
         setattr(target, f_name, MethodType(f, target))
+
+def _apply_time_series_helpers(dataframe):
+    from pandas import DataFrame
+#        import types
+
+    def by_wateryear(df_self,start_month,start_day=1):
+        '''
+        Group timesteps by water year
+        '''
+        def water_year(d):
+            if (d.month==start_month and d.day >= start_day) or (d.month>start_month):
+                return "%d-%d"%(d.year,d.year+1)
+            return "%d-%d"%(d.year-1,d.year)
+        water_year = df_self.index.map(water_year)
+
+        result = df_self.groupby(water_year)
+        return result
+
+    def of_month(df_self,month):
+        '''
+        Filter by timesteps in month (integer)
+        '''
+        result = df_self[df_self.index.month==month]
+        self._apply_time_series_helpers(result)
+        return result
+
+    def by_month(df_self):
+        '''
+        Group timesteps by month
+        '''
+        result = df_self.groupby(df_self.index.month)
+        return result
+
+    def of_year(df_self,year):
+        '''
+        Filter by timesteps in year (integer)
+        '''
+        result = df_self[df_self.index.year==year]
+        self._apply_time_series_helpers(result)
+        return result
+
+    def by_year(df_self):
+        '''
+        Group timesteps by year
+        '''
+        result = df_self.groupby(df_self.index.year)
+        return result
+
+    meths = {
+        'by_wateryear':by_wateryear,
+        'of_month':of_month,
+        'by_month':by_month,
+        'of_year':of_year,
+        'by_year':by_year,
+    }
+
+    dataframe.__class__ = type('VeneerDataFrame',(DataFrame,),meths)

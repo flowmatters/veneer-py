@@ -391,7 +391,9 @@ class Veneer(object):
         name = name.replace('$','')
         url = '/variables/%s/TimeSeries'%name
         result = self.retrieve_json(url)
-        return pd.DataFrame(self.convert_dates(result['Events'])).set_index('Date').rename({'Value':result['Name']})
+        df = pd.DataFrame(self.convert_dates(result['Events'])).set_index('Date').rename({'Value':result['Name']})
+        extensions._apply_time_series_helpers(df)
+        return df
 
     def update_variable_time_series(self,name,timeseries):
         name = name.replace('$','')
@@ -470,7 +472,9 @@ class Veneer(object):
             freq = ts['TimeStep'][0]
             index = pd.date_range(start_t,end_t,freq=freq)
             data_dict = {d['Name']:d['TimeSeries']['Values'] for d in details}
-            return pd.DataFrame(data_dict,index=index)
+            df = pd.DataFrame(data_dict,index=index)
+            extensions._apply_time_series_helpers(df)
+            return df
 
         def _transform_data_source_item(item):
             item['Details'] = _transform_details(item['Details'])
@@ -664,16 +668,17 @@ class Veneer(object):
 
     def _create_timeseries_dataframe(self,data_dict,common_index=True):
         if len(data_dict) == 0:
-            return pd.DataFrame()
+            df = pd.DataFrame()
         elif common_index:
             index = [self.parse_veneer_date(event['Date']) for event in list(data_dict.values())[0]]
             data = {k:[event['Value'] for event in result] for k,result in data_dict.items()}
-            return pd.DataFrame(data=data,index=index)
+            df = pd.DataFrame(data=data,index=index)
         else:
             from functools import reduce
             dataFrames = [pd.DataFrame(self.convert_dates(ts)).set_index('Date').rename(columns={'Value':k}) for k,ts in data_dict.items()]
-            return reduce(lambda l,r: l.join(r,how='outer'),dataFrames)
-
+            df = reduce(lambda l,r: l.join(r,how='outer'),dataFrames)
+        extensions._apply_time_series_helpers(df)
+        return df
 
 def read_sdt(fn):
     ts = pd.read_table(fn,sep=' +',engine='python',names=['Year','Month','Day','Val'])
