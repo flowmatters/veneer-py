@@ -37,6 +37,7 @@ class VeneerIronPython(object):
         self.catchment = VeneerCatchmentActions(self)
         self.link = VeneerLinkActions(self)
         self.node = VeneerNodeActions(self)
+        self.functions = VeneerFunctionActions(self)
 
     def _initScript(self,namespace=None):
         script = "# Generated Script\n"
@@ -632,6 +633,20 @@ class VeneerNetworkElementActions(object):
                                                literal=literal,column=column,
                                                data_group=data_group)
 
+    def create_modelled_variable(self,property,name,**kwargs):
+        '''
+        Create a modelled variable for accessing a model's properties from a function
+        '''
+        pass
+        # create accessor
+        # loop through, generate name, create model variable
+
+    def apply_function(self,parameter,function,fromList=False):
+        '''
+        Apply a function, from the function manager to a given model parameter or input
+        '''
+        pass
+
     def call(self,method,parameter_tuple=None,literal=False,fromList=False,**kwargs):
         accessor = self._build_accessor(method,**kwargs)
         return self._ironpy.call(accessor,parameter_tuple,literal=literal,from_list=fromList) 
@@ -1128,7 +1143,26 @@ class VeneerNodeConstituentActions(VeneerNetworkElementConstituentActions):
 #        accessor = 'scenario.Network.ConstituentsManagement.Elements' + \
 #        accessor += self._node._refine_accessor(nodes,node_types)
 
+class VeneerFunctionActions():
+    '''
+    Routines for managing Source functions.
+    '''
+    def __init__(self,ironpython):
+        self._ironpy = ironpython
 
+    def create_function(self,name_pattern,equation,substitutions={}):
+        '''
+        Create one function, or multiple functions based on a pattern
+        '''
+        pass
+
+#all_names=v.model.catchment.enumerate_names()
+#var_names=v.model.name_subst("tss_load_%s_%s",all_names)
+#v.model.catchment.generation.create_modelled_variable('load','tss_load_$catchment_$fu',constituents="tss")
+#function_codes=v.model.name_subst("exp(%s,1.2)",var_names)
+#function_names=v.model.name_subst("metals_%s_%s",all_names)
+#v.model.functions.create_function(function_names,function_codes)
+#v.model.catchment.generation.apply_function("ObservedLoad",function_names,constituents="metals")
 
 def build_dynamic_methods():
     def add_node_creator(name,klass):
