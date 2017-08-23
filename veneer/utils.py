@@ -1,4 +1,5 @@
 import pandas as pd
+import re
 
 try:
     from collections import UserDict
@@ -177,3 +178,14 @@ def _stringToList(string_or_list):
     if isinstance(string_or_list,str):
         return [string_or_list]
     return string_or_list
+
+def _variable_safe_name(name):
+    SUBSTS='- \t'
+    STRIP='#@!$%*&()[]{}'
+    for c in SUBSTS:
+        name = name.replace(c,'_')
+    for c in STRIP:
+        name = name.replace(c,'')
+    name = re.sub('__+','_',name)
+    name = name.strip('_')
+    return name

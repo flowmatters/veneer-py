@@ -1,5 +1,6 @@
 
-from .utils import _stringToList
+from .utils import _stringToList, _variable_safe_name
+from .templates import *
 
 NODE_TYPES={
     'inflow':'RiverSystem.Nodes.Inflow.InjectedFlow',
@@ -410,17 +411,21 @@ class VeneerIronPython(object):
     def call(self,theThing,parameter_tuple=None,literal=False,from_list=False,namespace=None):
         return self.get(theThing,namespace)
 
-    def apply(self,accessor,code,name,namespace):
+    def apply(self,accessor,code,name,init,namespace):
         script = self._initScript(namespace)
+        if init:
+            script += 'result = %s\n'%str(init)
 
         inner_loop = name + '= %s%s\n' + code
         script += self._generateLoop(accessor,inner_loop)
-        script += 'result = have_succeeded\n'
+        if not init:
+            script += 'result = have_succeeded\n'
+    
         result = self.run_script(script)
         if not result['Exception'] is None:
             raise Exception(result['Exception'])
-        data = result['Response']['Value'] if result['Response'] else result['Response']
-        return data
+#        data = result['Response']['Value'] if result['Response'] else result['Response']
+        return self.simplify_response(result['Response'])
 
 
     def sourceScenarioOptions(self,optionType,option=None,newVal = None):
@@ -551,6 +556,9 @@ class VeneerNetworkElementActions(object):
     def __init__(self,ironpython):
         self._ironpy = ironpython
         self._ns = None
+        self._pvr_element_name=''
+        self._build_pvr_accessor = self._build_accessor
+        self._pvr_attribute_prefix = ''
 
     def _instantiation_namespace(self,types,enum=False):
         if enum:
@@ -623,6 +631,12 @@ class VeneerNetworkElementActions(object):
         '''
         return self.get_param_values(self._name_accessor,**kwargs)
 
+    def enumerate_names(self,**kwargs):
+        '''
+        Enumerate the names of the matching network elements as tuples of name components
+        '''
+        return [(n,) for n in self.names(**kwargs)]
+
     def assign_time_series(self,parameter,values,data_group,column=0,
                            literal=True,fromList=False,**kwargs):
         '''
@@ -633,27 +647,63 @@ class VeneerNetworkElementActions(object):
                                                literal=literal,column=column,
                                                data_group=data_group)
 
-    def create_modelled_variable(self,property,name,**kwargs):
+    def create_modelled_variable(self,parameter,element_name=None,**kwargs):
         '''
         Create a modelled variable for accessing a model's properties from a function
         '''
-        pass
+        accessor = self._build_accessor(parameter,**kwargs)
+        print(accessor)
+        names = ['$'+_variable_safe_name(parameter+'_'+'_'.join(name_tuple)) for name_tuple in self.enumerate_names(**kwargs)]
+        print(names)
+        ns = 'RiverSystem.Functions.Variables.ModelledVariable as ModelledVariable'
+        init = '{"created":[],"failed":[]}\n'
+        init += BUILD_PVR_LOOKUP
+        init += 'orig_names=%s\n'%names
+        init += 'names=orig_names[::-1]\n'
+        accessor = self._build_pvr_accessor('__init__.__self__',**kwargs)
+        if not element_name:
+            element_name = self._pvr_element_name
+
+        if element_name is None:
+            element_name = parameter
+
+        code = CREATED_MODELLED_VARIABLE%(element_name,self._pvr_attribute_prefix+parameter)
+        return self._ironpy.apply(accessor,code,'target',init,ns)
         # create accessor
         # loop through, generate name, create model variable
+        # create modelled variable:
+        # * object
+        # * name
+        # * projectviewrow
+        # * add...
 
-    def apply_function(self,parameter,function,fromList=False):
+    def enum_pvrs(self,**kwargs):
+        accessor = self._build_pvr_accessor('__init__.__self__ ',**kwargs)
+        init = '[]\n'
+        init += BUILD_PVR_LOOKUP
+
+        code = ENUM_PVRS%tuple([self._pvr_element_name]*2)
+        return self._ironpy.apply(accessor[:-1],code,'target',init,None)
+
+    def apply_function(self,parameter,functions,**kwargs):
         '''
         Apply a function, from the function manager to a given model parameter or input
         '''
-        pass
+        functions = _stringToList(functions)
+        init = '{"success":0,"fail":0}\n'
+        init += APPLY_FUNCTION_INIT%functions
+
+        code = APPLY_FUNCTION_LOOP%parameter
+        accessor = self._build_accessor('__init__.__self__',**kwargs)
+        return self._ironpy.apply(accessor,code,'target',init,None)
 
     def call(self,method,parameter_tuple=None,literal=False,fromList=False,**kwargs):
         accessor = self._build_accessor(method,**kwargs)
         return self._ironpy.call(accessor,parameter_tuple,literal=literal,from_list=fromList) 
     
-    def apply(self,code,name='target',namespace=None,**kwargs):
-        accessor = self._build_accessor('',**kwargs)
-        return self._ironpy.apply(accessor[:-1],code,name,namespace)
+    def apply(self,code,name='target',init=None,namespace=None,**kwargs):
+        accessor = self._build_accessor('__init__.__self__ ',**kwargs)
+        return self._ironpy.apply(accessor[:-1],code,name,init,namespace)
 
     def _call(self,accessor,namespace=None):
         return self._ironpy.call(accessor,namespace)
@@ -661,8 +711,9 @@ class VeneerNetworkElementActions(object):
 class VeneerFunctionalUnitActions(VeneerNetworkElementActions):
     def __init__(self,catchment):
         self._catchment = catchment
+        self._name_accessor="definition.Name"
         super(VeneerFunctionalUnitActions,self).__init__(catchment._ironpy)
-
+        self._build_pvr_accessor = self._build_fu_accessor
 
     def _build_accessor(self,parameter=None,catchments=None,fus=None):
         return self._build_fu_accessor(parameter,catchments,fus)
@@ -685,7 +736,17 @@ class VeneerFunctionalUnitActions(VeneerNetworkElementActions):
 
         return accessor
 
-class VeneerCatchmentActions(VeneerFunctionalUnitActions):
+    def names(self,**kwargs):
+        accessor = self._build_fu_accessor(self._name_accessor,**kwargs)
+        return self._catchment._ironpy.get(accessor)
+
+    def enumerate_names(self,**kwargs):
+        fu_names = self.names(**kwargs)
+        cname_accessor = self._build_fu_accessor('catchment.DisplayName',**kwargs)
+        catchment_names = self._catchment._ironpy.get(cname_accessor)
+        return zip(fu_names,catchment_names)
+
+class VeneerCatchmentActions(VeneerNetworkElementActions):
     '''
     Helpers for querying/modifying the catchment model setup
 
@@ -696,11 +757,14 @@ class VeneerCatchmentActions(VeneerFunctionalUnitActions):
     * .subcatchment (subcatchment level models)
     '''
     def __init__(self,ironpython):
+        super(VeneerCatchmentActions,self).__init__(ironpython)
         self._ironpy = ironpython
+        self.function_units = VeneerFunctionalUnitActions(self)
         self.runoff = VeneerRunoffActions(self)
         self.generation = VeneerCatchmentGenerationActions(self)
         self.subcatchment = VeneerSubcatchmentActions(self)
         self._ns = None
+        self._name_accessor="Name"
 
     def _build_accessor(self,parameter=None,catchments=None):
         accessor = 'scenario.Network.Catchments'
@@ -721,9 +785,6 @@ class VeneerCatchmentActions(VeneerFunctionalUnitActions):
         return self.get_param_values('characteristics.areaInSquareMeters',by_name=by_name,catchments=catchments)
 #        return self._ironpy.get('scenario.Network.Catchments.*characteristics.areaInSquareMeters')
 
-    def names(self,catchments=None):
-        return self.get_param_values('Name',catchments=catchments)
-
     def get_functional_unit_areas(self,catchments=None,fus=None):
         '''
         Return the area of each functional unit in each catchment:
@@ -734,8 +795,9 @@ class VeneerCatchmentActions(VeneerFunctionalUnitActions):
 
         fus: Restrict to particular functional unit types by passing a list of FU names
         '''
-        accessor = self._build_fu_accessor('areaInSquareMeters',catchments,fus)
-        return self._ironpy.get(accessor)
+        return self.function_units.get_param_values('areaInSquareMeters',catchments=catchments,fus=fus)
+#        accessor = self._build_fu_accessor('areaInSquareMeters',catchments,fus)
+#        return self._ironpy.get(accessor)
 
     def set_functional_unit_areas(self,values,catchments=None,fus=None):
         '''
@@ -749,9 +811,9 @@ class VeneerCatchmentActions(VeneerFunctionalUnitActions):
 
         fus: Restrict to particular functional unit types by passing a list of FU names
         '''
-
-        accessor = self._build_fu_accessor('areaInSquareMeters',catchments,fus)
-        return self._ironpy.set(accessor,values,fromList=True)
+        return self.function_units.set_param_values('areaInSquareMeters',values,fromList=True,catchments=catchments,fus=fus)
+#        accessor = self._build_fu_accessor('areaInSquareMeters',catchments,fus)
+#        return self._ironpy.set(accessor,values,fromList=True)
 
     def get_functional_unit_types(self,catchments=None,fus=None):
         '''
@@ -771,6 +833,8 @@ class VeneerRunoffActions(VeneerFunctionalUnitActions):
     '''
     def __init__(self,catchment):
         super(VeneerRunoffActions,self).__init__(catchment)
+        self._pvr_element_name="Rainfall Runoff Model"
+        self._pvr_attribute_prefix=self._pvr_element_name+'@'
 
     def _build_accessor(self,parameter=None,catchments=None,fus=None):
         accessor = super(VeneerRunoffActions,self)._build_accessor('rainfallRunoffModel',catchments,fus)
@@ -1001,6 +1065,7 @@ class VeneerLinkRoutingActions(VeneerNetworkElementActions):
         self._link = link
         self._name_accessor = 'link.DisplayName'
         super(VeneerLinkRoutingActions,self).__init__(link._ironpy)
+        self._pvr_element_name = None
 
     def _build_accessor(self,parameter=None,links=None):
         accessor = 'scenario.Network.Links'
@@ -1150,11 +1215,60 @@ class VeneerFunctionActions():
     def __init__(self,ironpython):
         self._ironpy = ironpython
 
-    def create_function(self,name_pattern,equation,substitutions={}):
+    def create_functions(self,names,general_equation,params,name_params=None):
         '''
         Create one function, or multiple functions based on a pattern
         '''
-        pass
+        names = _stringToList(names)
+        if len(names) == 1:
+            if name_params:
+                names= ['$'+_variable_safe_name(names[0]%name_param_set)
+                         for name_param_set in name_params]
+        else:
+            names = ['%s_%d'%(names[0],d) for d in range(len(params))]
+
+        functions = list(zip(names,[general_equation%param_set for param_set in params]))
+        script = self._ironpy._initScript()
+        script += 'import RiverSystem.Functions.Function as Function\n'
+        script += 'functions=%s\n\n'%functions
+        script += 'result={"created":[],"failed":[]}\n'
+        script += 'for (fn,expr) in functions:\n'
+        script += '  rsFn = Function()\n'
+        script += '  rsFn.Name=fn\n'
+        script += '  rsFn.Expression=expr\n'
+        script += '  scenario.Network.FunctionManager.Functions.Add(rsFn)\n'
+        script += '  result["created"].append(fn)'
+        result = self._ironpy.run_script(script)
+        if not result['Exception'] is None:
+            raise Exception(result['Exception'])
+#        data = result['Response']['Value'] if result['Response'] else result['Response']
+        return self._ironpy.simplify_response(result['Response'])
+
+
+    def delete_variables(self,names):
+        script = self._ironpy._initScript()
+        script += 'names = %s\n'%names
+        script += 'to_remove = scenario.Network.FunctionManager.Variables.Where(lambda v: v.Name in names).ToList()\n'
+        script += 'result = [v.Name for v in to_remove]\n'
+        script += 'for v in to_remove: scenario.Network.FunctionManager.Variables.Remove(v)\n'
+        result = self._ironpy.run_script(script)
+        if not result['Exception'] is None:
+            raise Exception(result['Exception'])
+#        data = result['Response']['Value'] if result['Response'] else result['Response']
+        return self._ironpy.simplify_response(result['Response'])
+
+    def delete_functions(self,names):
+        script = self._ironpy._initScript()
+        script += 'names = %s\n'%names
+        script += 'to_remove = scenario.Network.FunctionManager.Functions.Where(lambda v: v.Name in names).ToList()\n'
+        script += 'result = [v.Name for v in to_remove]\n'
+        script += 'for v in to_remove: scenario.Network.FunctionManager.Functions.Remove(v)\n'
+        result = self._ironpy.run_script(script)
+        if not result['Exception'] is None:
+            raise Exception(result['Exception'])
+#        data = result['Response']['Value'] if result['Response'] else result['Response']
+        return self._ironpy.simplify_response(result['Response'])
+
 
 #all_names=v.model.catchment.enumerate_names()
 #var_names=v.model.name_subst("tss_load_%s_%s",all_names)
