@@ -695,7 +695,7 @@ class VeneerNetworkElementActions(object):
 
         code = APPLY_FUNCTION_LOOP%parameter
         accessor = self._build_accessor('__init__.__self__',**kwargs)
-        return self._ironpy.apply(accessor,code,'target',init,None)
+        return self._ironpy.apply(accessor,code,'target',init,self._ns)
 
     def call(self,method,parameter_tuple=None,literal=False,fromList=False,**kwargs):
         accessor = self._build_accessor(method,**kwargs)
@@ -1007,12 +1007,12 @@ class VeneerNetworkElementConstituentActions(VeneerNetworkElementActions):
             accessor += parameter
         return accessor
 
-    def initialise_played_constituents(self,**kwargs):
+    def initialise_played_constituents(self,played_type='varConcentration',**kwargs):
         accessor = self._build_accessor(aspect='',**kwargs)
         script = self._ironpy._initScript(self._ns)
         script += 'from RiverSystem.Constituents.ConstituentPlayedValue import ConstituentPlayedType as ConstituentPlayedType\n'
         script += "from RiverSystem.Constituents import ConstituentPlayedValue as ConstituentPlayedValue\n"
-        script += 'playType = ConstituentPlayedType.varConcentration\n'
+        script += 'playType = ConstituentPlayedType.%s\n'%played_type
         script += 'constituents = scenario.Network.ConstituentsManagement.Config.Constituents\n'
         script += '\n'
         script += '\n'
