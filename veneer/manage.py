@@ -26,6 +26,8 @@ def kill_all_on_exit(processes):
 def kill_all_now(processes):
     for p in processes:
         p.kill()
+    for p in processes:
+        p.wait()
 
 def _enqueue_output(out, queue):
     for line in iter(out.readline, b''):
