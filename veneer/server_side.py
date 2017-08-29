@@ -1090,7 +1090,7 @@ class VeneerLinkRoutingActions(VeneerNetworkElementActions):
         post_assignment += "is_sr = 'StorageRouting' in val.__name__\n"
         post_assignment += "theLink.FlowRouting = val(theLink) if is_sr else val()"
 
-        accessor = self._build_accessor()[:-13]+'.*__init__.__self__'
+        accessor = self._build_accessor(**kwargs)[:-13]+'.*__init__.__self__'
         namespace = self._instantiation_namespace(models)
         return self._ironpy._assignment(accessor,models,namespace,literal=False,fromList=True,
                                        instantiate=False,
