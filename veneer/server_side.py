@@ -986,12 +986,15 @@ class VeneerNetworkElementConstituentActions(VeneerNetworkElementActions):
                                                literal=literal,column=column,
                                                data_group=data_group,namespace=self._ns)
 
-    def _build_accessor(self,parameter=None,constituents=None,aspect=None,**kwargs):
+    def _build_accessor(self,parameter=None,constituents=None,aspect=None,played_type=None,**kwargs):
         aspect = self._default_aspect if aspect is None else aspect
         accessor = 'scenario.Network.ConstituentsManagement.Elements'
         accessor += self._filter_constituent_data_types()                   
         accessor += self._filter_by_query(**kwargs)
         accessor += '.*%s'%self._aspect_pre_modifer[aspect]
+
+        if aspect=='played' and played_type:
+            accessor += '.Where(lambda p: p.PlayedType==ConstituentPlayedType.%s)'%played_type
 
         if not constituents is None:
             constituents = _stringToList(constituents)
@@ -1037,6 +1040,7 @@ class VeneerLinkConstituentActions(VeneerNetworkElementConstituentActions):
         self._name_accessor = 'Link.DisplayName'
         super(VeneerLinkConstituentActions,self).__init__(link._ironpy)
         self._ns = 'RiverSystem.Constituents.LinkElementConstituentData as LinkElementConstituentData'
+        self._ns += '\nfrom RiverSystem.Constituents.ConstituentPlayedValue import ConstituentPlayedType as ConstituentPlayedType\n'
         self._default_aspect = 'model'
 
     def _filter_constituent_data_types(self):
