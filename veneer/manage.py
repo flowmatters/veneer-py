@@ -219,4 +219,36 @@ def start(project_fn,n_instances=1,ports=9876,debug=False,remote=True,script=Tru
     kill_all_on_exit(processes)
     return processes,actual_ports
 
+class BulkVeneerApplication(object):
+    def __init__(self,clients,name):
+        self.clients = clients
+        self.names = [name] 
 
+    def __getattr__(self,attrname):
+        self.names.append(attrname)
+        return self
+
+    def __call__(self,*pargs,**kwargs):
+        return self.clients.call_on_all(self.names,*pargs,**kwargs)
+
+class BulkVeneer(object):
+    def __init__(self,ports):
+        self.veneers = [Veneer(port) for port in ports]
+
+    def call_path(self,client,path,*pargs,**kwargs):
+        target = client
+        for p in path:
+            target = getattr(target,p)
+        return target(*pargs,**kwargs)
+
+    def call_on_all(self,path,*pargs,**kwargs):
+        result = [self.call_path(v,path,*pargs,**kwargs) for v in self.veneers]
+        result = [r for r in result if not r is None]
+        if len(result):
+            return result
+        return None
+
+    def __getattr__(self,attrname):
+        return BulkVeneerApplication(self,attrname)
+
+# +++ Need something to read latest messages from processes...
