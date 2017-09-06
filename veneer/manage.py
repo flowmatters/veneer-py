@@ -8,6 +8,8 @@ import atexit
 import os
 import tempfile
 import shutil
+from win32api import GetFileVersionInfo, LOWORD, HIWORD
+from .general import Veneer
 
 # Non blocking IO solution from http://stackoverflow.com/a/4896288
 ON_POSIX = 'posix' in sys.builtin_module_names
@@ -16,6 +18,14 @@ VENEER_EXE_FN='FlowMatters.Source.VeneerCmd.exe'
 MANY_VENEERS='D:\\src\\projects\\Veneer\\Compiled'
 VENEER_EXE='D:\\src\\projects\\Veneer\\Output\\FlowMatters.Source.VeneerCmd.exe'
 
+def _get_version_number (filename):
+    try:
+        info = GetFileVersionInfo (filename, "\\")
+        ms = info['FileVersionMS']
+        ls = info['FileVersionLS']
+        return HIWORD (ms), LOWORD (ms), HIWORD (ls), LOWORD (ls)
+    except:
+        return 0,0,0,0
 
 def kill_all_on_exit(processes):
     def end_processes():
@@ -56,7 +66,7 @@ def find_veneer_cmd_line_exe(project_fn=None,source_version=None):
                     return path_in_many
     return VENEER_EXE
 
-def create_command_line(veneer_path,source_version="4.1.1",source_path='C:\\Program Files\\eWater',dest=None):
+def create_command_line(veneer_path,source_version="4.1.1",source_path='C:\\Program Files\\eWater',dest=None,force=True):
     '''
     Copy all Veneer related files and all files from the relevant Source distribution to a third directory,
     for use as the veneer command line.
@@ -69,11 +79,20 @@ def create_command_line(veneer_path,source_version="4.1.1",source_path='C:\\Prog
 
     dest: Destination to copy Source and Veneer to. If not provided, a temporary directory will be created.
 
+    force: (default True) copy all files even if the directory already exists
+
     Returns: Full path to FlowMatters.Source.VeneerCmd.exe for use with start()
 
     Note: It is your responsibility to delete the copy of Source and Veneer from the destination directory
     when you are finished with it! (Even if a temporary directory is used!)
     '''
+
+    if dest:
+        exe_path = os.path.join(dest,'FlowMatters.Source.VeneerCmd.exe')
+
+    if dest and os.path.exists(exe_path) and not force:
+        return exe_path
+
     if dest is None:
         dest = tempfile.mkdtemp(suffix='_veneer')
 
@@ -82,7 +101,7 @@ def create_command_line(veneer_path,source_version="4.1.1",source_path='C:\\Prog
 
     available = glob(os.path.join(source_path,'Source *'))
     versions = [os.path.basename(ver).split(' ')[1] for ver in available]
-    chosen_one = [ver for ver in versions if ver.startswith(source_version)][0]
+    chosen_one = [ver for ver in versions if ver.startswith(source_version)][-1]
     chosen_one_full = [product_ver for product_ver in available if chosen_one in product_ver][0]
 
     for f in glob(os.path.join(source_path,chosen_one_full,'*.*')):
@@ -113,7 +132,40 @@ def configure_non_blocking_io(processes,stream):
         t.start()
     return queues,threads
 
-def start(project_fn,n_instances=1,ports=9876,debug=False,remote=True,script=True, veneer_exe=None):
+def _find_plugins_file(project_path):
+    if not os.path.isdir(project_path):
+        project_path = os.path.dirname(project_path)
+
+    plugin_fn = os.path.join(project_path,'Plugins.xml')
+    if os.path.exists(plugin_fn):
+        return plugin_fn
+
+    parent = os.path.abspath(os.path.join(project_path,os.path.pardir))
+    if parent == project_path:
+        return None
+
+    return _find_plugins_file(parent)
+
+def overwrite_plugin_configuration(source_binaries,project_fn):
+    plugin_fn = _find_plugins_file(project_fn)
+    if not plugin_fn:
+        # logger.warn('Unable to overwrite plugins. No Plugin.xml found')
+        return
+    print(plugin_fn)
+
+    if os.path.isfile(source_binaries):
+        source_binaries = os.path.join(os.path.dirname(source_binaries),'RiverSystem.Forms.exe')
+
+    source_version = '.'.join([str(v) for v in _get_version_number(source_binaries)[00:-1]])
+    print(source_version)
+
+    plugin_dir = os.path.join('C:\\','Users',os.environ['USERNAME'],'AppData','Roaming','Source',source_version)
+    if not os.path.exists(plugin_dir):
+        os.makedirs(plugin_dir)
+    plugin_dest_file = os.path.join(plugin_dir,'Plugins.xml')
+    shutil.copyfile(plugin_fn,plugin_dest_file)
+
+def start(project_fn,n_instances=1,ports=9876,debug=False,remote=True,script=True, veneer_exe=None,overwrite_plugins=None):
     """
     Start one or more copies of the Veneer command line progeram with a given project file
 
@@ -137,6 +189,9 @@ def start(project_fn,n_instances=1,ports=9876,debug=False,remote=True,script=Tru
                    If there is a source_version.txt file in the same directory as the project file,
                    this text file will be consulted to identify the version of Source.
 
+    - overwrite_plugins - Falsy (default) or True, If truthy, attempt to override the Source plugins using a Plugins.xml file,
+                          in the same directory as the project file (or a parent directory).
+
     returns processes, ports
        processes - list of process objects that can be used to terminate the servers
        ports - the port numbers used for each copy of the server
@@ -148,6 +203,9 @@ def start(project_fn,n_instances=1,ports=9876,debug=False,remote=True,script=Tru
         veneer_exe = find_veneer_cmd_line_exe(project_fn)
 
     project_fn = os.path.abspath(project_fn)
+    if overwrite_plugins:
+        overwrite_plugin_configuration(veneer_exe,project_fn)
+
     extras = ''
     if remote: extras += '-r '
     if script: extras += '-s '
