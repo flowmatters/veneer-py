@@ -1,6 +1,7 @@
 
 from .utils import _stringToList, _variable_safe_name
 from .templates import *
+import itertools
 
 NODE_TYPES={
     'inflow':'RiverSystem.Nodes.Inflow.InjectedFlow',
@@ -39,6 +40,7 @@ class VeneerIronPython(object):
         self.link = VeneerLinkActions(self)
         self.node = VeneerNodeActions(self)
         self.functions = VeneerFunctionActions(self)
+        self.simulation = VeneerSimulationActions(self)
 
     def _initScript(self,namespace=None):
         script = "# Generated Script\n"
@@ -453,7 +455,7 @@ class VeneerIronPython(object):
     def get_constituents(self):
         s = self._initScript()
         s += 'result = scenario.SystemConfiguration.Constituents.Select(lambda c: c.Name)\n'
-        return self._safe_run(s)['Response']['Value']
+        return self.simplify_response(self._safe_run(s)['Response'])
 
     def add_constituent(self,new_constituent):
         s = self._initScript(namespace='RiverSystem.Constituents.Constituent as Constituent')
@@ -1273,6 +1275,20 @@ class VeneerFunctionActions():
 #        data = result['Response']['Value'] if result['Response'] else result['Response']
         return self._ironpy.simplify_response(result['Response'])
 
+
+class VeneerSimulationActions():
+    def __init__(self,ironpython):
+        self._ironpy = ironpython
+
+    def get_configuration(self):
+        script = self._ironpy._initScript()
+
+        script += 'result = scenario.RunManager.CurrentConfiguration.GetType().FullName'
+        result = self._ironpy.run_script(script)
+        if not result['Exception'] is None:
+            raise Exception(result['Exception'])
+#        data = result['Response']['Value'] if result['Response'] else result['Response']
+        return self._ironpy.simplify_response(result['Response'])
 
 #all_names=v.model.catchment.enumerate_names()
 #var_names=v.model.name_subst("tss_load_%s_%s",all_names)
