@@ -277,6 +277,18 @@ def start(project_fn,n_instances=1,ports=9876,debug=False,remote=True,script=Tru
     kill_all_on_exit(processes)
     return processes,actual_ports
 
+def find_veneers(search=None):
+    import psutil
+    processes = psutil.get_process_list()
+    def try_name(p):
+        try: return p.name()
+        except:return None
+
+    veneers = [p for p in processes if try_name(p)=='FlowMatters.Source.VeneerCmd.exe']
+    if search:
+        veneers = [v for v in veneers if search in ' '.join(v.cmdline())]
+    return veneers
+
 class BulkVeneerApplication(object):
     def __init__(self,clients,name):
         self.clients = clients
