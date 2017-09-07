@@ -54,6 +54,31 @@ def name_for_location(result):
     '''
     return result['NetworkElement']
 
+def name_for_fu_and_sc(result):
+    '''
+    For a FU-based time series, name based on the FU and the subcatchment.
+
+    Note, when retrieving FU based results, you should limit the query to a single FU (or 'Total').
+    Due to a quirk in the Source recording system, you'll get the results for all FUs anyway.
+    If you don't specify a single FU, the system will make separate requests for each FU and get multiple
+    results from each requests (essentially transferring n^2 data).
+    '''
+    char = ':'
+    if not 'TimeSeriesName' in result:
+        char = '/'
+    return ':'.join(name_time_series(result).split(':')[:2])
+    
+
+def name_for_fu(result):
+    '''
+    For a FU-based time series, name based on the FU.
+
+    Note, when retrieving FU based results, you should limit the query to a single FU (or 'Total').
+    Due to a quirk in the Source recording system, you'll get the results for all FUs anyway.
+    If you don't specify a single FU, the system will make separate requests for each FU and get multiple
+    results from each requests (essentially transferring n^2 data).
+    '''
+    return name_for_fu_and_sc(result).split(':')[0]
 
 def log(text):
     import sys
