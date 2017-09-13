@@ -307,6 +307,9 @@ class Veneer(object):
             return code,resp.getheader('Location')
         elif code==200:
             return code,None
+        elif code==500:
+            error = json.loads(resp.read().decode('utf-8'))
+            raise Exception('\n'.join([error['Message'],error['StackTrace']]))
         else:
             return code,resp.read().decode('utf-8')
 
