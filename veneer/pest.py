@@ -295,6 +295,7 @@ class CalibrationObservations(ConfigItemCollection):
 		self.instructions.append('assert(len(mod_ts.columns==0))')
 		self.instructions.append('mod_ts = mod_ts[mod_ts.columns[0]]%s'%('' if mod_scale==1 else ('*%f'%mod_scale)))
 		self.instructions.append('obs_ts = observed_ts["%s"].dropna()'%ts_name)
+		self.instructions.append('print(len(obs_ts),obs_ts.index.dtype,mod_ts.index.dtype)')
 		if time_period is not None:
 			self.instructions.append('# Subset modelled and predicted')
 			self.instructions.append('date_format = "%%Y/%%m/%%d"')
@@ -442,7 +443,7 @@ class Case(object):
 			# run model with initial,
 			if len(self.observations)==1:
 				cmaes_params = ['i'] + cmaes_params
-				return '\n'.join([str(p) for p in cmaes_params]) + '\n'
+			return '\n'.join([str(p) for p in cmaes_params]) + '\n'
 		return None
 
 	def write_connection_file(self,wd,port):
@@ -527,6 +528,19 @@ class Case(object):
 		result['parameters'] = params
 
 		return result
+
+def make_pest_name(name):
+	if len(name)<=12:
+		return name
+
+	orig_name = name
+	subset=5
+	while len(name)>12 and subset>0:
+		pieces = orig_name.split('_')
+		name = ''.join(p[:subset] for p in pieces)
+		subset -= 1
+
+	return name[:12]
 
 # TODO
 # Shutdown Veneer with POST /shutdown
