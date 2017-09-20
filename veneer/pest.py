@@ -517,7 +517,10 @@ class Case(object):
 				slave_dir = os.path.join('.',name)
 				if not os.path.exists(slave_dir):
 					os.mkdir(slave_dir)
-
+				else:
+					slave_log = os.path.join(slave_dir,LOG_FILE)
+					if os.path.exists(slave_log):
+						os.remove(slave_log)
 				self.observations.data.copy_to(slave_dir)
 
 				if self.optimiser == 'sceua_p':
