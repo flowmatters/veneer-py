@@ -442,30 +442,34 @@ class Case(object):
 	def slave_name(self,p):
 		return 'Slave_%d'%p
 
-	def stdio_params(self):
-		min_relative_objective_fn_change = 0.001
-		iterations_for_change=5
-		max_iters=50000
+	def stdio_params(self,**kwargs):
+		p={}
+		p['min_relative_objective_fn_change'] = 0.001
+		p['iterations_for_change']=5
+		p['max_iters']=50000
 		random_seed = self.random_seed
 		if random_seed is None:
 			random_seed = np.random.randint(2**15)
 		random_seed = str(random_seed)
 		if self.optimiser == 'sceua_p':
-			sce_params = [max(10,len(self.veneer_ports)),5,9,5,'y',9,random_seed,'n',min_relative_objective_fn_change,iterations_for_change,max_iters]
+			p.update(kwargs)
+			sce_params = [max(10,len(self.veneer_ports)),5,9,5,'y',9,random_seed,'n',p['min_relative_objective_fn_change'],p['iterations_for_change'],p['max_iters']]
 			if len(self.observations)==1:
 				sce_params = ['i']+sce_params
 			return '\n'.join([str(p) for p in sce_params])
 		elif self.optimiser == 'cmaes_p':
-			iterations_for_change=40
-			min_relative_param_change=0.001
-			rel_hi_low_object_fn=0.01
-			no_iterations_hi_lo=10
+			p['iterations_for_change']=40
+			p['min_relative_param_change']=0.001
+			p['rel_hi_low_object_fn']=0.01
+			p['no_iterations_hi_lo']=10
 			lambda_param = int(4 + 3*math.log(len(self.parameters)))
-			lambda_param = max(lambda_param,len(self.veneer_ports))
-			mu_param = int(lambda_param/2)
-			cmaes_params = [lambda_param,mu_param,'s',random_seed,'n','n',min_relative_objective_fn_change,
-			                iterations_for_change,min_relative_param_change,iterations_for_change,
-			                rel_hi_low_object_fn,no_iterations_hi_lo,max_iters,'y']
+			p['lambda_param'] = max(lambda_param,len(self.veneer_ports))
+			p['mu_param'] = int(p['lambda_param']/2)
+			p.update(kwargs)
+			cmaes_params = [p['lambda_param'],p['mu_param'],'s',random_seed,'n','n',p['min_relative_objective_fn_change'],
+			                p['iterations_for_change'],p['min_relative_param_change'],p['iterations_for_change'],
+			                p['rel_hi_low_object_fn'],p['no_iterations_hi_lo'],p['max_iters'],'y']
+
 			# lambda, mu, recombination weights, random seed, read covariance matrix from file, forgive model runs
 			# ... named...
 			# run model with initial,
@@ -478,8 +482,8 @@ class Case(object):
 		with open(os.path.join(wd,CONNECTION_FN),'w') as f:
 			f.write(str(port))
 
-	def run(self):
-		stdio = self.stdio_params()
+	def run(self,**kwargs):
+		stdio = self.stdio_params(**kwargs)
 		if stdio is None:
 			redirect = ''
 		else:
