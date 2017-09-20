@@ -500,6 +500,8 @@ class Case(object):
 		if len(self.veneer_ports)==1:
 			working_dir='.'
 			self.write_connection_file(working_dir,self.veneer_ports[0])
+			if os.path.exists(LOG_FILE):
+				os.remove(LOG_FILE)
 		else:
 			if opt_exe=='pest':
 				opt_exe = 'ppest'
