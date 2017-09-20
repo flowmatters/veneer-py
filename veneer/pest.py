@@ -19,17 +19,21 @@ DEFAULT_PEST_DELIMITER='$'
 #
 PTF_SINGLE_THREADED_INSTRUCTION_PREFIX='v.'
 PTF_DATA_IO_INSTRUCTION_PREFIX='pd.'
+LOG_FILE='detailed_log.csv'
 
 PTF_PREFIX='''ptf $
+LOG_FILE='detailed_log.csv'
+import os
 from veneer.pest_runtime import *
 from veneer import Veneer
 from veneer.stats import * 
 import pandas as pd
 from veneer import general
-
 general.PRINT_URLS=False
 veneer_port=find_port()
 v = Veneer(port=veneer_port)
+detailed_log = %s
+run_details=[]
 '''
 
 PTF_RUN='''
@@ -52,6 +56,18 @@ PTF_ASSESS='''
 print(pest_observations)
 write_outputs(pest_observations,'%s')
 write_outputs(pest_observations,'__outputs_to_keep.txt')
+'''
+
+WRITE_DETAILED_LOG='''
+run_details += pest_observations
+
+if not os.path.exists(LOG_FILE):
+	f = open(LOG_FILE,'w')
+	f.write(','.join([n for n,_ in run_details])+'\\n')
+else:
+	f = open(LOG_FILE,'a')
+
+f.write(','.join([str(v) for _,v in run_details])+'\\n')
 '''
 
 PIF_PREFIX='pif $'
@@ -229,9 +245,12 @@ class DeferredActionCollection(object):
 		return '\n'.join([self.script_line(i,transform) for i in self.instructions])
 
 class CalibrationParameters(DeferredActionCollection):
-	def __init__(self,delimiter=DEFAULT_PEST_DELIMITER,instruction_prefix=PTF_SINGLE_THREADED_INSTRUCTION_PREFIX):
+	def __init__(self,delimiter=DEFAULT_PEST_DELIMITER,
+				 instruction_prefix=PTF_SINGLE_THREADED_INSTRUCTION_PREFIX,
+				 detailed_log=True):
 		super(CalibrationParameters,self).__init__(delimiter,instruction_prefix)
 		self.params = []
+		self.detailed_log = detailed_log
 
 	def __len__(self):
 		return len(self.params)
@@ -244,6 +263,9 @@ class CalibrationParameters(DeferredActionCollection):
 
 	def declarations(self):
 		return '\n'.join([p.declaration() for p in self.params])
+
+	def log_script(self):
+		return '\n'.join(['run_details.append(("%s",%s%s%s))'%(p.parnme,self.delimiter,p.parnme,self.delimiter) for p in self.params])
 
 class ObservedData(DeferredActionCollection):
 	def __init__(self):
@@ -258,8 +280,9 @@ class ObservedData(DeferredActionCollection):
 				copyfile(fn,os.path.join(slave_dir,fn))
 
 class CalibrationObservations(ConfigItemCollection):
-	def __init__(self,veneer_prefix,delimiter):
+	def __init__(self,veneer_prefix,delimiter,detailed_log=True):
 		super(CalibrationObservations,self).__init__(OBS_DEFAULTS)
+		self.detailed_log = detailed_log
 		self.delimiter = delimiter
 		self.data = ObservedData()
 		self.instructions = []
@@ -326,13 +349,14 @@ class CalibrationObservations(ConfigItemCollection):
 		return '\n'.join([PIF_PREFIX] + [self.pif_line(i) for i in self.items])
 
 class Case(object):
-	def __init__(self,name,optimiser='pest',model_servers=[9876],random_seed=1111):
+	def __init__(self,name,optimiser='pest',model_servers=[9876],random_seed=1111,detailed_log=True):
 		self.optimiser=optimiser.lower()
 		self.random_seed=random_seed
 		self.name=name
 		self.prefix = PTF_SINGLE_THREADED_INSTRUCTION_PREFIX
 		self.pest_delimiter = DEFAULT_PEST_DELIMITER
-		self.parameters = CalibrationParameters(self.pest_delimiter,self.prefix)
+		self.detailed_log = detailed_log
+		self.parameters = CalibrationParameters(self.pest_delimiter,self.prefix,detailed_log)
 		
 		self.param_groups = ConfigItemCollection(PARA_GROUP_DEFAULTS)
 		self.param_groups.add(DEFAULT_PG)
@@ -340,7 +364,7 @@ class Case(object):
 		self.observation_groups = ConfigItemCollection(OBS_GROUP_DEFAULTS)
 		self.observation_groups.add(DEFAULT_OG)
 
-		self.observations = CalibrationObservations(self.prefix,self.pest_delimiter)
+		self.observations = CalibrationObservations(self.prefix,self.pest_delimiter,detailed_log)
 		self.template_files = ConfigItemCollection(TEMPLATE_DEFAULTS)
 		self.template_files.add(self.ptf_fn(),self.runner_fn())
 		self.instruction_files = ConfigItemCollection(INSTRUCTION_DEFAULTS)
@@ -397,7 +421,11 @@ class Case(object):
 		return PCF.substitute(options) 
 
 	def ptf_text(self):
-		full = (PTF_PREFIX + self.parameters.script() + PTF_RUN + self.observations.script() + PTF_ASSESS)
+		full = (PTF_PREFIX%self.detailed_log + self.parameters.script() + PTF_RUN + self.observations.script() + PTF_ASSESS)
+
+		if self.detailed_log:
+			full += '\n' + self.parameters.log_script() + WRITE_DETAILED_LOG
+
 		return full%(self.options['SIM_OPTIONS'],self.outputs_fn())
 
 
@@ -527,7 +555,16 @@ class Case(object):
 		result['text']=txt
 		result['parameters'] = params
 
+		if self.detailed_log:
+			result['log'] = self.read_logs()
 		return result
+
+	def read_logs(self):
+		if len(self.veneer_ports)==1:
+			return pd.read_csv(LOG_FILE)
+		else:
+			all_logs = [pd.read_csv(os.path.join('Slave_%d'%p,LOG_FILE)) for p in self.veneer_ports]
+			return pd.concat(all_logs,axis=0,ignore_index=True)
 
 def make_pest_name(name):
 	if len(name)<=12:
