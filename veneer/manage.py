@@ -277,14 +277,33 @@ def start(project_fn,n_instances=1,ports=9876,debug=False,remote=True,script=Tru
     kill_all_on_exit(processes)
     return processes,actual_ports
 
-def find_veneers(search=None):
+def print_from_all(queues,prefix=''):
+    for i in range(len(queues)):
+        end=False
+        while not end:
+            try:
+                line = queues[i].get_nowait().decode('utf-8')
+            except Empty:
+                end = True
+                pass
+            else:
+                print('%s[%d] %s'%(prefix,i,line))
+
+def find_processes(search,ext='.exe'):
     import psutil
     processes = psutil.get_process_list()
     def try_name(p):
         try: return p.name()
         except:return None
 
-    veneers = [p for p in processes if try_name(p)=='FlowMatters.Source.VeneerCmd.exe']
+    if not search.endswith(ext):
+        search += ext
+
+    return [p for p in processes if try_name(p)==search]
+
+def find_veneers(search=None):
+    veneers = find_processes('FlowMatters.Source.VeneerCmd')
+
     if search:
         veneers = [v for v in veneers if search in ' '.join(v.cmdline())]
     return veneers
