@@ -24,6 +24,7 @@ LOG_FILE='detailed_log.csv'
 PTF_PREFIX='''ptf $
 LOG_FILE='detailed_log.csv'
 import os
+import math
 from veneer.pest_runtime import *
 from veneer import Veneer
 from veneer.stats import * 
@@ -341,6 +342,34 @@ class CalibrationObservations(ConfigItemCollection):
 		self.instructions.append('pest_observations.append(("%s",%s%s(obs_ts,mod_ts)))'%(obsnme,sign,stat.__name__))
 
 		self.add(obsnme,target)	
+
+	def penalise(self,penalty_name,penalty_equation,penalty_factor=1,multiplier=False):
+		'''
+		Add an objective that acts as a penalty on the solution based on inconsistency of
+		parameter values. For example if DWC > EMC:
+
+		case.observations.penalise('dwc_gt_emc','$DWC$ > $EMC$',1000)
+
+		where:
+		 - penalty_name: name to use in PEST files to report the penalty value
+		 - penalty_equation: A string that, when processed by PEST will be valid Python. Can use
+                             PEST parameter names, such as $EMC$.
+                             Can be a boolean equation (if multiplier=False, default), in which case
+                             the penalty will be penalty_factor if the equation evaluates True, 0 otherwise
+                             Or, can be a numeric equation (if multiplier=True) in which case
+                             the penalty will be penalty_factor * the value of the equation
+         - penatly_factor: Value to use for the penalty (multiplier=False), or the value to multiply the
+                           equation by (multiplier=True)
+         - multiplier: if true, treat the equation as numeric and the penalty_factor as a multiplier, otherwise
+                       treat the equation as boolean and the penalty_factor as the value to use if true
+		'''
+		if multiplier:
+			instr = '%f * (%s)'%(penalty_factor,penalty_equation)
+		else:
+			instr = '%f if (%s) else 0'%(penalty_factor,penalty_equation)
+
+		self.instructions.append('pest_observations.append(("%s",%s))'%(penalty_name,instr))
+		self.add(penalty_name,0)
 
 	def pif_line(self,obs):
 		return '%s%s%s !%s!'%(self.delimiter,obs['OBSNME'],self.delimiter,obs['OBSNME'])
