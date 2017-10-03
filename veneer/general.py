@@ -620,7 +620,10 @@ class Veneer(object):
 
         These criteria are used to identify which time series to retrieve.
 
-        timestep should be one of 'daily' (default), 'monthly', 'annual'
+        timestep should be one of 'daily' (default), 'monthly', 'annual'.
+        *WARNING*: The monthly and annual option uses the corresponding option in the Veneer plugin, which ALWAYS SUMS values,
+        regardless of units. So, if you retrieve a rate variable (eg m^3/s) those values will be summed and you will need to 
+        correct this manually in the returned DataFrame.
 
         All retrieved time series are returned in a single Data Frame.
 
