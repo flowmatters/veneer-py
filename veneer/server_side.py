@@ -871,7 +871,9 @@ class VeneerCatchmentGenerationActions(VeneerFunctionalUnitActions):
 
     * catchments - the name(s) of catchments to match when querying/configuring.
 
-    * fus - the type(s) of functional units to match when querying/configuring
+    * fus - the type(s) of functional units to match when querying/configuring.
+    
+    * constituents - the name(s) of the constituents to match when querying/configuring.
     '''
     def __init__(self,catchment):
         super(VeneerCatchmentGenerationActions,self).__init__(catchment)
