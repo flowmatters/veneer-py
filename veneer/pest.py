@@ -495,7 +495,12 @@ class Case(object):
 			p['lambda_param'] = max(lambda_param,len(self.veneer_ports))
 			p['mu_param'] = int(p['lambda_param']/2)
 			p.update(kwargs)
-			cmaes_params = [p['lambda_param'],p['mu_param'],'s',random_seed,'n','n',p['min_relative_objective_fn_change'],
+			cmaes_params = [p['lambda_param'],p['mu_param'],'s',random_seed,'n']
+			
+			if len(self.observations) > len(self.parameters):
+				cmaes_params += ['n'] # Employ SVD hybridisation?
+
+			cmaes_params += ['n',p['min_relative_objective_fn_change'],
 			                p['iterations_for_change'],p['min_relative_param_change'],p['iterations_for_change'],
 			                p['rel_hi_low_object_fn'],p['no_iterations_hi_lo'],p['max_iters'],'y']
 
