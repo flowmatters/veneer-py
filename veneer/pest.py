@@ -295,7 +295,7 @@ class CalibrationObservations(ConfigItemCollection):
 
 		return self.data.script(store_ts) +'\n' + '\n'.join(self.instructions)
 
-	def compare(self,ts_name,mod_ref,stat=stats.nse,target=None,aggregation=None,time_period=None,obsnme=None,mod_scale=1):
+	def compare(self,ts_name,mod_ref,stat=stats.nse,target=None,aggregation=None,time_period=None,obsnme=None,mod_scale=1,mod_transform=''):
 		if obsnme is None:
 			obsnme = ts_name
 
@@ -314,8 +314,13 @@ class CalibrationObservations(ConfigItemCollection):
 		if aggregation is None:
 			aggregation = 'daily'
 
-		self.instructions.append('mod_ts = %sretrieve_multiple_time_series(run_data=run_results,criteria=%s,timestep="%s")'%(self.veneer_prefix,mod_ref,aggregation)) 
+		retrieval_instruction = 'mod_ts = %sretrieve_multiple_time_series(run_data=run_results,criteria=%s,timestep="%s")'%(self.veneer_prefix,mod_ref,aggregation)
+		if not mod_transform.startswith('.'):
+			retrieval_instruction += '.'
+		retrieval_instruction += mod_transform
+		self.instructions.append(retrieval_instruction)
 		self.instructions.append('print(mod_ts.columns)')
+		self.instructions.append('print(len(mod_ts.columns==0))')
 		self.instructions.append('assert(len(mod_ts.columns==0))')
 		self.instructions.append('mod_ts = mod_ts[mod_ts.columns[0]]%s'%('' if mod_scale==1 else ('*%f'%mod_scale)))
 		self.instructions.append('obs_ts = observed_ts["%s"].dropna()'%ts_name)
