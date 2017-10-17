@@ -189,3 +189,6 @@ def _variable_safe_name(name):
     name = re.sub('__+','_',name)
     name = name.strip('_')
     return name
+
+def _safe_filename(fn):
+    return fn.replace('\\','/')

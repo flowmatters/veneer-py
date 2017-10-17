@@ -1,5 +1,5 @@
 
-from .utils import _stringToList, _variable_safe_name
+from .utils import _stringToList, _variable_safe_name, _safe_filename
 from .templates import *
 import itertools
 
@@ -405,7 +405,7 @@ class VeneerIronPython(object):
                            data_group=None,namespace=None):
         assignment = "H.AssignTimeSeries(scenario,%s__init__.__self__,'%s','"+data_group+"',newVal"
         post_assignment = ",%d)"%column
-        theValue = [fn.replace('\\','/') for fn in _stringToList(theValue)]
+        theValue = [_safe_filename(fn) for fn in _stringToList(theValue)]
         if len(theValue)==1:
             theValue=theValue[0]
         return self._assignment(theThing,theValue,namespace,literal,from_list,False,assignment,post_assignment)
