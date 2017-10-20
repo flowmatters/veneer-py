@@ -9,29 +9,41 @@ def _node_id(node):
         return node['id']
     return node
 
-def network_downstream_links(self,node):
+def network_downstream_links(self,node_or_link):
     '''
     Find all the links in the network that are immediately downstream of a given node.
 
     Parameters:
 
-    * node  - the node to search on. Expects the node feature object
+    * node_or_link  - the node to search on. Expects the node feature object
     '''
     features = self['features']
-    links = features.find_by_feature_type('link')
-    return links.find_by_from_node(_node_id(node))
+    source = features.find_by_id(_node_id(node_or_link))[0]
+    if source['properties']['feature_type']=='node':
+        node = source['id']
+    else:
+        node = source['properties']['to_node']
 
-def network_upstream_links(self,node):
+    links = features.find_by_feature_type('link')
+    return links.find_by_from_node(node)
+
+def network_upstream_links(self,node_or_link):
     '''
     Find all the links in the network that are immediately upstream of a given node.
 
     Parameters:
 
-    * node  - the node to search on. Expects the node feature object
-    '''
+    * node_or_link  - the node or link to search on. Expects the node feature object
+    '''   
     features = self['features']
+    source = features.find_by_id(_node_id(node_or_link))[0]
+    if source['properties']['feature_type']=='node':
+        node = source['id']
+    else:
+        node = source['properties']['from_node']
+
     links = features.find_by_feature_type('link')
-    return links.find_by_to_node(_node_id(node))
+    return links.find_by_to_node(node)
 
 def network_node_names(self):
     '''
