@@ -118,6 +118,16 @@ class Veneer(object):
             self.data_ext='.json'
         self.model = VeneerIronPython(self)
 
+    def shutdown(self):
+        '''
+        Stop the Veneer server (and shutdown the command line if applicable)
+        '''
+        try:
+            self.post_json('/shutdown')
+        except ConnectionResetError:
+            return
+        raise Exception("Connection didn't reset. Shutdown may not have worked")
+
     def _replace_inf(self,text):
         return re.sub('":(-?)INF','":\\1Infinity',text)
 
