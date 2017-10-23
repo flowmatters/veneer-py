@@ -99,10 +99,13 @@ def create_command_line(veneer_path,source_version="4.1.1",source_path='C:\\Prog
     if not os.path.exists(dest):
         os.makedirs(dest)
 
-    available = glob(os.path.join(source_path,'Source *'))
-    versions = [os.path.basename(ver).split(' ')[1] for ver in available]
-    chosen_one = [ver for ver in versions if ver.startswith(source_version)][-1]
-    chosen_one_full = [product_ver for product_ver in available if chosen_one in product_ver][0]
+    if source_version:
+        available = glob(os.path.join(source_path,'Source *'))
+        versions = [os.path.basename(ver).split(' ')[1] for ver in available]
+        chosen_one = [ver for ver in versions if ver.startswith(source_version)][-1]
+        chosen_one_full = [product_ver for product_ver in available if chosen_one in product_ver][0]
+    else:
+        chosen_one_full = source_path
 
     for f in glob(os.path.join(source_path,chosen_one_full,'*.*')):
         if not os.path.isfile(f):
