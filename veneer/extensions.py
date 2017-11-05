@@ -110,6 +110,59 @@ def network_as_dataframe(self):
     result['id'] = [f['id'] for f in self['features']]
     return result
 
+def network_partition(self,key_features,new_prop):
+    '''
+    Partition the network by a list of feature names (key_features).
+
+    Add property (new_prop) to each feature identifying next downstream feature from key_features.
+
+    Features in key_features are assigned to their own group.
+
+    Features with no downstream key_feature (eg close to outlets) are attributed with their outlet node
+    '''
+    features = self['features']
+
+    def attribute_next_down(feature):
+        if new_prop in feature['properties']:
+            return feature['properties'][new_prop]
+
+        if feature['properties']['name'] in key_features:
+            feature['properties'][new_prop] = feature['properties']['name']
+            return feature['properties']['name']
+
+        f_type = feature['properties']['feature_type']
+
+        if f_type=='catchment':
+            ds_feature_id = feature['properties']['link']
+        elif f_type=='link':
+            ds_feature_id = feature['properties']['to_node']
+        else: # f_type=='node'
+            downstream_links = self.downstream_links(feature)
+            if len(downstream_links)==0:
+                # Outlet and we didn't find one of the key features...
+                feature['properties'][new_prop] = feature['properties']['name']
+                return feature['properties']['name']
+            elif len(downstream_links)>1:
+                for l in downstream_links:
+                    key = attribute_next_down(l)
+                    if key in key_features:
+                        # If this link leads to a key_feature, return that name
+                        return key
+                # All downstream links terminate without reaching a key_feature
+                # Return the first one
+                return downstream_links[0]['properties'][new_prop]
+
+            # Just one downstream link, usual case
+            ds_feature_id = downstream_links[0]['id']
+
+        ds_feature = features.find_by_id(ds_feature_id)[0]
+        key = attribute_next_down(ds_feature)
+        feature['properties'][new_prop] = key
+        return key
+
+    for f in features:
+        attribute_next_down(f)
+
 def add_network_methods(target):
     '''
     Attach extension methods to an object that represents a Veneer network.
