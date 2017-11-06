@@ -324,8 +324,9 @@ class BulkVeneerApplication(object):
         return self.clients.call_on_all(self.names,*pargs,**kwargs)
 
 class BulkVeneer(object):
-    def __init__(self,ports):
+    def __init__(self,ports=[],clients=[]):
         self.veneers = [Veneer(port) for port in ports]
+        self.veneers += clients
 
     def call_path(self,client,path,*pargs,**kwargs):
         target = client
