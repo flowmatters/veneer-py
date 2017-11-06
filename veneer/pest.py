@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import math
 import os
+import re
 
 from string import Template
 from collections import OrderedDict
@@ -10,7 +11,7 @@ from shutil import copyfile
 
 from veneer import stats
 from .pest_runtime import CONNECTION_FN
-from .manage import kill_all_on_exit, kill_all_now
+from .manage import kill_all_on_exit, kill_all_now, BulkVeneer
 
 dict = OrderedDict
 
@@ -244,6 +245,16 @@ class DeferredActionCollection(object):
 
 	def script(self,transform=None):
 		return '\n'.join([self.script_line(i,transform) for i in self.instructions])
+
+	def eval_script(self,substitutions={},global_variables={}):
+		script = self.script()
+		for key,val in substitutions.items():
+			if key[0] != self.delimiter:
+				key = '%s%s%s'%(self.delimiter,key,self.delimiter)
+			pattern = re.compile(re.escape(key), re.IGNORECASE)
+			script = pattern.sub(str(val),script)
+		for line in script.splitlines():
+			eval(line,global_variables)
 
 class CalibrationParameters(DeferredActionCollection):
 	def __init__(self,delimiter=DEFAULT_PEST_DELIMITER,
@@ -521,6 +532,9 @@ class Case(object):
 		with open(os.path.join(wd,CONNECTION_FN),'w') as f:
 			f.write(str(port))
 
+	def get_clients(self):
+		return BulkVeneer(self.veneer_ports)
+
 	def run(self,**kwargs):
 		stdio = self.stdio_params(**kwargs)
 		if stdio is None:
@@ -607,6 +621,32 @@ class Case(object):
 			result['log'] = self.read_logs()
 		return result
 
+	def apply_parameters(self,v=None,parameters=None):
+		'''
+		Apply a calibrated parameter set to a Source model at the end of a Veneer end-point.
+
+		Used post-calibration.
+
+		Parameters:
+
+		* v - Veneer client object. If None, parameters will be applied to ALL veneer instanced used 
+		      in the calibration
+		* parameters - dictionary-like object of parameters. If None, used the calibrated parameters
+		               from the simulation.
+		'''
+		if parameters is None:
+			results = self.get_results()
+			parameters = results['parameters'].value # transform to dict-like
+
+		if not isinstance(parameters,dict):
+			parameters = parameters.to_dict()
+
+		if v is None:
+			v = self.get_clients()
+		
+		self.parameters.eval_script(parameters,{'v':v})
+
+		
 	def read_logs(self):
 		if len(self.veneer_ports)==1:
 			return pd.read_csv(LOG_FILE)
