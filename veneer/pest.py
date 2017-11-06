@@ -30,6 +30,7 @@ from veneer.pest_runtime import *
 from veneer import Veneer
 from veneer.stats import * 
 import pandas as pd
+import numpy as np
 from veneer import general
 general.PRINT_URLS=False
 veneer_port=find_port()
@@ -306,9 +307,10 @@ class CalibrationObservations(ConfigItemCollection):
 
 		return self.data.script(store_ts) +'\n' + '\n'.join(self.instructions)
 
-	def compare(self,ts_name,mod_ref,stat=stats.nse,target=None,aggregation=None,time_period=None,obsnme=None,mod_scale=1,mod_transform=''):
+	def compare(self,ts_name,mod_ref,stat=stats.nse,target=None,aggregation=None,time_period=None,obsnme=None,
+	            mod_scale=1,mod_transform='',mod_combine='sum'):
 		if obsnme is None:
-			obsnme = ts_name
+			obsnme = ts_name.replace(' ','_')
 
 		if target is None:
 			if hasattr(stat,'perfect'):
@@ -325,17 +327,28 @@ class CalibrationObservations(ConfigItemCollection):
 		if aggregation is None:
 			aggregation = 'daily'
 
-		retrieval_instruction = 'mod_ts = %sretrieve_multiple_time_series(run_data=run_results,criteria=%s,timestep="%s")'%(self.veneer_prefix,mod_ref,aggregation)
-		if not mod_transform.startswith('.'):
-			retrieval_instruction += '.'
-		retrieval_instruction += mod_transform
-		self.instructions.append(retrieval_instruction)
-		self.instructions.append('print(mod_ts.columns)')
-		self.instructions.append('print(len(mod_ts.columns==0))')
+		RETRIEVAL_TEMPLATE='mod_ts%s = %sretrieve_multiple_time_series(run_data=run_results,criteria=%s,timestep="%s")%s'
+		if len(mod_transform) and not mod_transform.startswith('.'):
+			mod_transform = '.' + mod_transform
+
+		if isinstance(mod_ref,list):
+			for i, ref in enumerate(mod_ref):
+				ri = RETRIEVAL_TEMPLATE%(str(i),self.veneer_prefix,ref,aggregation,mod_transform)
+				self.instructions.append(ri)
+				self.instructions.append('mod_ts%d[mod_ts%d==-9999]=np.nan'%(i,i))
+			combo_instruction = 'mod_ts = pd.DataFrame({"mod":%s})'%('+'.join(['mod_ts%d[mod_ts%d.columns[0]]'%(i,i) for i in range(len(mod_ref))]))
+			self.instructions.append(combo_instruction)
+		else:
+			retrieval_instruction = RETRIEVAL_TEMPLATE%('',self.veneer_prefix,mod_ref,aggregation,mod_transform)
+			self.instructions.append(retrieval_instruction)
+			self.instructions.append('mod_ts[mod_ts==-9999]=np.nan')
+		self.instructions.append('assert(not np.any(np.isnan(mod_ts)))')
+		#self.instructions.append('print(mod_ts.columns)')
+		#self.instructions.append('print(len(mod_ts.columns==0))')
 		self.instructions.append('assert(len(mod_ts.columns==0))')
-		self.instructions.append('mod_ts = mod_ts[mod_ts.columns[0]]%s'%('' if mod_scale==1 else ('*%f'%mod_scale)))
+		self.instructions.append('mod_ts = mod_ts[mod_ts.columns[0]].dropna()%s'%('' if mod_scale==1 else ('*%f'%mod_scale)))
 		self.instructions.append('obs_ts = observed_ts["%s"].dropna()'%ts_name)
-		self.instructions.append('print(len(obs_ts),obs_ts.index.dtype,mod_ts.index.dtype)')
+		#self.instructions.append('print(len(obs_ts),obs_ts.index.dtype,mod_ts.index.dtype)')
 		if time_period is not None:
 			self.instructions.append('# Subset modelled and predicted')
 			self.instructions.append('date_format = "%%Y/%%m/%%d"')
