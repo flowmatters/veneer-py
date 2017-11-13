@@ -8,7 +8,6 @@ import atexit
 import os
 import tempfile
 import shutil
-from win32api import GetFileVersionInfo, LOWORD, HIWORD
 from .general import Veneer
 
 # Non blocking IO solution from http://stackoverflow.com/a/4896288
@@ -19,6 +18,7 @@ MANY_VENEERS='D:\\src\\projects\\Veneer\\Compiled'
 VENEER_EXE='D:\\src\\projects\\Veneer\\Output\\FlowMatters.Source.VeneerCmd.exe'
 
 def _get_version_number (filename):
+    from win32api import GetFileVersionInfo, LOWORD, HIWORD
     try:
         info = GetFileVersionInfo (filename, "\\")
         ms = info['FileVersionMS']
