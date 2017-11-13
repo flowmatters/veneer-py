@@ -294,7 +294,7 @@ def print_from_all(queues,prefix=''):
 
 def find_processes(search,ext='.exe'):
     import psutil
-    processes = psutil.get_process_list()
+    processes = psutil.process_iter()
     def try_name(p):
         try: return p.name()
         except:return None
