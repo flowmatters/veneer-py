@@ -174,6 +174,100 @@ class SearchableList(object):
     def as_dataframe(self):
         return pd.DataFrame(self._list)
 
+class DeferredCall(object):
+  def __init__(self,parameter,delimiter):
+    if parameter:
+        self.call_tree=[parameter]
+    else:
+        self.call_tree = []
+    self.pargs = []
+    self.kwargs = {}
+    self.delimiter = delimiter
+    self.cal_params = []
+    self._is_call = False
+    self.next = None
+
+  def __getattr__(self,attrname):
+    if attrname != '_ipython_canary_method_should_not_exist_':
+        self.call_tree.append(attrname)
+    return self
+
+  def __getitem__(self,ix):
+      i = len(self.call_tree)-1
+      if i<0:
+          self.call_tree.append('')
+      self.call_tree[i] += '[%s]'%str(ix)
+      return self
+
+  def  __call__(self,*pargs,**kwargs):
+    self.pargs = pargs
+    self.kwargs = kwargs
+    self.cal_params = [p for p in (list(self.pargs) + list(self.kwargs.values())) if self.is_cal_param(p)]
+    self._is_call = True
+    self.next = DeferredCall(None,self.delimiter)
+    return self.next
+
+  def is_cal_param(self,val):
+    return isinstance(val,str) and (val[0]==self.delimiter) and (val[-1]==self.delimiter)
+
+  def to_arg(self,val):
+    if isinstance(val,str) and not self.is_cal_param(val):
+      return "'%s'"%val
+    return val
+
+  def argstring(self):
+    pstring = ','.join([self.to_arg(v) for v in self.pargs])
+    kwstring = ','.join(['%s=%s'%(k,str(self.to_arg(v))) for k,v in self.kwargs.items()])
+    if len(pstring) and len(kwstring):
+      return ','.join([pstring,kwstring])
+    else:
+      return pstring + kwstring
+
+  def __str__(self):
+    result = '.'.join(self.call_tree)
+    if self._is_call:
+        result += '(' + self.argstring() + ')'
+    if self.next:
+        next_text = str(self.next)
+        if next_text:
+            if next_text[0] == '[':
+                result += next_text
+            else:
+                result += '.' + next_text
+    return result
+
+class DeferredActionCollection(object):
+  def __init__(self,delimiter,instruction_prefix):
+    self.instructions = []
+    self.instruction_prefix = instruction_prefix
+    self.delimiter = delimiter
+
+  def __getattr__(self,attrname):
+    if attrname in ['_getAttributeNames','trait_names']:
+      raise Exception('Not implemented')
+    self.instructions.append(DeferredCall(attrname,self.delimiter))
+    return self.instructions[-1]
+
+  def script_line(self,instruction,transform=None):
+    if transform is None:
+      return self.instruction_prefix+str(instruction)
+    else:
+      return transform(instruction)
+
+  def script(self,transform=None):
+    return '\n'.join([self.script_line(i,transform) for i in self.instructions])
+
+  def eval_script(self,substitutions={},global_variables={}):
+    script = self.script()
+    for key,val in substitutions.items():
+      if key[0] != self.delimiter:
+        key = '%s%s%s'%(self.delimiter,key,self.delimiter)
+      pattern = re.compile(re.escape(key), re.IGNORECASE)
+      script = pattern.sub(str(val),script)
+    exec(script,global_variables)
+    # for line in script.splitlines():
+    #   eval(line,global_variables)
+
 def _stringToList(string_or_list):
     if isinstance(string_or_list,str):
         return [string_or_list]
