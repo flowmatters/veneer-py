@@ -41,6 +41,25 @@ class VeneerIronPython(object):
         self.node = VeneerNodeActions(self)
         self.functions = VeneerFunctionActions(self)
         self.simulation = VeneerSimulationActions(self)
+        self.deferred_scripts = []
+        self.deferring = False
+
+    def defer(self):
+        '''
+        Start deferring script execution.
+        '''
+        self.deferring = True
+
+    def flush(self):
+        '''
+        Run all deferred scripts, and stop deferring script execution
+        '''
+        self.deferring = False
+        mega_script = '\n'.join(self.deferred_scripts)
+        self.deferred_scripts = []
+        if not len(mega_script):
+            return
+        return self._safe_run(mega_script)
 
     def _initScript(self,namespace=None):
         script = "# Generated Script\n"
@@ -69,6 +88,10 @@ class VeneerIronPython(object):
         if init:
             script = self._initScript() + '\n'+ script
         script = self.clean_script(script)
+        if self.deferring:
+            self.deferred_scripts.append(script)
+            return None
+
         return self._veneer.run_server_side_script(script,async)
 
     def sourceHelp(self,theThing='scenario',namespace=None):
@@ -382,6 +405,8 @@ class VeneerIronPython(object):
 #       return script
 #        return None
         result = self.run_script(script)
+        if result is None:
+            return
         if not result['Exception'] is None:
             raise Exception(result['Exception'])
         return result['Response']['Value']
