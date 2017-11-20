@@ -1223,6 +1223,15 @@ class VeneerFunctionActions():
     def __init__(self,ironpython):
         self._ironpy = ironpython
 
+    def _accessor(self,option,functions=None):
+        accessor = 'scenario.Network.FunctionManager.Functions'
+        if functions is not None:
+            functions = _stringToList(functions)
+            accessor += '.Where(lambda v: v.Name in %s)'%functions
+        accessor += '.*' + option
+
+        return accessor
+
     def create_functions(self,names,general_equation,params,name_params=None):
         '''
         Create one function, or multiple functions based on a pattern
@@ -1277,6 +1286,68 @@ class VeneerFunctionActions():
 #        data = result['Response']['Value'] if result['Response'] else result['Response']
         return self._ironpy.simplify_response(result['Response'])
 
+    def get_options(self,option,functions=None):
+        '''
+        Return the current value of `option` for one or more functions.
+        '''
+        accessor = self._accessor(option,functions)
+        resp = self._ironpy.get(accessor)
+        return resp
+
+    def get_options(self,option,functions=None):
+        '''
+        Return the current value of `option` for one or more functions.
+
+        option - one of
+            'EvaluationTimes'
+            'ForceEvaluate'
+            'InitialValue'
+            'ResultUnit'
+            'IsClone'
+            'IsConstant' (readonly)
+            'Expression'
+            'Transient'
+            'HasContextVariables' (readonly)
+            'CanBeRecorded' (readonly)
+            'Name'
+            'FullName' (readonly)
+            
+        '''
+        accessor = self._accessor(option,functions)
+        resp = self._ironpy.get(accessor)
+        return resp
+
+    def set_options(self,option,values,fromList=False,functions=None,literal=False):
+        accessor = self._accessor(option,functions)
+        ns = 'RiverSystem.Management.ExpressionBuilder.TimeOfEvaluation as TimeOfEvaluation'
+        return self._ironpy.set(accessor,values,ns,literal=literal,fromList=fromList)
+
+    def set_time_of_evaluation(self,toe,fromList=False,functions=None):
+        '''
+        Set the Time of Evaluation for one or more functions.
+
+        Currently only supports setting a *single* time of evaluation.abs
+
+        Should be a string and one of:
+            'None'
+            'EndOfTimeStep'
+            'DuringResourceAssessmentTriggers'
+            'DuringOrderingPhase'
+            'DuringFlowPhase'
+            'StartOfTimeStep'
+            'PostTimeStep'
+            'PostFlowPhase'
+            'DuringResourceAssessmentEntry'
+            'ElementPostConstraints'
+            'ElementPostOrdering'
+            'ElementPostFlow'
+            'InitialiseRun'
+            'StartOfRun'
+        '''
+
+        toe = _stringToList(toe)
+        toe = ['TimeOfEvaluation.%s'%s for s in toe]
+        return self.set_options('EvaluationTimes',toe,fromList=True,functions=functions)
 
 class VeneerSimulationActions():
     def __init__(self,ironpython):
