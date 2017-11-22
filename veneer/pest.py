@@ -50,7 +50,10 @@ pest_observations=[]
 
 # Get results
 run_results = v.retrieve_run()
-
+if 'RunLog' in run_results:
+  print(os.linesep.join(run_results['RunLog']))
+else:
+  print('No run log. Consider upgrading Veneer plugin')
 # Compute stats
 '''
 
