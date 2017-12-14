@@ -732,6 +732,33 @@ def to_source_date(the_date):
         return the_date.strftime('%d/%m/%Y')
     return the_date
 
+def read_rescsv(fn):
+    '''
+    Read a .res.csv file saved from Source
+
+    Returns
+      * attributes - Pandas Dataframe of the various metadata attributes in the file
+      * data - Pandas dataframe of the time series
+    '''
+    import pandas as pd
+    import re
+    import io
+    text = open(fn,'r').read()
+
+    r = re.compile('\nEOH\n')
+    header,body = r.split(text)
+
+    r = re.compile('\nEOC\n')
+    config,headers = r.split(header)
+
+    attribute_names = config.splitlines()[-1].split(',')
+    attributes = pd.DataFrame([dict(zip(attribute_names,line.split(','))) for line in headers.splitlines()[1:]])
+
+    columns = ['Date'] + list(attributes.Name)
+    data = pd.read_csv(io.StringIO(body),header=None,index_col=0,parse_dates=True,dayfirst=True,names=columns)
+
+    return attributes, data
+
 if __name__ == '__main__':
     # Output
     destination = sys.argv[1] if len(sys.argv)>1 else "C:\\temp\\veneer_download\\"
