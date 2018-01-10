@@ -275,7 +275,7 @@ class Veneer(object):
                     'RecordAll':[translate(r) for r in enable]}
         self.update_json('/recorders',modifier)
 
-    def run_model(self,params=None,start=None,end=None,async=False,**kwargs):
+    def run_model(self,params=None,start=None,end=None,async=False,name=None,**kwargs):
         '''
         Trigger a run of the Source model
 
@@ -288,6 +288,8 @@ class Veneer(object):
         async: (default False). If True, the method will return immediately rather than waiting for the simulation to finish.
                Useful for triggering parallel runs. Method will return a connection object that can then be queried to know
                when the run has finished.
+
+        name: Name to assign to run in Source results (default None: let Source name using default strategy)
 
         kwargs: optional named parameters to be used to update the params dictionary
 
@@ -305,6 +307,9 @@ class Veneer(object):
             params['StartDate'] = to_source_date(start)
         if not end is None:
             params['EndDate'] = to_source_date(end)
+
+        if not name is None:
+            params['_RunName'] = name
 
     #   conn.request('POST','/runs',json.dumps({'parameters':params}),headers={'Content-type':'application/json','Accept':'application/json'})
         conn.request('POST','/runs',json.dumps(params),headers={'Content-type':'application/json','Accept':'application/json'})
