@@ -3,7 +3,8 @@ import re
 
 CANARY_METHODS = [
     '_ipython_canary_method_should_not_exist_',
-    '_ipython_display_'
+    '_ipython_display_',
+    '_repr_javascript_'
 ]
 
 try:
