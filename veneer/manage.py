@@ -107,12 +107,20 @@ def create_command_line(veneer_path,source_version="4.1.1",source_path='C:\\Prog
     else:
         chosen_one_full = source_path
 
-    for f in glob(os.path.join(source_path,chosen_one_full,'*.*')):
+    source_files = glob(os.path.join(source_path,chosen_one_full,'*.*'))
+    if not len(source_files):
+        raise Exception('Source files not found at %s'%source_path)
+
+    veneer_files = glob(os.path.join(veneer_path,'*.*'))
+    if not len(veneer_files):
+        raise Exception('Veneer files not found at %s'%veneer_path)
+
+    for f in source_files:
         if not os.path.isfile(f):
             continue
         shutil.copyfile(f,os.path.join(dest,os.path.basename(f)))
 
-    for f in glob(os.path.join(veneer_path,'*.*')):
+    for f in veneer_files:
         if not os.path.isfile(f):
             continue
         shutil.copyfile(f,os.path.join(dest,os.path.basename(f)))
