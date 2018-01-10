@@ -1,6 +1,11 @@
 import pandas as pd
 import re
 
+CANARY_METHODS = [
+    '_ipython_canary_method_should_not_exist_',
+    '_ipython_display_'
+]
+
 try:
     from collections import UserDict
 except ImportError:
@@ -188,7 +193,7 @@ class DeferredCall(object):
     self.next = None
 
   def __getattr__(self,attrname):
-    if attrname != '_ipython_canary_method_should_not_exist_':
+    if not attrname in CANARY_METHODS:
         self.call_tree.append(attrname)
     return self
 
