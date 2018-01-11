@@ -5,6 +5,14 @@ CANARY_METHODS = [
     '_ipython_canary_method_should_not_exist_',
     '_ipython_display_',
     '_repr_javascript_'
+    '_repr_jpeg_',
+    '_repr_latex_',
+    '_repr_markdown_',
+    '_repr_pdf_',
+    '_repr_json_',
+    '_repr_html_',
+    '_repr_svg_'
+    '_repr_png_'
 ]
 
 try:
