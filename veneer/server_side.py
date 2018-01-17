@@ -906,8 +906,13 @@ class VeneerCatchmentGenerationActions(VeneerFunctionalUnitActions):
 
     def _build_accessor(self,parameter,catchments=None,fus=None,constituents=None):
         accessor = 'scenario.Network.ConstituentsManagement.Elements' + \
-                    '.OfType[CatchmentElementConstituentData]()' + \
-                    '.*FunctionalUnitData'
+                    '.OfType[CatchmentElementConstituentData]()'
+
+        if not catchments is None:
+            catchments = _stringToList(catchments)
+            accessor += '.Where(lambda cData: cData.Catchment.Name in %s)'%catchments
+
+        accessor += '.*FunctionalUnitData'
 
         if not fus is None:
             fus = _stringToList(fus)
