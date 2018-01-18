@@ -3,7 +3,7 @@ High level actions
 '''
 from .utils import _safe_filename
 
-def switch_data_source(v,from_set,to_set):
+def switch_data_source(v,from_set,to_set,remove_original=True):
 	switch_input_sets_script="""
 %s
 dm = scenario.Network.DataManager
@@ -19,8 +19,10 @@ def transfer_usages(orig_item,dest_item):
     orig_detail.Usages.Clear();
 
 transfer_usages(orig_item,dest_item)
-dm.RemoveGroup(orig_item)
+
 """%(v.model._initScript(),from_set,to_set)
+	if remove_original:
+		switch_input_sets_script += "\ndm.RemoveGroup(orig_item)"
 	return v.model.run_script(switch_input_sets_script)
 
 def enable_streaming(v,fn):
