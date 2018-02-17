@@ -137,14 +137,14 @@ class Veneer(object):
 
         url: Path to required resource, relative to the root of the Veneer service.
         '''
+        query_url = self.prefix+url+self.data_ext
         if PRINT_URLS:
-            print("*** %s ***" % (url))
-
+            print("*** %s - %s ***" % (url, query_url))
         if self.protocol=='file':
-            text = open(self.prefix+url+self.data_ext).read()
+            text = open(query_url).read()
         else:
             conn = hc.HTTPConnection(self.host,port=self.port)
-            conn.request('GET',quote(url+self.data_ext))
+            conn.request('GET',quote(query_url))
             resp = conn.getresponse()
             text = resp.read().decode('utf-8')
             #text = urlopen(self.base_url + quote(url+self.data_ext)).read().decode('utf-8')
