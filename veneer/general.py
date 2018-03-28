@@ -610,6 +610,15 @@ class Veneer(object):
         '''
         return self.send_json('/inputSets/%s'%(name.replace(' ','%20')),method='PUT',data=input_set)
 
+    def create_input_set(self,input_set):
+        '''
+        Create a new input set in Source model.
+
+        input_set: A Python dictionary representing the updated input set. Should contain the same fields as the input set
+                   returned from the input_sets method. (eg Configuration,Filename,Name,ReloadOnRun)
+        '''
+        return self.post_json('/inputSets',data=input_set)
+        
     def apply_input_set(self,name):
         '''
         Have Source apply a given input set
