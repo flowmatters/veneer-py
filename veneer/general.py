@@ -2,8 +2,12 @@ try:
     from urllib2 import urlopen, quote
     import httplib as hc
 except:
-    from urllib.request import urlopen, quote, Request
-    import http.client as hc
+    try:
+        from urllib import urlopen, quote
+        import httplib as hc    
+    except:
+        from urllib.request import urlopen, quote, Request
+        import http.client as hc
 
 import json
 import re
