@@ -73,3 +73,16 @@ if match:
 else:
     result['failed'].append(var_name)
 '''
+
+VALID_IDENTIFIER_FN='''
+def valid_identifier(nm):
+  import re
+  if not nm:
+    return False
+  if len(nm) < 2:
+    return False
+  if nm[0] != '$':
+    return False
+
+  return re.match("[_A-Za-z][_a-zA-Z0-9]*$",nm[1:])
+'''

@@ -1278,9 +1278,14 @@ class VeneerFunctionActions():
         functions = list(zip(names,[general_equation%param_set for param_set in params]))
         script = self._ironpy._initScript()
         script += 'import RiverSystem.Functions.Function as Function\n'
+        script += VALID_IDENTIFIER_FN
         script += 'functions=%s\n\n'%functions
         script += 'result={"created":[],"failed":[]}\n'
         script += 'for (fn,expr) in functions:\n'
+        script += '  if not fn.startswith("$"): fn = "$"+fn\n'
+        script += '  if not valid_identifier(fn):\n'
+        script += '    result["failed"].append(fn)\n'
+        script += '    continue\n'
         script += '  if scenario.Network.FunctionManager.Functions.Any(lambda f: f.Name==fn):\n'
         script += '    result["failed"].append(fn)\n'
         script += '    continue\n'
