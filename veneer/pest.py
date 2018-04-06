@@ -368,6 +368,7 @@ class Case(object):
     self.options = CONTROL_DEFAULTS.copy()
     self.options.update(SVD_DEFAULTS)
     self.options['SIM_OPTIONS'] = {}
+    self.expect_run_time = 1.0
 
     self.veneer_ports=model_servers
 
@@ -431,7 +432,7 @@ class Case(object):
     prf_options = PRF_DEFAULTS.copy()
     prf_options['NSLAVE'] = len(self.veneer_ports)
     prf_options['SLAVE_LINES'] = '\n'.join(['%s %s\\'%(slave,os.path.join('.',slave)) for slave in [self.slave_name(p) for p in self.veneer_ports]])
-    prf_options['SLAVE_RUNTIME_LINES'] = ' '.join(['1.0']*len(self.veneer_ports))
+    prf_options['SLAVE_RUNTIME_LINES'] = ' '.join(['%f'%self.expect_run_time]*len(self.veneer_ports))
     return PRF.substitute(prf_options)
 
   def slave_name(self,p):
