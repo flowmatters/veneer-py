@@ -2,7 +2,7 @@ try:
     from urllib2 import quote
     import httplib as hc
 except:
-    from urllib.request import quote, Request
+    from urllib.request import quote
     import http.client as hc
 
 import json
@@ -146,13 +146,15 @@ class Veneer(object):
             conn.request('GET',quote(query_url))
             resp = conn.getresponse()
             text = resp.read().decode('utf-8')
-            #text = urlopen(self.base_url + quote(url+self.data_ext)).read().decode('utf-8')
 
         text = self._replace_inf(text)
         if PRINT_ALL:
             print(json.loads(text))
             print("")
-        return json.loads(text)
+        try:
+            return json.loads(text)
+        except Exception as e:
+            raise Exception('Error parsing response as JSON. Retrieving %s and received:\n%s'%(url,text[:100]))
 
     def retrieve_csv(self,url):
         '''
@@ -165,8 +167,10 @@ class Veneer(object):
         if PRINT_URLS:
             print("*** %s ***" % (url))
 
-        req = Request(self.base_url + quote(url+self.data_ext),headers={"Accept":"text/csv"})
-        text = urlopen(req).read().decode('utf-8')
+        conn = hc.HTTPConnection(self.host,port=self.port)
+        conn.request('GET',quote(url+self.data_ext),headers={"Accept":"text/csv"})
+        resp = conn.getresponse()
+        text = resp.read().decode('utf-8')
 
         result = read_veneer_csv(text)
         if PRINT_ALL:
