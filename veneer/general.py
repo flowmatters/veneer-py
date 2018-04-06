@@ -348,8 +348,10 @@ class Veneer(object):
         '''
         Tell Source to drop/delete ALL current run results from memory
         '''
-        while len(self.retrieve_runs())>0:
-            self.drop_run()
+        runs = self.retrieve_runs()
+        while len(runs)>0:
+            self.drop_run(int(runs[-1]['RunUrl'].split('/')[-1]))
+            runs = self.retrieve_runs()
 
     def retrieve_runs(self):
         '''
