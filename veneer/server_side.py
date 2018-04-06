@@ -1263,7 +1263,7 @@ class VeneerFunctionActions():
 
         return accessor
 
-    def create_functions(self,names,general_equation,params,name_params=None):
+    def create_functions(self,names,general_equation,params=[[]],name_params=None):
         '''
         Create one function, or multiple functions based on a pattern
         '''
