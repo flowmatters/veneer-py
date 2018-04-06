@@ -786,7 +786,8 @@ class VeneerCatchmentActions(VeneerNetworkElementActions):
     def __init__(self,ironpython):
         super(VeneerCatchmentActions,self).__init__(ironpython)
         self._ironpy = ironpython
-        self.function_units = VeneerFunctionalUnitActions(self)
+        self.functional_units = VeneerFunctionalUnitActions(self)
+        self.function_units = self.functional_units
         self.runoff = VeneerRunoffActions(self)
         self.generation = VeneerCatchmentGenerationActions(self)
         self.subcatchment = VeneerSubcatchmentActions(self)
@@ -822,7 +823,7 @@ class VeneerCatchmentActions(VeneerNetworkElementActions):
 
         fus: Restrict to particular functional unit types by passing a list of FU names
         '''
-        return self.function_units.get_param_values('areaInSquareMeters',catchments=catchments,fus=fus)
+        return self.functional_units.get_param_values('areaInSquareMeters',catchments=catchments,fus=fus)
 #        accessor = self._build_fu_accessor('areaInSquareMeters',catchments,fus)
 #        return self._ironpy.get(accessor)
 
@@ -838,7 +839,7 @@ class VeneerCatchmentActions(VeneerNetworkElementActions):
 
         fus: Restrict to particular functional unit types by passing a list of FU names
         '''
-        return self.function_units.set_param_values('areaInSquareMeters',values,fromList=True,catchments=catchments,fus=fus)
+        return self.functional_units.set_param_values('areaInSquareMeters',values,fromList=True,catchments=catchments,fus=fus)
 #        accessor = self._build_fu_accessor('areaInSquareMeters',catchments,fus)
 #        return self._ironpy.set(accessor,values,fromList=True)
 
