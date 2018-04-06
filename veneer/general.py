@@ -531,9 +531,11 @@ class Veneer(object):
         result['Items'] = SearchableList([_transform_data_source_item(i) for i in result['Items']])
         return result
 
-    def create_data_source(self,name,data,units='mm/day',precision=3):
+    def create_data_source(self,name,data=None,units='mm/day',precision=3,reload_on_run=False):
         '''
         Create a new data source (name) using a Pandas dataframe (data)
+
+        If no dataframe is provided, name is interpreted as a filename
         '''
         dummy_data_group = {}
         dummy_data_group['Name']=name
@@ -546,7 +548,10 @@ class Veneer(object):
         dummy_detail['TimeSeries']={}
 
         #dummy_item['Details'] = [dummy_detail]
-        dummy_item['DetailsAsCSV']=data.to_csv(float_format='%%.%df'%precision)
+        if data:
+            dummy_item['DetailsAsCSV']=data.to_csv(float_format='%%.%df'%precision)
+        dummy_item['ReloadOnRun'] = reload_on_run
+
         dummy_item['UnitsForNewTS']=units
         dummy_data_group['Items']=[dummy_item]
 
