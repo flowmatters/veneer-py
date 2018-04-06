@@ -1,13 +1,9 @@
 try:
-    from urllib2 import urlopen, quote
+    from urllib2 import quote
     import httplib as hc
 except:
-    try:
-        from urllib import urlopen, quote
-        import httplib as hc    
-    except:
-        from urllib.request import urlopen, quote, Request
-        import http.client as hc
+    from urllib.request import quote, Request
+    import http.client as hc
 
 import json
 import re
