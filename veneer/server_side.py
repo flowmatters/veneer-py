@@ -1281,6 +1281,9 @@ class VeneerFunctionActions():
         script += 'functions=%s\n\n'%functions
         script += 'result={"created":[],"failed":[]}\n'
         script += 'for (fn,expr) in functions:\n'
+        script += '  if scenario.Network.FunctionManager.Functions.Any(lambda f: f.Name==fn):\n'
+        script += '    result["failed"].append(fn)\n'
+        script += '    continue\n'
         script += '  rsFn = Function()\n'
         script += '  rsFn.Name=fn\n'
         script += '  rsFn.Expression=expr\n'
