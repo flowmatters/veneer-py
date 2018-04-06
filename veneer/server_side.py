@@ -679,7 +679,6 @@ class VeneerNetworkElementActions(object):
         Create a modelled variable for accessing a model's properties from a function
         '''
         accessor = self._build_accessor(parameter,**kwargs)
-        print(accessor)
         names = ['$'+_variable_safe_name(parameter+'_'+'_'.join(name_tuple)) for name_tuple in self.enumerate_names(**kwargs)]
         print(names)
         ns = 'RiverSystem.Functions.Variables.ModelledVariable as ModelledVariable'
@@ -1131,6 +1130,7 @@ class VeneerLinkRoutingActions(VeneerNetworkElementActions):
 
         accessor = self._build_accessor(**kwargs)[:-13]+'.*__init__.__self__'
         namespace = self._instantiation_namespace(models)
+
         return self._ironpy._assignment(accessor,models,namespace,literal=False,fromList=True,
                                        instantiate=False,
                                        assignment=assignment,
