@@ -93,14 +93,15 @@ def create_command_line(veneer_path,source_version="4.1.1",source_path='C:\\Prog
     when you are finished with it! (Even if a temporary directory is used!)
     '''
 
+    if dest: dest = Path(dest)
     if dest:
-        exe_path = Path(dest)/'FlowMatters.Source.VeneerCmd.exe'
+        exe_path = dest/'FlowMatters.Source.VeneerCmd.exe'
 
     if dest and exe_path.exists() and not force:
         return exe_path
 
     if dest is None:
-        dest = tempfile.mkdtemp(suffix='_veneer')
+        dest = Path(tempfile.mkdtemp(suffix='_veneer'))
 
     if not dest.exists():
         dest.mkdir(parents=True)
@@ -151,7 +152,8 @@ def configure_non_blocking_io(processes,stream):
     return queues,threads
 
 def _find_plugins_file(project_path):
-    if not os.path.isdir(project_path):
+    project_path = Path(project_path)
+    if not project_path.is_dir():
         project_path = _dirname(project_path)
 
     plugin_fn = Path(project_path)/'Plugins.xml'
@@ -165,13 +167,15 @@ def _find_plugins_file(project_path):
     return _find_plugins_file(parent)
 
 def overwrite_plugin_configuration(source_binaries,project_fn):
+    source_binaries = Path(source_binaries)
+    project_fn = Path(project_fn)
     plugin_fn = _find_plugins_file(project_fn)
     if not plugin_fn:
         # logger.warn('Unable to overwrite plugins. No Plugin.xml found')
         return
     print(plugin_fn)
 
-    if os.path.isfile(source_binaries):
+    if source_binaries.is_file():
         source_binaries = Path(_dirname(source_binaries))/'RiverSystem.Forms.exe'
 
     source_version = '.'.join([str(v) for v in _get_version_number(source_binaries)[00:-1]])
@@ -181,7 +185,7 @@ def overwrite_plugin_configuration(source_binaries,project_fn):
     if not plugin_dir.exists():
         plugin_dir.mkdir(parents=True)
     plugin_dest_file = Path(plugin_dir)/'Plugins.xml'
-    shutil.copyfile(plugin_fn,plugin_dest_file)
+    shutil.copyfile(str(plugin_fn),str(plugin_dest_file))
 
 def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=True,
           script=True, veneer_exe=None,overwrite_plugins=None,return_io=False,
@@ -239,7 +243,7 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=True,
 
     cmd_line = '%s -p %%d %s '%(veneer_exe,extras)
     if project_fn:
-        cmd_line += str(project_fn)
+        cmd_line += '"%s"'%str(project_fn)
     cmd_lines = [cmd_line%port for port in ports]
     if debug:
         for cmd in cmd_lines:
