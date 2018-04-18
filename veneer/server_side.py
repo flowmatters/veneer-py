@@ -16,6 +16,17 @@ NODE_TYPES={
     'environmental_demand':'RiverSystem.Nodes.EnvironmentalDemand.EnvironmentalDemandNodeModel'
 }
 
+def _transform_node_type_name(n):
+    n = n[0].upper() + n[1:]
+    splits = n.split('_')
+    if len(splits)>1:
+        n = ''.join([comp.capitalize() for comp in splits])
+    if n.endswith('NodeModel'):
+        return n
+    if n.endswith('Node'):
+        return n+'Model'
+    return n + 'NodeModel'
+
 class VeneerIronPython(object):
     """
     Helper functions for manipulating the internals of the Source model itself.
@@ -1195,6 +1206,7 @@ class VeneerNodeActions(VeneerNetworkElementActions):
             accessor += '.Where(lambda n:n%s.Name in %s)'%(node_access,nodes)
         if not node_types is None:
             node_types = _stringToList(node_types)
+            node_types = [_transform_node_type_name(n) for n in node_types]
             accessor += '.Where(lambda n:n%s.%s and n%s.%s.GetType().Name.Split(".").Last() in %s)'%(node_access,self._model_property(splitter),node_access,self._model_property(splitter),node_types)
         return accessor
 
