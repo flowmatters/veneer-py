@@ -87,3 +87,15 @@ def valid_identifier(nm):
 
   return re.match("[_A-Za-z][_a-zA-Z0-9]*$",nm[1:])
 '''
+
+FIND_MODELLED_VARIABLE_TARGETS='''
+ignoreExceptions=False
+pvrs = pvt_lookup.get(target.__init__.__self__,[])
+#pvrs = [pvr for pvr in pvrs if System.String.IsNullOrEmpty(attribute_name) or pvr.ElementName.StartsWith(element_name)]
+
+for pvr in pvrs:
+  if not pvr.ElementName in result:
+    result[pvr.ElementName] = []
+  for attr in pvr.ElementRecorder.RecordableAttributes:
+    result[pvr.ElementName].append(attr.KeyString)
+'''

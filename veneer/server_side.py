@@ -676,11 +676,16 @@ class VeneerNetworkElementActions(object):
 
     def create_modelled_variable(self,parameter,element_name=None,**kwargs):
         '''
-        Create a modelled variable for accessing a model's properties from a function
+        Create a modelled variable for accessing a model's properties from a function.
+
+        **NOTE:** DIFFERENT BEHAVIOUR. In contrast to many other functions, the parameter here should be named as they appear in the Source user interface.
+        (Where in most other functions here, parameter is the name as it appears in code). For example, 'Rainfall' is used HERE to indicate the Rainfall input of
+        a rainfall runoff model, but, 'rainfall' is used in assign_time_series.
+
+        See potential_modelled_variables for a list of parameter names applicable to your query (kwargs)
         '''
         accessor = self._build_accessor(parameter,**kwargs)
         names = ['$'+_variable_safe_name(parameter+'_'+'_'.join(name_tuple)) for name_tuple in self.enumerate_names(**kwargs)]
-        print(names)
         ns = 'RiverSystem.Functions.Variables.ModelledVariable as ModelledVariable'
         init = '{"created":[],"failed":[]}\n'
         init += BUILD_PVR_LOOKUP
@@ -704,7 +709,34 @@ class VeneerNetworkElementActions(object):
         # * projectviewrow
         # * add...
 
+    def potential_modelled_variables(self,**kwargs):
+        '''
+        Find a list of potential properties that can be used to as modelled variables given the current query (kwargs)
+
+        Returns a list of 2-element tuples (element_name, parameter_name).
+
+        These values can be used with create_modelled_variable for the same query (kwargs)
+        '''
+        accessor = self._build_pvr_accessor('__init__.__self__',**kwargs)
+        init = "{}\n"
+        init += BUILD_PVR_LOOKUP
+
+        code = FIND_MODELLED_VARIABLE_TARGETS
+        lookup = self._ironpy.apply(accessor,code,'target',init,None)
+        result = []
+        for k,vals in lookup.items():
+            vals = list(set(vals))
+            for val in vals:
+                result.append((k,val))
+        return result
+#        return {k:list(set(v)) for k,v in result.items()}
+
     def enum_pvrs(self,**kwargs):
+        '''
+        List of all recordable attributes matching a given query.
+
+        Information can be used with v.configure_recording and when setting up modelled variables.
+        '''
         accessor = self._build_pvr_accessor('__init__.__self__ ',**kwargs)
         init = '[]\n'
         init += BUILD_PVR_LOOKUP
