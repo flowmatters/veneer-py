@@ -56,7 +56,8 @@ if len(pvrs)==1:
 elif len(pvrs)>1:
     matches = [pvr for pvr in pvrs if pvr.ElementName==element_name]
     if len(matches): match=matches[0]
-if match:
+name_exists = scenario.Network.FunctionManager.Variables.Any(lambda v: v.Name==var_name)
+if match and valid_identifier(var_name) and not name_exists:
     mv = ModelledVariable()
     mv.AttributeRecordingStateName = attribute_name
     assert match.ElementRecorder

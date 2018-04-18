@@ -684,6 +684,7 @@ class VeneerNetworkElementActions(object):
         ns = 'RiverSystem.Functions.Variables.ModelledVariable as ModelledVariable'
         init = '{"created":[],"failed":[]}\n'
         init += BUILD_PVR_LOOKUP
+        init += VALID_IDENTIFIER_FN
         init += 'orig_names=%s\n'%names
         init += 'names=orig_names[::-1]\n'
         accessor = self._build_pvr_accessor('__init__.__self__',**kwargs)
