@@ -502,8 +502,22 @@ class VeneerIronPython(object):
         s += '  theList.Add(c)\n'
         s += '  H.InitialiseModelsForConstituent(scenario,c)\n'
         s += 'H.EnsureElementsHaveConstituentProviders(scenario)\n'
-#        s += 'nw = scenario.Network\n'
-#        s += 'nw.ConstituentsManagement.Reset(scenario.CurrentConfiguration.StartDate)\n'
+        return self._safe_run(s)
+
+    def get_constituent_sources(self):
+        s = self._initScript()
+        s += 'result = scenario.SystemConfiguration.ConstituentSources.Select(lambda c: c.Name)\n'
+        return self.simplify_response(self._safe_run(s)['Response'])
+
+    def add_constituent_source(self,new_source):
+        s = self._initScript(namespace='RiverSystem.Catchments.Constituents.ConstituentSource as ConstituentSource')
+        s += 'scenario.Network.ConstituentsManagement.Config.ProcessConstituents = True\n' 
+        s += 'theList = scenario.SystemConfiguration.ConstituentSources\n'
+        s += 'if not theList.Any(lambda cs: cs.Name=="%s"):\n'%new_source
+        s += '  cs=ConstituentSource("%s")\n'%new_source
+        s += '  theList.Add(cs)\n'
+        s += '  H.InitialiseModelsForConstituentSource(scenario)\n'
+        s += 'H.EnsureElementsHaveConstituentProviders(scenario)\n'
         return self._safe_run(s)
 
     def running_configuration(self,new_value=None,return_all=False):
@@ -943,12 +957,14 @@ class VeneerCatchmentGenerationActions(VeneerFunctionalUnitActions):
     * fus - the type(s) of functional units to match when querying/configuring.
     
     * constituents - the name(s) of the constituents to match when querying/configuring.
+
+    * sources - the name(s) of specific constituent sources to match when querying/configuring.
     '''
     def __init__(self,catchment):
         super(VeneerCatchmentGenerationActions,self).__init__(catchment)
         self._ns = 'RiverSystem.Constituents.CatchmentElementConstituentData as CatchmentElementConstituentData'
 
-    def _build_accessor(self,parameter,catchments=None,fus=None,constituents=None):
+    def _build_accessor(self,parameter,catchments=None,fus=None,constituents=None,sources=None):
         accessor = 'scenario.Network.ConstituentsManagement.Elements' + \
                     '.OfType[CatchmentElementConstituentData]()'
 
@@ -968,7 +984,13 @@ class VeneerCatchmentGenerationActions(VeneerFunctionalUnitActions):
             constituents = _stringToList(constituents)
             accessor +=  '.Where(lambda x: x.Constituent.Name in %s)'%constituents
 
-        accessor += '.*ConstituentSources.*GenerationModel'
+        accessor += '.*ConstituentSources'
+
+        if not sources is None:
+            sources = _stringToList(sources)
+            accessor +=  '.Where(lambda cs: cs.Name in %s)'%sources
+
+        accessor += '.*GenerationModel'
         if not parameter is None:
             accessor += '.%s'%parameter
 
