@@ -548,7 +548,7 @@ class Veneer(object):
         dummy_detail['TimeSeries']={}
 
         #dummy_item['Details'] = [dummy_detail]
-        if data:
+        if data is not None:
             dummy_item['DetailsAsCSV']=data.to_csv(float_format='%%.%df'%precision)
         dummy_item['ReloadOnRun'] = reload_on_run
 
