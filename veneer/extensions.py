@@ -147,9 +147,11 @@ def network_partition(self,key_features,new_prop):
                     key = attribute_next_down(l)
                     if key in key_features:
                         # If this link leads to a key_feature, return that name
+                        feature['properties'][new_prop] = key
                         return key
                 # All downstream links terminate without reaching a key_feature
                 # Return the first one
+                feature['properties'][new_prop] = downstream_links[0]['properties'][new_prop] 
                 return downstream_links[0]['properties'][new_prop]
 
             # Just one downstream link, usual case
