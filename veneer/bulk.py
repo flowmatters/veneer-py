@@ -6,6 +6,7 @@ except:
 import json
 import shutil
 import os
+from glob import glob
 
 class VeneerRetriever(object):
     '''
@@ -204,3 +205,66 @@ class VeneerRetriever(object):
             if f['properties']['icon'] in icons_retrieved: continue
             self.retrieve_resource(f['properties']['icon'],'png')
             icons_retrieved.append(f['properties']['icon'])
+
+class PruneVeneer(object):
+    def __init__(self,path,dry_run=False):
+        self.path = path
+        self.removals = []
+
+    def remove_variable(self,v,daily=True,aggregate=True):
+        self.removals.append(({'RecordingVariable':v},dict(daily=daily,aggregate=aggregate)))
+
+    def remove_element(self,e,daily=True,aggregate=True):
+        self.removals.append(({'RecordingElement':e},dict(daily=daily,aggregate=aggregate)))
+
+    def glob(self,f,recursive=False):
+        fn = os.path.join(self.path,f)
+        return glob(fn,recursive=recursive)
+
+    def prune(self):
+        files_to_remove = []
+        files_to_deindex = []
+        ts_template = 'runs/*/location/%s/element/%s/variable/%s'
+        for r,opt in self.removals:
+            loc=r.get('NetworkElement','*')
+            ele=r.get('RecordingElement','*')
+            var=r.get('RecordingVariable','*')
+            search = ts_template%(loc,ele,var)
+            #print(search)
+            if opt['daily']:
+                matches = self.glob(search+'.json')
+                files_to_remove += matches
+                if opt['aggregate']:
+                    files_to_deindex += matches
+            if opt['aggregate']:
+                files_to_remove += self.glob(search+'/**',recursive=True)
+
+        print('Found %d files and folders to remove'%len(files_to_remove))
+        print('Found %d time series to de-index'%len(files_to_deindex))
+        print('Cleaning up run files')
+        self.clean_up_results_files(files_to_deindex)
+        print('Removing time series files')
+        for f in files_to_remove:
+            if os.path.isfile(f):
+                os.remove(f)
+        print('Pruning empty directories')
+        os.system('find %s -type d -empty -delete'%self.path)
+
+    def clean_up_results_files(self,files):
+        files_per_run = {}
+        for fn in files:
+            relative = fn[len(self.path):]
+            run = int(relative.split('/')[2])
+            if not run in files_per_run:
+                files_per_run[run] = []
+            files_per_run[run].append(relative[:-5])
+        for run,files in files_per_run.items():
+            self.clean_up_run(run,files)
+        
+    def clean_up_run(self,run_number,files):
+        run_fn = os.path.join(self.path,'runs','%d.json'%run_number)
+        run = json.load(open(run_fn))
+        len_before = len(run['Results'])
+        run['Results'] = [res for res in run['Results'] if not res['TimeSeriesUrl'] in files]
+        
+        json.dump(run,open(run_fn,'w'))
