@@ -26,7 +26,7 @@ def _basename(path):
 def _get_version_number (filename):
     from win32api import GetFileVersionInfo, LOWORD, HIWORD
     try:
-        info = GetFileVersionInfo (filename, "\\")
+        info = GetFileVersionInfo (str(filename), "\\")
         ms = info['FileVersionMS']
         ls = info['FileVersionLS']
         return HIWORD (ms), LOWORD (ms), HIWORD (ls), LOWORD (ls)
