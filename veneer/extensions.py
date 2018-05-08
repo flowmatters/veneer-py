@@ -165,6 +165,20 @@ def network_partition(self,key_features,new_prop):
     for f in features:
         attribute_next_down(f)
 
+def network_upstream_features(self,node):
+    result = []
+    links = self.upstream_links(node)
+    result += links
+    for l in links:
+        catchment = self['features'].find_by_link(l['id'])
+        if catchment is not None:
+            result.append(catchment)
+        
+        upstream_node = self['features'].find_by_id(l['properties']['from_node'])[0]
+        result.append(upstream_node)
+        result += self.upstream_features(upstream_node['id'])
+    return SearchableList(result,nested=['properties'])
+
 def add_network_methods(target):
     '''
     Attach extension methods to an object that represents a Veneer network.
