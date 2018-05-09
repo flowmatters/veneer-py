@@ -912,6 +912,18 @@ class VeneerCatchmentActions(VeneerNetworkElementActions):
         '''
         return self.get_param_values('FunctionalUnits.*definition.Name')
 
+    def remove(self,name):
+        '''
+        Remove named catchment from the network
+        '''
+        script = self._ironpy._initScript('RiverSystem')
+        script += self._ironpy._generator.find_feature_by_name()
+        script += 'network = scenario.Network\n'
+        script += 'catchment = network.CatchmentWithName("%s")\n'%name
+        script += 'if catchment:\n'
+        script += '    network.Remove.Overloads[RiverSystem.ICatchment](catchment)\n'
+        return self._ironpy._safe_run(script)
+
 class VeneerRunoffActions(VeneerFunctionalUnitActions):
     '''
     Helpers for querying/modifying the rainfall runoff model setup
