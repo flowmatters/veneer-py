@@ -2,6 +2,7 @@
 from .utils import _stringToList, _variable_safe_name, _safe_filename
 from .templates import *
 import itertools
+import os
 
 NODE_TYPES={
     'inflow':'RiverSystem.Nodes.Inflow.InjectedFlow',
@@ -545,8 +546,13 @@ class VeneerIronPython(object):
         return self._safe_run(script)
 
     def save(self,fn=None):
+        '''
+        Save the current *project* to disk.
+
+        fn - filename to save to. Should include .rsproj extension. If None, save using current filename
+        '''
         if fn:
-            fn = "'%s'"%fn
+            fn = "'%s'"%os.path.abspath(fn)
         else:
             fn = 'ph.ProjectMetaStructure.OutputFile'
         script = '''
