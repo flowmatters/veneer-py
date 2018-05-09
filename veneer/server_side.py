@@ -3,6 +3,7 @@ from .utils import _stringToList, _variable_safe_name, _safe_filename
 from .templates import *
 import itertools
 import os
+import pandas as pd
 
 NODE_TYPES={
     'inflow':'RiverSystem.Nodes.Inflow.InjectedFlow',
@@ -1486,6 +1487,26 @@ class VeneerSimulationActions():
             raise Exception(result['Exception'])
 #        data = result['Response']['Value'] if result['Response'] else result['Response']
         return self._ironpy.simplify_response(result['Response'])
+
+    def get_assurance_rules(self):
+        columns=['Category','Name','LogLevel']
+
+        prefix='scenario.Network.AssuranceManager.DefaultLogLevels'
+        default_values = {col:self._ironpy.get('%s.*%s'%(prefix,col)) for col in columns}
+
+        ns = 'RiverSystem.Assurance.AssuranceConfiguration as AssuranceConfiguration'
+        prefix = 'scenario.GetScenarioConfiguration[AssuranceConfiguration]().Entries'
+        overwritten_values = {col:self._ironpy.get('%s.*%s'%(prefix,col),namespace=ns) for col in columns}
+        
+        combined = pd.concat([pd.DataFrame(default_values), pd.DataFrame(overwritten_values)])
+        return combined.drop_duplicates(subset=['Category','Name'],keep='last')
+
+    def configure_assurance_rule(self,level='Off',rule=None,category=None):
+        level = '"%s"'%level
+        if rule is not None: rule = '"%s"'%rule
+        if category is not None: category = '"%s"'%category
+        script=self._ironpy._initScript()+'H.ConfigureAssuranceRule(scenario,%s,%s,%s)'%(level,rule,category)
+        return self._ironpy.run_script(script)
 
 #all_names=v.model.catchment.enumerate_names()
 #var_names=v.model.name_subst("tss_load_%s_%s",all_names)
