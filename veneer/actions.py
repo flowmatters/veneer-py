@@ -25,12 +25,24 @@ transfer_usages(orig_item,dest_item)
 		switch_input_sets_script += "\ndm.RemoveGroup(orig_item)"
 	return v.model.run_script(switch_input_sets_script)
 
-def enable_streaming(v,fn):
+def enable_streaming(v,fn,overwrite='Fail'):
+	'''
+	Configure Source to stream time series results to a HDF5 file (fn)
+
+	Optionally specify behaviour for when the file exists (overwrite string):
+	 * 'Fail' - default - Don't run the simulation if the output file already exists,
+	 * 'Overwrite' - attempt to overwrite the existing output file. 
+	                 Note This option will fail if the existing file is locked, such as if the previous run is
+					 still loaded in Source
+     * 'Incremenet' - Change the filename by adding an incrementing integer
+	'''
 	script='''
 %s
 import FlowMatters.Source.HDF5IO.StreamingOutputManager as StreamingOutputManager
-StreamingOutputManager.EnableStreaming(scenario,"%s")
-'''%(v.model._initScript(),_safe_filename(fn))
+import FlowMatters.Source.HDF5IO.StreamingOutputOverwriteOption as StreamingOutputOverwriteOption
+streamer = StreamingOutputManager.EnableStreaming(scenario,"%s")
+streamer.OverwriteOption = StreamingOutputOverwriteOption.%s
+'''%(v.model._initScript(),_safe_filename(fn),overwrite)
 	return v.model.run_script(script)
 
 def disable_streaming(v):
