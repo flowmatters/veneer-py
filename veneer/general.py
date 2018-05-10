@@ -275,6 +275,10 @@ class Veneer(object):
             if 'FunctionalUnit' in rule:
                 vals[0] += '@@' + rule['FunctionalUnit']
 
+            all_known_keys = set(['FunctionalUnit'] + keys)
+            invalid_keys = set(rule.keys()) - (all_known_keys)
+            if len(invalid_keys):
+                raise Exception("Unknown recording keys: %s"%(str(invalid_keys)))
             return 'location/%s/element/%s/variable/%s'%tuple(vals)
 
         modifier = {'RecordNone':[translate(r) for r in disable],
