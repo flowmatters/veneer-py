@@ -245,10 +245,11 @@ class Veneer(object):
 
         disable: List of time series selectors to disable
 
-        Note: Each time series selector is a python dictionary object with up to three keys:
+        Note: Each time series selector is a python dictionary object with up to four keys:
           * NetworkElement
           * RecordingElement
           * RecordingVariable
+          * FunctionalUnit
 
         These are used to match time series available from the Source model. A given selector may match
         multiple time series. For example, a selector of {'RecordingVariable':'Downstream Flow Volume'}
@@ -271,6 +272,8 @@ class Veneer(object):
             keys = ['NetworkElement','RecordingElement','RecordingVariable']
             vals = get_many(rule,keys,'')
             if vals[2]=='':vals[2]=vals[1]
+            if 'FunctionalUnit' in rule:
+                vals[0] += '@@' + rule['FunctionalUnit']
 
             return 'location/%s/element/%s/variable/%s'%tuple(vals)
 
@@ -651,6 +654,7 @@ class Veneer(object):
           * RecordingVariable
           * TimeSeriesName
           * TimeSeriesUrl
+          * FunctionalUnit
 
         These criteria are used to identify which time series to retrieve.
 
