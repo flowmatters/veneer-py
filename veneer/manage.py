@@ -160,9 +160,9 @@ def _find_plugins_file(project_path):
     if plugin_fn.exists():
         return plugin_fn
 
-    parent = (Path(project_path)/os.path.pardir).absolute()
-    if parent == project_path:
-        return None
+    parent = (Path(project_path).parent).absolute()
+    if parent==Path(project_path):
+        raise Exception('Could not find Plugins.xml in current or ancestor directories')
 
     return _find_plugins_file(parent)
 
