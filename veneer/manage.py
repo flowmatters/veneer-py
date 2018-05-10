@@ -286,7 +286,7 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=True,
     #               print('.')
     #               sys.stdout.flush()
                 else:
-                    if line.startswith('Started Source RESTful Service on port'):
+                    if 'Started Source RESTful Service on port' in line:
                         actual_ports[i] = int(line.split(':')[-1])
 
                     if line.startswith('Server started. Ctrl-C to exit'):
