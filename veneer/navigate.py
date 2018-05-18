@@ -39,13 +39,13 @@ class Queryable(object):
         self._init = True
         for r in entries:
             if r[:2]=='__': continue
-            setattr(self,r,self._child_(r))
+            super(Queryable,self).__setattr__(r,self._child_(r))
 
     def __repr__(self):
         return str(self._eval_())
 
     def __dir__(self):
-        res = [e['Value'] for e in self._v.model.run_script('dir(%s)'%self._path)['Response']['Value']]
+        res = [e['Value'] for e in self._v.model._safe_run('dir(%s)'%self._path)['Response']['Value']]
         self._initialise_children_(res)
         return res
     
