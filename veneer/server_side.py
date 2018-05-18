@@ -632,6 +632,11 @@ class VeneerNetworkElementActions(object):
             param = '__init__.__self__'
         return self._ironpy.sourceHelp(self._build_accessor(param,**kwargs))
 
+    def nav_first(self,**kwargs):
+        from .navigate import Queryable
+        accessor = self._build_accessor(None,**kwargs).replace('.*','.First().')
+        return Queryable(self._ironpy._veneer,path=accessor)
+
     def get_models(self,by_name=False,**kwargs):
         '''
         Return the models used in a particular context
