@@ -44,6 +44,9 @@ class Queryable(object):
     def _run_script(self,script):
         return self._v.model._safe_run('%s\n%s'%(self._v.model._init_script(),script))
 
+    def __call__(self,*args,**kwargs):
+        return self._v.model.call(self._path+str(tuple(args)))
+
     def __repr__(self):
         return str(self._eval_())
 
