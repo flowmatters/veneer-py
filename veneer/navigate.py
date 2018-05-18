@@ -41,11 +41,14 @@ class Queryable(object):
             if r[:2]=='__': continue
             super(Queryable,self).__setattr__(r,self._child_(r))
 
+    def _run_script(self,script):
+        return self._v.model._safe_run('%s\n%s'%(self._v.model._init_script(),script))
+
     def __repr__(self):
         return str(self._eval_())
 
     def __dir__(self):
-        res = [e['Value'] for e in self._v.model._safe_run('dir(%s)'%self._path)['Response']['Value']]
+        res = [e['Value'] for e in self._run_script('dir(%s)'%(self._path))['Response']['Value']]
         self._initialise_children_(res)
         return res
     
@@ -61,4 +64,5 @@ class Queryable(object):
 
         v = self._double_quote_(v)
             
-        self._v.model.set('%s.%s'%(self._path,a),v)
+        if not self._v.model.set('%s.%s'%(self._path,a),v):
+            raise Exception("Couldn't set property")
