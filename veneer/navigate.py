@@ -17,7 +17,6 @@ class Queryable(object):
 
     def _child_(self,path):
         val = Queryable(self._v,'%s.%s'%(self._path,path))
-        #prop = CustomProperty(path,val)
         return val
 
     def _double_quote_(self,maybe_string):
@@ -52,17 +51,9 @@ class Queryable(object):
     
     def __getattr__(self,attrname):
         return self._child_(attrname)
-#         if not attrname in CANARY_METHODS:
-#             self.call_tree.append(attrname)
-#         return self
 
     def __getitem__(self,ix):
         return self._child_idx_(ix)
-#         i = len(self.call_tree)-1
-#         if i<0:
-#           self.call_tree.append('')
-#         self.call_tree[i] += '[%s]'%str(ix)
-#         return self
 
     def __setattr__(self,a,v):
         if a.startswith('_'):
