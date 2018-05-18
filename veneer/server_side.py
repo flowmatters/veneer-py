@@ -74,7 +74,7 @@ class VeneerIronPython(object):
             return
         return self._safe_run(mega_script)
 
-    def _initScript(self,namespace=None):
+    def _init_script(self,namespace=None):
         script = "# Generated Script\n"
         if not namespace is None:
             namespace = _stringToList(namespace)
@@ -99,7 +99,7 @@ class VeneerIronPython(object):
 
     def run_script(self,script,async=False,init=False):
         if init:
-            script = self._initScript() + '\n'+ script
+            script = self._init_script() + '\n'+ script
         script = self.clean_script(script)
         if self.deferring:
             self.deferred_scripts.append(script)
@@ -121,7 +121,7 @@ class VeneerIronPython(object):
         """
         #theThing = theThing.replace('.*','.First().')
 
-        script = self._initScript(namespace)
+        script = self._init_script(namespace)
         innerLoop = "theThing = %s%s\n"
         innerLoop += "if hasattr(theThing, '__call__'):\n"
         innerLoop += "    result = 'function'\n"
@@ -179,7 +179,7 @@ class VeneerIronPython(object):
 
         v.model.find_model_type('emc')
         '''
-        script = self._initScript()
+        script = self._init_script()
         script += 'try:\n'
         script += '  import TIME.Management.Finder as Finder\n'
         script += 'except:\n'
@@ -205,7 +205,7 @@ class VeneerIronPython(object):
         return [v['Value'] for v in res['Response']['Value']]
 
     def _find_members_with_attribute_in_type(self,model_type,attribute):
-        script = self._initScript(model_type)
+        script = self._init_script(model_type)
         if attribute:
             script += 'from TIME.Core.Metadata import %s\n'%attribute
         script += 'result = []\n'
@@ -232,7 +232,7 @@ class VeneerIronPython(object):
         return result
 
     def _find_fields_and_properties_for_type(self,model_type):
-        script = self._initScript(model_type)
+        script = self._init_script(model_type)
         script += 'from System.Reflection import PropertyInfo,FieldInfo\n'
         script += 'result = []\n'
         script += 'tmp = %s()\n'%model_type
@@ -338,7 +338,7 @@ class VeneerIronPython(object):
 
         Query should either start with `scenario` OR from a class imported using `namespace`
         """
-        script = self._initScript(namespace)
+        script = self._init_script(namespace)
         listQuery = theThing.find(".*") != -1
         if listQuery:
             script += 'result = []\n'
@@ -360,7 +360,7 @@ class VeneerIronPython(object):
         '''
         Get references (Veneer URLs) to the 
         '''
-        script = self._initScript(namespace)
+        script = self._init_script(namespace)
         script += ''
         listQuery = theThing.find(".*") != -1
         if listQuery:
@@ -396,7 +396,7 @@ class VeneerIronPython(object):
         elif type(theValue)==list:
             theValue = 'tuple(%s)'%theValue
 
-        script = self._initScript(namespace)
+        script = self._init_script(namespace)
         script += 'origNewVal = %s\n'%theValue
         if fromList:
             script += 'origNewVal.reverse()\n'
@@ -452,7 +452,7 @@ class VeneerIronPython(object):
         return self.get(theThing,namespace)
 
     def apply(self,accessor,code,name,init,namespace):
-        script = self._initScript(namespace)
+        script = self._init_script(namespace)
         if init:
             script += 'result = %s\n'%str(init)
 
@@ -472,7 +472,7 @@ class VeneerIronPython(object):
         return self.source_scenario_options(optionType,option,newVal)
 
     def source_scenario_options(self,optionType,option=None,newVal = None):
-        script = self._initScript('RiverSystem.ScenarioConfiguration.%s as %s'%(optionType,optionType))
+        script = self._init_script('RiverSystem.ScenarioConfiguration.%s as %s'%(optionType,optionType))
         retrieve = "scenario.GetScenarioConfiguration[%s]()"%optionType
         if option is None:
             script += "result = dir(%s)\n"%retrieve
@@ -491,12 +491,12 @@ class VeneerIronPython(object):
         return result
 
     def get_constituents(self):
-        s = self._initScript()
+        s = self._init_script()
         s += 'result = scenario.SystemConfiguration.Constituents.Select(lambda c: c.Name)\n'
         return self.simplify_response(self._safe_run(s)['Response'])
 
     def add_constituent(self,new_constituent):
-        s = self._initScript(namespace='RiverSystem.Constituents.Constituent as Constituent')
+        s = self._init_script(namespace='RiverSystem.Constituents.Constituent as Constituent')
         s += 'scenario.Network.ConstituentsManagement.Config.ProcessConstituents = True\n' 
         s += 'theList = scenario.SystemConfiguration.Constituents\n'
         s += 'if not theList.Any(lambda c: c.Name=="%s"):\n'%new_constituent
@@ -507,12 +507,12 @@ class VeneerIronPython(object):
         return self._safe_run(s)
 
     def get_constituent_sources(self):
-        s = self._initScript()
+        s = self._init_script()
         s += 'result = scenario.SystemConfiguration.ConstituentSources.Select(lambda c: c.Name)\n'
         return self.simplify_response(self._safe_run(s)['Response'])
 
     def add_constituent_source(self,new_source):
-        s = self._initScript(namespace='RiverSystem.Catchments.Constituents.ConstituentSource as ConstituentSource')
+        s = self._init_script(namespace='RiverSystem.Catchments.Constituents.ConstituentSource as ConstituentSource')
         s += 'scenario.Network.ConstituentsManagement.Config.ProcessConstituents = True\n' 
         s += 'theList = scenario.SystemConfiguration.ConstituentSources\n'
         s += 'if not theList.Any(lambda cs: cs.Name=="%s"):\n'%new_source
@@ -581,7 +581,7 @@ class VeneerScriptGenerators(object):
         self._ironpy = ironpython
 
     def find_feature_by_name(self):
-        script = self._ironpy._initScript()
+        script = self._ironpy._init_script()
         script += "def find_feature_by_name(searchTerm,exact=False):\n"
         script += "  for n in scenario.Network.Nodes:\n"
         script += "    if n.Name == searchTerm:\n"
@@ -601,7 +601,7 @@ class VeneerSourceUIHelpers(object):
         self._ironpy = ironpython
 
     def open_editor(self,name_of_element):
-        script = self._ironpy._initScript(namespace="RiverSystem.Controls.Controllers.FeatureEditorController as FeatureEditorController")
+        script = self._ironpy._init_script(namespace="RiverSystem.Controls.Controllers.FeatureEditorController as FeatureEditorController")
         script += self._ironpy._generator.find_feature_by_name()
         script += "f = find_feature_by_name('%s')\n"%name_of_element
         script += "if not f is None:\n"
@@ -917,7 +917,7 @@ class VeneerCatchmentActions(VeneerNetworkElementActions):
         '''
         Remove named catchment from the network
         '''
-        script = self._ironpy._initScript('RiverSystem')
+        script = self._ironpy._init_script('RiverSystem')
         script += self._ironpy._generator.find_feature_by_name()
         script += 'network = scenario.Network\n'
         script += 'catchment = network.CatchmentWithName("%s")\n'%name
@@ -1065,7 +1065,7 @@ class VeneerLinkActions(object):
         self._name_accessor = '.DisplayName'
 
     def create(self,from_node,to_node,name=None,allow_duplicates=False):
-        script = self._ironpy._initScript()
+        script = self._ironpy._init_script()
         script += self._ironpy._generator.find_feature_by_name()
         script += 'n1 = find_feature_by_name("%s",exact=True)\n'%from_node
         script += 'n2 = find_feature_by_name("%s",exact=True)\n'%to_node
@@ -1131,7 +1131,7 @@ class VeneerNetworkElementConstituentActions(VeneerNetworkElementActions):
 
     def initialise_played_constituents(self,played_type='varConcentration',**kwargs):
         accessor = self._build_accessor(aspect='',**kwargs)
-        script = self._ironpy._initScript(self._ns)
+        script = self._ironpy._init_script(self._ns)
         script += 'from RiverSystem.Constituents.ConstituentPlayedValue import ConstituentPlayedType as ConstituentPlayedType\n'
         script += "from RiverSystem.Constituents import ConstituentPlayedValue as ConstituentPlayedValue\n"
         script += 'playType = ConstituentPlayedType.%s\n'%played_type
@@ -1265,7 +1265,7 @@ class VeneerNodeActions(VeneerNetworkElementActions):
         return accessor
 
     def create(self,name,node_type,location=None,schematic_location=None,splitter=False):
-        script = self._ironpy._initScript('.'.join(node_type.split('.')[:-1]))
+        script = self._ironpy._init_script('.'.join(node_type.split('.')[:-1]))
         script += 'import RiverSystem.E2ShapeProperties as E2ShapeProperties\n'
         script += 'import RiverSystem.Utils.RiverSystemUtils as rsutils\n'
         script += 'network = scenario.Network\n'
@@ -1293,7 +1293,7 @@ class VeneerNodeActions(VeneerNetworkElementActions):
         # schematic_location???
 
     def remove(self,name):
-        script = self._ironpy._initScript('RiverSystem')
+        script = self._ironpy._init_script('RiverSystem')
         script += self._ironpy._generator.find_feature_by_name()
         script += 'network = scenario.Network\n'
         script += 'node = find_feature_by_name("%s",exact=True)\n'%name
@@ -1362,7 +1362,7 @@ class VeneerFunctionActions():
             names = ['%s_%d'%(names[0],d) for d in range(len(params))]
 
         functions = list(zip(names,[general_equation%param_set for param_set in params]))
-        script = self._ironpy._initScript()
+        script = self._ironpy._init_script()
         script += 'import RiverSystem.Functions.Function as Function\n'
         script += VALID_IDENTIFIER_FN
         script += 'functions=%s\n\n'%functions
@@ -1388,7 +1388,7 @@ class VeneerFunctionActions():
 
 
     def delete_variables(self,names):
-        script = self._ironpy._initScript()
+        script = self._ironpy._init_script()
         script += 'names = %s\n'%names
         script += 'to_remove = scenario.Network.FunctionManager.Variables.Where(lambda v: v.Name in names).ToList()\n'
         script += 'result = [v.Name for v in to_remove]\n'
@@ -1400,7 +1400,7 @@ class VeneerFunctionActions():
         return self._ironpy.simplify_response(result['Response'])
 
     def delete_functions(self,names):
-        script = self._ironpy._initScript()
+        script = self._ironpy._init_script()
         script += 'names = %s\n'%names
         script += 'to_remove = scenario.Network.FunctionManager.Functions.Where(lambda v: v.Name in names).ToList()\n'
         script += 'result = [v.Name for v in to_remove]\n'
@@ -1479,7 +1479,7 @@ class VeneerSimulationActions():
         self._ironpy = ironpython
 
     def get_configuration(self):
-        script = self._ironpy._initScript()
+        script = self._ironpy._init_script()
 
         script += 'result = scenario.RunManager.CurrentConfiguration.GetType().FullName'
         result = self._ironpy.run_script(script)
@@ -1505,7 +1505,7 @@ class VeneerSimulationActions():
         level = '"%s"'%level
         if rule is not None: rule = '"%s"'%rule
         if category is not None: category = '"%s"'%category
-        script=self._ironpy._initScript()+'H.ConfigureAssuranceRule(scenario,%s,%s,%s)'%(level,rule,category)
+        script=self._ironpy._init_script()+'H.ConfigureAssuranceRule(scenario,%s,%s,%s)'%(level,rule,category)
         return self._ironpy.run_script(script)
 
 #all_names=v.model.catchment.enumerate_names()
