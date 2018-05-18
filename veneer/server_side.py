@@ -633,6 +633,13 @@ class VeneerNetworkElementActions(object):
         return self._ironpy.sourceHelp(self._build_accessor(param,**kwargs))
 
     def nav_first(self,**kwargs):
+        '''
+        Get a Queryable object for the first match of the query parameters.
+
+        Queryable object can be used for traditional object navigation.
+
+        See https://github.com/flowmatters/veneer-py/blob/master/doc/examples/navigation/0-Introduction.ipynb
+        '''
         from .navigate import Queryable
         accessor = self._build_accessor(None,**kwargs).replace('.*','.First().')
         return Queryable(self._ironpy._veneer,path=accessor)
