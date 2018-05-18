@@ -217,6 +217,9 @@ class Veneer(object):
 
         return conn
 
+    def status(self):
+        return self.retrieve_json('/')
+
     def run_server_side_script(self,script,async=False):
         '''
         Run an IronPython script within Source.
