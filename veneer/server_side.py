@@ -139,7 +139,7 @@ class VeneerIronPython(object):
         else:
             return [d['Value'] for d in data['Response']['Value']]
 
-    def _generateLoop(self,theThing,innerLoop,first=False):
+    def _generateLoop(self,theThing,innerLoop,first=False,names=None):
         script = ''
         script += "have_succeeded = False\n"
         script += "ignoreExceptions = True\n"
@@ -152,6 +152,8 @@ class VeneerIronPython(object):
             script += indentText+'for %s in %s%s:\n'%(loopVar,prevLoop,level)
             indent += 1
             indentText = ' '*(indent*4) 
+            if names is not None:
+                script += indentText+'%s = %s\n'%(names[indent//2],loopVar)
             script += indentText+'try:\n'
             indent += 1
             indentText = ' '*(indent*4)
@@ -332,7 +334,7 @@ class VeneerIronPython(object):
     def process_response_dict(self,resp):
         return {self.simplify_response(e['Key']):self.simplify_response(e['Value']) for e in resp['Entries']}
 
-    def get(self,theThing,namespace=None):
+    def get(self,theThing,namespace=None,names=None,alt_expression=None):
         """
         Retrieve a value, or list of values from Source using theThing as a query string.
 
@@ -342,8 +344,11 @@ class VeneerIronPython(object):
         listQuery = theThing.find(".*") != -1
         if listQuery:
             script += 'result = []\n'
-            innerLoop = 'result.append(%s%s)'
-            script += self._generateLoop(theThing,innerLoop)
+            if alt_expression is None:
+                innerLoop = 'result.append(%s%s)'
+            else:
+                innerLoop = 'result.append(%s)'%alt_expression
+            script += self._generateLoop(theThing,innerLoop,names=names)
         else:
             script += "result = %s\n"%theThing
 #       return script
