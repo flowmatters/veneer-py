@@ -7,16 +7,17 @@ scenario.Name = 'New Scenario Name'
 '''
 
 class Queryable(object):
-    def __init__(self,v,path='scenario'):
+    def __init__(self,v,path='scenario',namespace=None):
         self._v = v
         self._path = path
         self._init = False
+        self._ns = namespace
 
     def _eval_(self):
-        return self._v.model.get(self._path)
+        return self._v.model.get(self._path,namespace=self._ns)
 
     def _child_(self,path):
-        val = Queryable(self._v,'%s.%s'%(self._path,path))
+        val = Queryable(self._v,'%s.%s'%(self._path,path),namespace=self._ns)
         return val
 
     def _double_quote_(self,maybe_string):
@@ -32,7 +33,7 @@ class Queryable(object):
         return '"%s"'%v
 
     def _child_idx_(self,ix):
-        return Queryable(self._v,'%s[%s]'%(self._path,str(ix)))
+        return Queryable(self._v,'%s[%s]'%(self._path,str(ix)),namespace=self._ns)
 
     def _initialise_children_(self,entries):
         if self._init: return
@@ -42,7 +43,7 @@ class Queryable(object):
             super(Queryable,self).__setattr__(r,self._child_(r))
 
     def _run_script(self,script):
-        return self._v.model._safe_run('%s\n%s'%(self._v.model._init_script(),script))
+        return self._v.model._safe_run('%s\n%s'%(self._v.model._init_script(self._ns),script))
 
     def __call__(self,*args,**kwargs):
         return self._v.model.call(self._path+str(tuple(args)))

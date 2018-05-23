@@ -642,7 +642,7 @@ class VeneerNetworkElementActions(object):
         '''
         from .navigate import Queryable
         accessor = self._build_accessor(None,**kwargs).replace('.*','.First().')
-        return Queryable(self._ironpy._veneer,path=accessor)
+        return Queryable(self._ironpy._veneer,path=accessor,namespace=self._ns)
 
     def get_models(self,by_name=False,**kwargs):
         '''
