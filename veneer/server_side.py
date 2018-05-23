@@ -852,7 +852,7 @@ class VeneerFunctionalUnitActions(VeneerNetworkElementActions):
         fu_names = self.names(**kwargs)
         cname_accessor = self._build_fu_accessor('catchment.DisplayName',**kwargs)
         catchment_names = self._catchment._ironpy.get(cname_accessor)
-        return zip(fu_names,catchment_names)
+        return zip(catchment_names,fu_names)
 
 class VeneerCatchmentActions(VeneerNetworkElementActions):
     '''
