@@ -1032,6 +1032,21 @@ class VeneerCatchmentGenerationActions(VeneerFunctionalUnitActions):
 
         return accessor
 
+    def enumerate_names(self,fu_only=False,**kwargs):
+        if fu_only:
+            fu_names = self.names(**kwargs)
+            cname_accessor = self._build_fu_accessor('catchment.DisplayName',**kwargs)
+            catchment_names = self._catchment._ironpy.get(cname_accessor)
+
+            return zip(fu_names,catchment_names)
+
+        accessor = self._build_accessor(None,**kwargs)
+        names = self._ironpy.get(accessor,
+                                 self._ns,
+                                 names=['cat','fu','con','src'],
+                                 alt_expression='(cat.DisplayName,fu.DisplayName,con.DisplayName,src.DisplayName)')
+        return [tuple(n) for n in names]
+
 class VeneerSubcatchmentActions(VeneerNetworkElementActions):
     '''
     Helpers for querying/modifying the subcatchment-level models
