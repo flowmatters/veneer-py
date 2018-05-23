@@ -77,7 +77,8 @@ else:
 
 VALID_IDENTIFIER_FN='''
 def valid_identifier(nm):
-  import re
+  from System.Text import RegularExpressions
+
   if not nm:
     return False
   if len(nm) < 2:
@@ -85,7 +86,7 @@ def valid_identifier(nm):
   if nm[0] != '$':
     return False
 
-  return re.match("[_A-Za-z][_a-zA-Z0-9]*$",nm[1:])
+  return RegularExpressions.Regex("[_A-Za-z][_a-zA-Z0-9]*$").IsMatch(nm[1:])
 '''
 
 FIND_MODELLED_VARIABLE_TARGETS='''
