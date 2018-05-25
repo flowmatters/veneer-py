@@ -381,8 +381,7 @@ class VeneerIronPython(object):
         listQuery = theThing.find(".*") != -1
         if listQuery:
             script += 'result = []\n'
-            innerLoop = "ignoreExceptions=False\n"
-            innerLoop += 'result.append(H.FindDataSource(scenario,%s__init__.__self__,"%s"))'
+            innerLoop = 'result.append(H.FindDataSource(scenario,%s__init__.__self__,"%s"))'
             script += self._generateLoop(theThing,innerLoop)
         else:
             obj = '.'.join(theThing.split('.')[0:-1])
