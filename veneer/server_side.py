@@ -623,6 +623,7 @@ class VeneerNetworkElementActions(object):
         self._pvr_element_name=''
         self._build_pvr_accessor = self._build_accessor
         self._pvr_attribute_prefix = ''
+        self.name_columns = ['NetworkElement']
 
     def _instantiation_namespace(self,types,enum=False):
         if enum:
@@ -822,6 +823,7 @@ class VeneerFunctionalUnitActions(VeneerNetworkElementActions):
         self._name_accessor="definition.Name"
         super(VeneerFunctionalUnitActions,self).__init__(catchment._ironpy)
         self._build_pvr_accessor = self._build_fu_accessor
+        self.name_columns = ['Catchment','Functional Unit']
 
     def _build_accessor(self,parameter=None,catchments=None,fus=None):
         return self._build_fu_accessor(parameter,catchments,fus)
@@ -999,6 +1001,7 @@ class VeneerCatchmentGenerationActions(VeneerFunctionalUnitActions):
     def __init__(self,catchment):
         super(VeneerCatchmentGenerationActions,self).__init__(catchment)
         self._ns = 'RiverSystem.Constituents.CatchmentElementConstituentData as CatchmentElementConstituentData'
+        self.name_columns = ['Catchment','Functional Unit','Constituent','ConstituentSource']
 
     def _build_accessor(self,parameter,catchments=None,fus=None,constituents=None,sources=None):
         accessor = 'scenario.Network.ConstituentsManagement.Elements' + \
