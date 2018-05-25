@@ -207,6 +207,9 @@ class VeneerIronPython(object):
         return [v['Value'] for v in res['Response']['Value']]
 
     def expand_model(self,model_type):
+        if '.' in model_type:
+            return  model_type
+
         results = self.find_model_type(model_type)
         if len(results) == 0:
             raise Exception('No model matching: %s'%model_type)
