@@ -806,6 +806,36 @@ class VeneerNetworkElementActions(object):
         accessor = self._build_accessor('__init__.__self__',**kwargs)
         return self._ironpy.apply(accessor,code,'target',init,self._ns)
 
+    def tabulate_parameters(self,model_type=None,_param_lookup=None,_names=None,**kwargs):
+        all_models = self.get_models(**kwargs)
+        if _param_lookup is None:
+            _param_lookup = {m:self._ironpy.find_parameters(m) for m in set(all_models)}
+
+        if _names is None:
+            _names = list(self.enumerate_names(**kwargs))
+
+        if model_type is None:
+            models = set(all_models)
+            return {m:self.tabulate_parameters(m,_param_lookup,_names,**kwargs) for m in set(models)}
+
+        parameters = {}
+        for i,col_name in enumerate(self.name_columns):
+            parameters[col_name] = [name_row[i] for name_row in _names]
+
+        for p in _param_lookup[model_type]:
+            parameters[p]=[]
+            values = self.get_param_values(p,**kwargs)
+
+            for m in all_models:
+                if m==model_type:
+                    parameters[p].append(values[0])
+                    values = values[1:]
+                else:
+                    parameters[p].append(-9999)
+                    if p in _param_lookup[m]:
+                        values = values[1:]
+        return pd.DataFrame(parameters,columns=self.name_columns + _param_lookup[model_type])
+
     def call(self,method,parameter_tuple=None,literal=False,fromList=False,**kwargs):
         accessor = self._build_accessor(method,**kwargs)
         return self._ironpy.call(accessor,parameter_tuple,literal=literal,from_list=fromList) 
