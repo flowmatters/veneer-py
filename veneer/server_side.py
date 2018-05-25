@@ -206,6 +206,14 @@ class VeneerIronPython(object):
         res = self._safe_run(script)
         return [v['Value'] for v in res['Response']['Value']]
 
+    def expand_model(self,model_type):
+        results = self.find_model_type(model_type)
+        if len(results) == 0:
+            raise Exception('No model matching: %s'%model_type)
+        if len(results) > 1:
+            raise Exception('Multiple models matching:%s - %s'%(model_type,str(results)))
+        return results[0]
+
     def _find_members_with_attribute_in_type(self,model_type,attribute):
         script = self._init_script(model_type)
         if attribute:
@@ -818,6 +826,7 @@ class VeneerNetworkElementActions(object):
             models = set(all_models)
             return {m:self.tabulate_parameters(m,_param_lookup,_names,**kwargs) for m in set(models)}
 
+        model_type = self._ironpy.expand_model(model_type)
         parameters = {}
         for i,col_name in enumerate(self.name_columns):
             parameters[col_name] = [name_row[i] for name_row in _names]
