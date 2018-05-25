@@ -839,7 +839,7 @@ class VeneerNetworkElementActions(object):
         model_type = self._ironpy.expand_model(model_type)
         parameters = {}
         for i,col_name in enumerate(self.name_columns):
-            parameters[col_name] = [name_row[i] for name_row in _names]
+            parameters[col_name] = [name_row[i] for j,name_row in enumerate(_names) if all_models[j]==model_type]
 
         for p in _param_lookup[model_type]:
             parameters[p]=[]
@@ -849,10 +849,8 @@ class VeneerNetworkElementActions(object):
                 if m==model_type:
                     parameters[p].append(values[0])
                     values = values[1:]
-                else:
-                    parameters[p].append(-9999)
-                    if p in _param_lookup[m]:
-                        values = values[1:]
+                elif p in _param_lookup[m]:
+                    values = values[1:]
         return pd.DataFrame(parameters,columns=self.name_columns + _param_lookup[model_type])
 
     def call(self,method,parameter_tuple=None,literal=False,fromList=False,**kwargs):
