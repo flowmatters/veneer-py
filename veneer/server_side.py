@@ -816,7 +816,7 @@ class VeneerNetworkElementActions(object):
         accessor = self._build_accessor('__init__.__self__',**kwargs)
         return self._ironpy.apply(accessor,code,'target',init,self._ns)
 
-    def tabulate_parameters(self,model_type=None,_param_lookup=None,_names=None,**kwargs):
+    def tabulate_parameters(self,model_type=None,**kwargs):
         '''
         Build DataFrame of model parameters.
 
@@ -824,33 +824,55 @@ class VeneerNetworkElementActions(object):
 
         If None (default), do for ALL models used and return a dictionary of model types => parameter dataframes.
         '''
+        def properties(m):
+            return self._ironpy.find_parameters(m)
+
+        def values(p,**kwargs):
+            return self.get_param_values(p,**kwargs)
+
+        return self._tabulate_properties(properties,values,model_type,**kwargs)
+
+    def tabulate_inputs(self,model_type=None,**kwargs):
+        def properties(m):
+            return self._ironpy.find_inputs(m)
+
+        def values(p,**kwargs):
+            return self.get_data_sources(p,**kwargs)
+
+        return self._tabulate_properties(properties,values,model_type,**kwargs)
+
+    def _tabulate_properties(self,property_getter,value_getter,model_type=None,_property_lookup=None,_names=None,**kwargs):
         all_models = self.get_models(**kwargs)
-        if _param_lookup is None:
-            _param_lookup = {m:self._ironpy.find_parameters(m) for m in set(all_models)}
+        if _property_lookup is None:
+            _property_lookup = {m:property_getter(m) for m in set(all_models)}
 
         if _names is None:
             _names = list(self.enumerate_names(**kwargs))
 
         if model_type is None:
             models = set(all_models)
-            return {m:self.tabulate_parameters(m,_param_lookup,_names,**kwargs) for m in set(models)}
+            return {m:self._tabulate_properties(property_getter,value_getter,m,_property_lookup,_names,**kwargs) for m in set(models)}
 
         model_type = self._ironpy.expand_model(model_type)
-        parameters = {}
+        table = {}
         for i,col_name in enumerate(self.name_columns):
-            parameters[col_name] = [name_row[i] for j,name_row in enumerate(_names) if all_models[j]==model_type]
+            table[col_name] = [name_row[i] for j,name_row in enumerate(_names) if all_models[j]==model_type]
 
-        for p in _param_lookup[model_type]:
-            parameters[p]=[]
-            values = self.get_param_values(p,**kwargs)
+        for p in _property_lookup[model_type]:
+            table[p]=[]
+            values = value_getter(p,**kwargs)
 
             for m in all_models:
+                if not p in _property_lookup[m]:
+                    continue
+
                 if m==model_type:
-                    parameters[p].append(values[0])
-                    values = values[1:]
-                elif p in _param_lookup[m]:
-                    values = values[1:]
-        return pd.DataFrame(parameters,columns=self.name_columns + _param_lookup[model_type])
+                    table[p].append(values[0])
+
+                values = values[1:]
+
+        return pd.DataFrame(table,columns=self.name_columns + _property_lookup[model_type])
+
 
     def call(self,method,parameter_tuple=None,literal=False,fromList=False,**kwargs):
         accessor = self._build_accessor(method,**kwargs)
