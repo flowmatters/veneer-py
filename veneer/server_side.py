@@ -818,6 +818,13 @@ class VeneerNetworkElementActions(object):
         return self._ironpy.apply(accessor,code,'target',init,self._ns)
 
     def tabulate_parameters(self,model_type=None,_param_lookup=None,_names=None,**kwargs):
+        '''
+        Build DataFrame of model parameters.
+
+        model_type - model type of interest.
+
+        If None (default), do for ALL models used and return a dictionary of model types => parameter dataframes.
+        '''
         all_models = self.get_models(**kwargs)
         if _param_lookup is None:
             _param_lookup = {m:self._ironpy.find_parameters(m) for m in set(all_models)}
