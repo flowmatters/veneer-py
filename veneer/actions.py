@@ -20,7 +20,7 @@ def transfer_usages(orig_item,dest_item):
 
 transfer_usages(orig_item,dest_item)
 
-"""%(v.model._initScript(),from_set,to_set)
+"""%(v.model._init_script(),from_set,to_set)
 	if remove_original:
 		switch_input_sets_script += "\ndm.RemoveGroup(orig_item)"
 	return v.model.run_script(switch_input_sets_script)
@@ -34,7 +34,7 @@ def enable_streaming(v,fn,overwrite='Fail'):
 	 * 'Overwrite' - attempt to overwrite the existing output file. 
 	                 Note This option will fail if the existing file is locked, such as if the previous run is
 					 still loaded in Source
-     * 'Incremenet' - Change the filename by adding an incrementing integer
+     * 'Increment' - Change the filename by adding an incrementing integer
 	'''
 	script='''
 %s
@@ -42,11 +42,11 @@ import FlowMatters.Source.HDF5IO.StreamingOutputManager as StreamingOutputManage
 import FlowMatters.Source.HDF5IO.StreamingOutputOverwriteOption as StreamingOutputOverwriteOption
 streamer = StreamingOutputManager.EnableStreaming(scenario,"%s")
 streamer.OverwriteOption = StreamingOutputOverwriteOption.%s
-'''%(v.model._initScript(),_safe_filename(fn),overwrite)
+'''%(v.model._init_script(),_safe_filename(fn),overwrite)
 	return v.model.run_script(script)
 
 def disable_streaming(v):
-	script = v.model._initScript() + '''
+	script = v.model._init_script() + '''
 import FlowMatters.Source.HDF5IO.StreamingOutputManager as StreamingOutputManager
 StreamingOutputManager.DisableStreaming(scenario)
 '''
