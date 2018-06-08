@@ -187,6 +187,7 @@ def overwrite_plugin_configuration(source_binaries,project_fn):
         plugin_dir.mkdir(parents=True)
     plugin_dest_file = Path(plugin_dir)/'Plugins.xml'
     shutil.copyfile(str(plugin_fn),str(plugin_dest_file))
+    assert plugin_dest_file.exists()
 
 def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=True,
           script=True, veneer_exe=None,overwrite_plugins=None,return_io=False,
