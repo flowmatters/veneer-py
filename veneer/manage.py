@@ -182,6 +182,7 @@ def overwrite_plugin_configuration(source_binaries,project_fn):
     print(source_version)
 
     plugin_dir = Path('C:')/'Users'/os.environ['USERNAME']/'AppData'/'Roaming'/'Source'/source_version
+    print(plugin_dir)
     if not plugin_dir.exists():
         plugin_dir.mkdir(parents=True)
     plugin_dest_file = Path(plugin_dir)/'Plugins.xml'
