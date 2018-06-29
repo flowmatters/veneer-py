@@ -816,6 +816,16 @@ class VeneerNetworkElementActions(object):
         accessor = self._build_accessor('__init__.__self__',**kwargs)
         return self._ironpy.apply(accessor,code,'target',init,self._ns)
 
+    def model_table(self,**kwargs):
+        '''
+        Build a dataframe of models in use
+        '''
+        names = self.enumerate_names(**kwargs)
+        models = self.get_models(**kwargs)
+        self.name_columns
+        rows = [dict(list(zip(self.name_columns,n))+[('model',m)])for n,m in zip(names,models)]
+        return pd.DataFrame(rows)
+
     def tabulate_parameters(self,model_type=None,**kwargs):
         '''
         Build DataFrame of model parameters.
