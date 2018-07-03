@@ -191,7 +191,7 @@ def overwrite_plugin_configuration(source_binaries,project_fn):
 
 def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=True,
           script=True, veneer_exe=None,overwrite_plugins=None,return_io=False,
-          model=None):
+          model=None,additional_plugins=[]):
     """
     Start one or more copies of the Veneer command line progeram with a given project file
 
@@ -222,6 +222,8 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=True,
 
     - model - Specify the model (scenario) to use. Default None (use first scenario)
 
+    - additional_plugins - List of plugin files (DLLs) to load
+
     returns processes, ports
        processes - list of process objects that can be used to terminate the servers
        ports - the port numbers used for each copy of the server
@@ -242,6 +244,9 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=True,
     if remote: extras += '-r '
     if script: extras += '-s '
     if model: extras += '-m %s'%str(model)
+
+    if len(additional_plugins):
+        extras += '-l '+ ','.join(additional_plugins)
 
     cmd_line = '%s -p %%d %s '%(veneer_exe,extras)
     if project_fn:
