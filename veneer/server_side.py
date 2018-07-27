@@ -298,6 +298,16 @@ class VeneerIronPython(object):
         """
         return self._find_members_with_attribute_for_types(model_types,'InputAttribute')
 
+    def find_states(self,model_types):
+        """
+        Find the state names for a given model type or list of model types
+
+        Returns:
+         * A list of states (if a single model type is provided)
+         * A dictionary model type name -> list of states (if more than model type)
+        """
+        return self._find_members_with_attribute_for_types(model_types,'StateAttribute')
+
     def find_outputs(self,model_types):
         """
         Find the output names for a given model type or list of model types
