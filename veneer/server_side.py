@@ -1,6 +1,7 @@
 
 from .utils import _stringToList, _variable_safe_name, _safe_filename
 from .templates import *
+from .component import VeneerComponentModelActions
 import itertools
 import os
 import pandas as pd
@@ -54,6 +55,7 @@ class VeneerIronPython(object):
         self.node = VeneerNodeActions(self)
         self.functions = VeneerFunctionActions(self)
         self.simulation = VeneerSimulationActions(self)
+        self.component = VeneerComponentModelActions(self)
         self.deferred_scripts = []
         self.deferring = False
 
