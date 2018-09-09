@@ -64,6 +64,12 @@ To get help on a specific command, put a `?` after the full method name, such as
 v.retrieve_multiple_time_series?
 ```
 
+## Documentation and Training
+
+Reference docs are at [https://flowmatters.github.io/veneer-py](https://flowmatters.github.io/veneer-py).
+
+Training notebooks and sample data are at [doc/training](doc/training)
+
 ## Contributions
 
 ... Are most welcome... We'll formalise contributor guidelines in the future.

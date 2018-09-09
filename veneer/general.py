@@ -1,14 +1,15 @@
 try:
-    from urllib2 import urlopen, quote
+    from urllib2 import quote
+    import httplib as hc
 except:
-    from urllib.request import urlopen, quote, Request
+    from urllib.request import quote
+    import http.client as hc
 
 import json
-import http.client as hc
-from . import utils
+import re
 from .bulk import VeneerRetriever
 from .server_side import VeneerIronPython
-from .utils import SearchableList,_stringToList
+from .utils import SearchableList,_stringToList,read_veneer_csv,objdict
 import pandas as pd
 # Source
 from . import extensions
@@ -21,7 +22,7 @@ def name_time_series(result):
     '''
     Name the retrieved time series based on the full name of the time series (including variable and location)
     '''
-    return result['TimeSeriesName']
+    return result.get('TimeSeriesName',result.get('Name','%s/%s/%s'%(result['NetworkElement'],result['RecordingElement'],result['RecordingVariable'])))
 
 def name_element_variable(result):
     element = result['NetworkElement']
@@ -38,6 +39,12 @@ def name_for_variable(result):
     '''
     return result['RecordingVariable']
 
+def name_for_end_variable(result):
+    '''
+    Name the retrieved time series based on the final part of the RecordingVariable (eg after the last @)
+    '''
+    return name_for_variable(result).split('@')[-1]
+
 def name_for_location(result):
     '''
     Name the retrieved time series based on the network location only.
@@ -46,11 +53,39 @@ def name_for_location(result):
     '''
     return result['NetworkElement']
 
+def name_for_fu_and_sc(result):
+    '''
+    For a FU-based time series, name based on the FU and the subcatchment.
+
+    Note, when retrieving FU based results, you should limit the query to a single FU (or 'Total').
+    Due to a quirk in the Source recording system, you'll get the results for all FUs anyway.
+    If you don't specify a single FU, the system will make separate requests for each FU and get multiple
+    results from each requests (essentially transferring n^2 data).
+    '''
+    char = ':'
+    if not 'TimeSeriesName' in result:
+        char = '/'
+    return ':'.join(name_time_series(result).split(':')[:2])
+    
+
+def name_for_fu(result):
+    '''
+    For a FU-based time series, name based on the FU.
+
+    Note, when retrieving FU based results, you should limit the query to a single FU (or 'Total').
+    Due to a quirk in the Source recording system, you'll get the results for all FUs anyway.
+    If you don't specify a single FU, the system will make separate requests for each FU and get multiple
+    results from each requests (essentially transferring n^2 data).
+    '''
+    return name_for_fu_and_sc(result).split(':')[0]
 
 def log(text):
     import sys
     print('\n'.join(_stringToList(text)))
     sys.stdout.flush()
+
+def _veneer_url_safe_id_string(s):
+    return s.replace('#','').replace('/','%2F').replace(':','')
 
 class Veneer(object):
     '''
@@ -77,8 +112,23 @@ class Veneer(object):
         if self.live_source:
             self.data_ext=''
         else:
+            if protocol=='file':
+                self.base_url = '%s://%s'%(protocol,prefix)
             self.data_ext='.json'
         self.model = VeneerIronPython(self)
+
+    def shutdown(self):
+        '''
+        Stop the Veneer server (and shutdown the command line if applicable)
+        '''
+        try:
+            self.post_json('/shutdown')
+        except ConnectionResetError:
+            return
+        raise Exception("Connection didn't reset. Shutdown may not have worked")
+
+    def _replace_inf(self,text):
+        return re.sub('":(-?)INF','":\\1Infinity',text)
 
     def retrieve_json(self,url):
         '''
@@ -86,15 +136,25 @@ class Veneer(object):
 
         url: Path to required resource, relative to the root of the Veneer service.
         '''
+        query_url = self.prefix+url+self.data_ext
         if PRINT_URLS:
-            print("*** %s ***" % (url))
+            print("*** %s - %s ***" % (url, query_url))
+        if self.protocol=='file':
+            text = open(query_url).read()
+        else:
+            conn = hc.HTTPConnection(self.host,port=self.port)
+            conn.request('GET',quote(query_url))
+            resp = conn.getresponse()
+            text = resp.read().decode('utf-8')
 
-        text = urlopen(self.base_url + quote(url+self.data_ext)).read().decode('utf-8')
-
+        text = self._replace_inf(text)
         if PRINT_ALL:
             print(json.loads(text))
             print("")
-        return json.loads(text)
+        try:
+            return json.loads(text)
+        except Exception as e:
+            raise Exception('Error parsing response as JSON. Retrieving %s and received:\n%s'%(url,text[:100]))
 
     def retrieve_csv(self,url):
         '''
@@ -107,10 +167,12 @@ class Veneer(object):
         if PRINT_URLS:
             print("*** %s ***" % (url))
 
-        req = Request(self.base_url + quote(url+self.data_ext),headers={"Accept":"text/csv"})
-        text = urlopen(req).read().decode('utf-8')
+        conn = hc.HTTPConnection(self.host,port=self.port)
+        conn.request('GET',quote(url+self.data_ext),headers={"Accept":"text/csv"})
+        resp = conn.getresponse()
+        text = resp.read().decode('utf-8')
 
-        result = utils.read_veneer_csv(text)
+        result = read_veneer_csv(text)
         if PRINT_ALL:
             print(result)
             print("")
@@ -155,6 +217,9 @@ class Veneer(object):
 
         return conn
 
+    def status(self):
+        return self.retrieve_json('/')
+
     def run_server_side_script(self,script,async=False):
         '''
         Run an IronPython script within Source.
@@ -183,10 +248,11 @@ class Veneer(object):
 
         disable: List of time series selectors to disable
 
-        Note: Each time series selector is a python dictionary object with up to three keys:
+        Note: Each time series selector is a python dictionary object with up to four keys:
           * NetworkElement
           * RecordingElement
           * RecordingVariable
+          * FunctionalUnit
 
         These are used to match time series available from the Source model. A given selector may match
         multiple time series. For example, a selector of {'RecordingVariable':'Downstream Flow Volume'}
@@ -209,14 +275,20 @@ class Veneer(object):
             keys = ['NetworkElement','RecordingElement','RecordingVariable']
             vals = get_many(rule,keys,'')
             if vals[2]=='':vals[2]=vals[1]
+            if 'FunctionalUnit' in rule:
+                vals[0] += '@@' + rule['FunctionalUnit']
 
+            all_known_keys = set(['FunctionalUnit'] + keys)
+            invalid_keys = set(rule.keys()) - (all_known_keys)
+            if len(invalid_keys):
+                raise Exception("Unknown recording keys: %s"%(str(invalid_keys)))
             return 'location/%s/element/%s/variable/%s'%tuple(vals)
 
         modifier = {'RecordNone':[translate(r) for r in disable],
                     'RecordAll':[translate(r) for r in enable]}
         self.update_json('/recorders',modifier)
 
-    def run_model(self,params={},start=None,end=None,async=False,**kwargs):
+    def run_model(self,params=None,start=None,end=None,async=False,name=None,**kwargs):
         '''
         Trigger a run of the Source model
 
@@ -230,6 +302,8 @@ class Veneer(object):
                Useful for triggering parallel runs. Method will return a connection object that can then be queried to know
                when the run has finished.
 
+        name: Name to assign to run in Source results (default None: let Source name using default strategy)
+
         kwargs: optional named parameters to be used to update the params dictionary
 
         In the default behaviour (async=False), this method will return once the Source simulation has finished, and will return
@@ -237,12 +311,18 @@ class Veneer(object):
         '''
         conn = hc.HTTPConnection(self.host,port=self.port)
 
+        if params is None:
+            params = {}
+
         params.update(kwargs)
 
         if not start is None:
             params['StartDate'] = to_source_date(start)
         if not end is None:
             params['EndDate'] = to_source_date(end)
+
+        if not name is None:
+            params['_RunName'] = name
 
     #   conn.request('POST','/runs',json.dumps({'parameters':params}),headers={'Content-type':'application/json','Accept':'application/json'})
         conn.request('POST','/runs',json.dumps(params),headers={'Content-type':'application/json','Accept':'application/json'})
@@ -255,6 +335,9 @@ class Veneer(object):
             return code,resp.getheader('Location')
         elif code==200:
             return code,None
+        elif code==500:
+            error = json.loads(resp.read().decode('utf-8'))
+            raise Exception('\n'.join([error['Message'],error['StackTrace']]))
         else:
             return code,resp.read().decode('utf-8')
 
@@ -275,8 +358,10 @@ class Veneer(object):
         '''
         Tell Source to drop/delete ALL current run results from memory
         '''
-        while len(self.retrieve_runs())>0:
-            self.drop_run()
+        runs = self.retrieve_runs()
+        while len(runs)>0:
+            self.drop_run(int(runs[-1]['RunUrl'].split('/')[-1]))
+            runs = self.retrieve_runs()
 
     def retrieve_runs(self):
         '''
@@ -319,7 +404,7 @@ class Veneer(object):
         nodes = network['features'].find_by_feature_type('node')
         node_names = nodes._unique_values('name')
         '''
-        result = utils.objdict(self.retrieve_json('/network'))
+        result = objdict(self.retrieve_json('/network'))
         result['features'] = SearchableList(result['features'],['geometry','properties'])
         extensions.add_network_methods(result)
         return result
@@ -364,7 +449,9 @@ class Veneer(object):
         name = name.replace('$','')
         url = '/variables/%s/TimeSeries'%name
         result = self.retrieve_json(url)
-        return pd.DataFrame(self.convert_dates(result['Events'])).set_index('Date').rename({'Value':result['Name']})
+        df = pd.DataFrame(self.convert_dates(result['Events'])).set_index('Date').rename({'Value':result['Name']})
+        extensions._apply_time_series_helpers(df)
+        return df
 
     def update_variable_time_series(self,name,timeseries):
         name = name.replace('$','')
@@ -432,8 +519,20 @@ class Veneer(object):
         result = self.retrieve_json(name)
 
         def _transform_details(details):
-            data_dict = {d['Name']:d['TimeSeries']['Events'] for d in details}
-            return self._create_timeseries_dataframe(data_dict,common_index=False)
+            if 'Events' in details[0]['TimeSeries']:
+                data_dict = {d['Name']:d['TimeSeries']['Events'] for d in details}
+                return self._create_timeseries_dataframe(data_dict,common_index=False)
+
+            # Slim Time Series...
+            ts = details[0]['TimeSeries']
+            start_t = self.parse_veneer_date(ts['StartDate'])
+            end_t = self.parse_veneer_date(ts['EndDate'])
+            freq = ts['TimeStep'][0]
+            index = pd.date_range(start_t,end_t,freq=freq)
+            data_dict = {d['Name']:d['TimeSeries']['Values'] for d in details}
+            df = pd.DataFrame(data_dict,index=index)
+            extensions._apply_time_series_helpers(df)
+            return df
 
         def _transform_data_source_item(item):
             item['Details'] = _transform_details(item['Details'])
@@ -442,9 +541,37 @@ class Veneer(object):
         result['Items'] = SearchableList([_transform_data_source_item(i) for i in result['Items']])
         return result
 
+    def create_data_source(self,name,data=None,units='mm/day',precision=3,reload_on_run=False):
+        '''
+        Create a new data source (name) using a Pandas dataframe (data)
+
+        If no dataframe is provided, name is interpreted as a filename
+        '''
+        dummy_data_group = {}
+        dummy_data_group['Name']=name
+        dummy_item = {}
+        dummy_item['Name']='Item for %s'%name
+        dummy_item['InputSets']=['Default Input Set']
+
+        dummy_detail = {}
+        dummy_detail['Name'] = 'Details for %s'%name
+        dummy_detail['TimeSeries']={}
+
+        #dummy_item['Details'] = [dummy_detail]
+        if data is not None:
+            dummy_item['DetailsAsCSV']=data.to_csv(float_format='%%.%df'%precision)
+        dummy_item['ReloadOnRun'] = reload_on_run
+
+        dummy_item['UnitsForNewTS']=units
+        dummy_data_group['Items']=[dummy_item]
+
+        return self.post_json('/dataSources',data=dummy_data_group)
+
     def data_source_item(self,source,name=None,input_set='__all__'):
         if name:
-            source = '/'.join([source,input_set,name])
+            source = '/'.join([source,input_set,_veneer_url_safe_id_string(name)])
+        else:
+            name = source
 
         prefix = '/dataSources/'
         if not source.startswith(prefix):
@@ -453,7 +580,20 @@ class Veneer(object):
 
         def _transform(res):
             if 'TimeSeries' in res:
-                return pd.DataFrame(res['TimeSeries']['Events']).set_index('Date').rename(columns={'Value':res['Name']})
+                return self._create_timeseries_dataframe({name:res['TimeSeries']['Events']},common_index=False)
+            elif 'Items' in res:
+                data_dict = {}
+                suffix = ''
+                for item in res['Items']:
+                    if len(res['Items'])>1:
+                        suffix = " (%s)"%item['Name']
+
+                    if 'Details' in item:
+                        update = {("%s%s"%(d['Name'],suffix)):d['TimeSeries']['Events'] for d in item['Details']}
+
+                        data_dict.update(update)
+
+                return self._create_timeseries_dataframe(data_dict,common_index=False)
             return res
 
         if isinstance(result,list):
@@ -490,6 +630,15 @@ class Veneer(object):
         '''
         return self.send_json('/inputSets/%s'%(name.replace(' ','%20')),method='PUT',data=input_set)
 
+    def create_input_set(self,input_set):
+        '''
+        Create a new input set in Source model.
+
+        input_set: A Python dictionary representing the updated input set. Should contain the same fields as the input set
+                   returned from the input_sets method. (eg Configuration,Filename,Name,ReloadOnRun)
+        '''
+        return self.post_json('/inputSets',data=input_set)
+        
     def apply_input_set(self,name):
         '''
         Have Source apply a given input set
@@ -512,10 +661,14 @@ class Veneer(object):
           * RecordingVariable
           * TimeSeriesName
           * TimeSeriesUrl
+          * FunctionalUnit
 
         These criteria are used to identify which time series to retrieve.
 
-        timestep should be one of 'daily' (default), 'monthly', 'annual'
+        timestep should be one of 'daily' (default), 'monthly', 'annual'.
+        *WARNING*: The monthly and annual option uses the corresponding option in the Veneer plugin, which ALWAYS SUMS values,
+        regardless of units. So, if you retrieve a rate variable (eg m^3/s) those values will be summed and you will need to 
+        correct this manually in the returned DataFrame.
 
         All retrieved time series are returned in a single Data Frame.
 
@@ -535,25 +688,44 @@ class Veneer(object):
             run_data = self.retrieve_run(run)
 
         retrieved={}
+        def name_column(result):
+            col_name = name_fn(result)
+            if col_name in retrieved:
+                i = 1
+                alt_col_name = '%s %d'%(col_name,i)
+                while alt_col_name in retrieved:
+                    i += 1
+                    alt_col_name = '%s %d'%(col_name,i)
+                col_name = alt_col_name
+            return col_name
+
         units_store = {}
         for result in run_data['Results']:
             if self.result_matches_criteria(result,criteria):
                 d = self.retrieve_json(result['TimeSeriesUrl']+suffix)
                 result.update(d)
-                col_name = name_fn(result)
-                if col_name in retrieved:
-                    i = 1
-                    alt_col_name = '%s %d'%(col_name,i)
-                    while alt_col_name in retrieved:
-                        i += 1
-                        alt_col_name = '%s %d'%(col_name,i)
-                    col_name = alt_col_name
+                col_name = name_column(result)
 #                    raise Exception("Duplicate column name: %s"%col_name)
                 if 'Events' in d:
                     retrieved[col_name] = d['Events']
                     units_store[col_name] = result['Units']
                 else:
-                    pass
+                    all_ts = d['TimeSeries']
+                    for ts in all_ts:
+                        col_name = name_column(ts)
+                        units_store[col_name] = ts['Units']
+
+                        vals = ts['Values']
+                        s = self.parse_veneer_date(ts['StartDate'])
+                        e = self.parse_veneer_date(ts['EndDate'])
+                        if ts['TimeStep']=='Daily':
+                            f='D'
+                        elif ts['TimeStep']=='Monthly':
+                            f='M'
+                        elif ts['TimeStep']=='Annual':
+                            f='A'
+                        dates = pd.date_range(s,e,freq=f)
+                        retrieved[col_name] = [{'Date':d,'Value':v} for d,v in zip(dates,vals)]
                     # Multi Time Series!
 
         result = self._create_timeseries_dataframe(retrieved)
@@ -563,6 +735,8 @@ class Veneer(object):
         return result
 
     def parse_veneer_date(self,txt):
+        if hasattr(txt,'strftime'):
+            return txt
         return pd.datetime.strptime(txt,'%m/%d/%Y %H:%M:%S')
 
     def convert_dates(self,events):
@@ -570,16 +744,17 @@ class Veneer(object):
 
     def _create_timeseries_dataframe(self,data_dict,common_index=True):
         if len(data_dict) == 0:
-            return pd.DataFrame()
+            df = pd.DataFrame()
         elif common_index:
             index = [self.parse_veneer_date(event['Date']) for event in list(data_dict.values())[0]]
             data = {k:[event['Value'] for event in result] for k,result in data_dict.items()}
-            return pd.DataFrame(data=data,index=index)
+            df = pd.DataFrame(data=data,index=index)
         else:
             from functools import reduce
             dataFrames = [pd.DataFrame(self.convert_dates(ts)).set_index('Date').rename(columns={'Value':k}) for k,ts in data_dict.items()]
-            return reduce(lambda l,r: l.join(r,how='outer'),dataFrames)
-
+            df = reduce(lambda l,r: l.join(r,how='outer'),dataFrames)
+        extensions._apply_time_series_helpers(df)
+        return df
 
 def read_sdt(fn):
     ts = pd.read_table(fn,sep=' +',engine='python',names=['Year','Month','Day','Val'])
@@ -591,6 +766,33 @@ def to_source_date(the_date):
     if hasattr(the_date,'strftime'):
         return the_date.strftime('%d/%m/%Y')
     return the_date
+
+def read_rescsv(fn):
+    '''
+    Read a .res.csv file saved from Source
+
+    Returns
+      * attributes - Pandas Dataframe of the various metadata attributes in the file
+      * data - Pandas dataframe of the time series
+    '''
+    import pandas as pd
+    import re
+    import io
+    text = open(fn,'r').read()
+
+    r = re.compile('\nEOH\n')
+    header,body = r.split(text)
+
+    r = re.compile('\nEOC\n')
+    config,headers = r.split(header)
+
+    attribute_names = config.splitlines()[-1].split(',')
+    attributes = pd.DataFrame([dict(zip(attribute_names,line.split(','))) for line in headers.splitlines()[1:]])
+
+    columns = ['Date'] + list(attributes.Name)
+    data = pd.read_csv(io.StringIO(body),header=None,index_col=0,parse_dates=True,dayfirst=True,names=columns)
+
+    return attributes, data
 
 if __name__ == '__main__':
     # Output

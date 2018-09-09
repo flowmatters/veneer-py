@@ -1,4 +1,13 @@
 
+try:
+    from urllib2 import urlopen, quote
+except:
+    from urllib.request import urlopen, quote, Request
+import json
+import shutil
+import os
+from glob import glob
+
 class VeneerRetriever(object):
     '''
     Retrieve all information from a Veneer web service and write it out to disk in the same path structure.
@@ -6,17 +15,18 @@ class VeneerRetriever(object):
     Typically used for creating/archiving static dashboards from an existing Veneer web application.
     '''
     def __init__(self,destination,port=9876,host='localhost',protocol='http',
-                 retrieve_daily=True,retreive_monthly=True,retrieve_annual=True,
+                 retrieve_daily=True,retrieve_monthly=True,retrieve_annual=True,
                  retrieve_slim_ts=True,retrieve_single_ts=True,
                  retrieve_single_runs=True,retrieve_daily_for=[],
                  retrieve_ts_json=True,retrieve_ts_csv=False,
-                 print_all = False, print_urls = True):
+                 print_all = False, print_urls = False):
+        from .general import Veneer,log
         self.destination = destination
         self.port = port
         self.host = host
         self.protocol = protocol
         self.retrieve_daily = retrieve_daily
-        self.retreive_monthly = retreive_monthly
+        self.retrieve_monthly = retrieve_monthly
         self.retrieve_annual = retrieve_annual
         self.retrieve_slim_ts = retrieve_slim_ts
         self.retrieve_single_ts = retrieve_single_ts
@@ -28,6 +38,7 @@ class VeneerRetriever(object):
         self.print_urls = print_urls
         self.base_url = "%s://%s:%d" % (protocol,host,port)
         self._veneer = Veneer(host=self.host,port=self.port,protocol=self.protocol)
+        self.log = log
 
     def mkdirs(self,directory):
         import os
@@ -50,7 +61,7 @@ class VeneerRetriever(object):
         try:
             text = urlopen(self.base_url + quote(url)).read().decode('utf-8')
         except:
-            log("Couldn't retrieve %s"%url)
+            self.log("Couldn't retrieve %s"%url)
             return None
 
         self.save_data(url[1:],bytes(text,'utf-8'),"json")
@@ -157,7 +168,7 @@ class VeneerRetriever(object):
 
         if self.retrieve_this_daily(ts_url):
             urls.append(ts_url)
-        if self.retreive_monthly:
+        if self.retrieve_monthly:
             urls.append(ts_url + "/aggregated/monthly")
         if self.retrieve_annual:
             urls.append(ts_url + "/aggregated/annual")
@@ -174,7 +185,12 @@ class VeneerRetriever(object):
             if var['TimeSeries']: self.retrieve_json(var['TimeSeries'])
             if var['PiecewiseFunction']: self.retrieve_json(var['PiecewiseFunction'])
 
-    def retrieve_all(self,destination,**kwargs):
+    def retrieve_all(self,clean=False):
+        if os.path.exists(self.destination):
+            if clean:
+                shutil.rmtree(self.destination)
+            else:
+                raise Exception("Destination (%s) already exists. Use clean=True to overwrite"%self.destination)
         self.mkdirs(self.destination)
         self.retrieve_runs()
         self.retrieve_json("/functions")
@@ -189,3 +205,66 @@ class VeneerRetriever(object):
             if f['properties']['icon'] in icons_retrieved: continue
             self.retrieve_resource(f['properties']['icon'],'png')
             icons_retrieved.append(f['properties']['icon'])
+
+class PruneVeneer(object):
+    def __init__(self,path,dry_run=False):
+        self.path = path
+        self.removals = []
+
+    def remove_variable(self,v,daily=True,aggregate=True):
+        self.removals.append(({'RecordingVariable':v},dict(daily=daily,aggregate=aggregate)))
+
+    def remove_element(self,e,daily=True,aggregate=True):
+        self.removals.append(({'RecordingElement':e},dict(daily=daily,aggregate=aggregate)))
+
+    def glob(self,f,recursive=False):
+        fn = os.path.join(self.path,f)
+        return glob(fn,recursive=recursive)
+
+    def prune(self):
+        files_to_remove = []
+        files_to_deindex = []
+        ts_template = 'runs/*/location/%s/element/%s/variable/%s'
+        for r,opt in self.removals:
+            loc=r.get('NetworkElement','*')
+            ele=r.get('RecordingElement','*')
+            var=r.get('RecordingVariable','*')
+            search = ts_template%(loc,ele,var)
+            #print(search)
+            if opt['daily']:
+                matches = self.glob(search+'.json')
+                files_to_remove += matches
+                if opt['aggregate']:
+                    files_to_deindex += matches
+            if opt['aggregate']:
+                files_to_remove += self.glob(search+'/**',recursive=True)
+
+        print('Found %d files and folders to remove'%len(files_to_remove))
+        print('Found %d time series to de-index'%len(files_to_deindex))
+        print('Cleaning up run files')
+        self.clean_up_results_files(files_to_deindex)
+        print('Removing time series files')
+        for f in files_to_remove:
+            if os.path.isfile(f):
+                os.remove(f)
+        print('Pruning empty directories')
+        os.system('find %s -type d -empty -delete'%self.path)
+
+    def clean_up_results_files(self,files):
+        files_per_run = {}
+        for fn in files:
+            relative = fn[len(self.path):]
+            run = int(relative.split('/')[2])
+            if not run in files_per_run:
+                files_per_run[run] = []
+            files_per_run[run].append(relative[:-5])
+        for run,files in files_per_run.items():
+            self.clean_up_run(run,files)
+        
+    def clean_up_run(self,run_number,files):
+        run_fn = os.path.join(self.path,'runs','%d.json'%run_number)
+        run = json.load(open(run_fn))
+        len_before = len(run['Results'])
+        run['Results'] = [res for res in run['Results'] if not res['TimeSeriesUrl'] in files]
+        
+        json.dump(run,open(run_fn,'w'))
