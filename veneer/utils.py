@@ -38,14 +38,18 @@ def deprecate_async(cls):
                 return attr
 
             def wrapped(*args, **kwargs):
-                run_async = kwargs.pop('async', None)
-                if not run_async:
-                    run_async = kwargs.pop('run_async', None)
-
-                if run_async:
+                if 'async' in kwargs:
                     warnings.warn("Use of deprecated `async` argument. \
-                                   Use `run_async` instead", FutureWarning)
-                    kwargs['run_async'] = run_async
+                                   Use `run_async` instead",
+                                  DeprecationWarning)
+                    use_async = kwargs.pop('async', False)
+
+                    # in case they use both, prefer value for run_async
+                    if 'run_async' in kwargs:
+                        warnings.warn("Both `async` and `run_async` arguments \
+                                       used. In future, just use `run_async`.")
+                    else:
+                        kwargs['run_async'] = use_async
 
                 return attr(*args, **kwargs)
 
