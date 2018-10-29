@@ -18,7 +18,7 @@ class BatchRunner(object):
     def _run_single(self, parameter_set, endpoint, **kwargs):
         self.parameters.eval_script(parameter_set, {'v': endpoint})
         endpoint.drop_all_runs()
-        ticket = endpoint.run_model(async=True, **kwargs)
+        ticket = endpoint.run_model(run_async=True, **kwargs)
         return (ticket, endpoint)
 
     def retrieve(self, var_name='y'):
@@ -26,7 +26,6 @@ class BatchRunner(object):
         return self._retrieval
 
     def _retrieve(self, ticket, endpoint):
-        resp = ticket.getresponse()
         results = {}
         self._retrieval.eval_script({}, {'v': endpoint, 'results': results})
         return results
