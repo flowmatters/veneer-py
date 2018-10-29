@@ -1219,6 +1219,7 @@ class VeneerNetworkElementConstituentActions(VeneerNetworkElementActions):
             '':'',
             'initial':'.*'
         }
+        self.name_columns = ['NetworkElement','Constituent']
 
     def assign_time_series(self,parameter,values,data_group,column=0,
                            literal=True,fromList=False,aspect='played',**kwargs):
@@ -1277,6 +1278,14 @@ class VeneerNetworkElementConstituentActions(VeneerNetworkElementActions):
         script += self._ironpy._generateLoop(accessor,innerLoop,first=False)
 
         return self._ironpy._safe_run(script)
+
+    def enumerate_names(self,fu_only=False,**kwargs):
+        accessor = self._build_accessor(None,**kwargs)
+        names = self._ironpy.get(accessor,
+                                 self._ns,
+                                 names=['ne','con'],
+                                 alt_expression='(ne.DisplayName,con.Constituent.Name)')
+        return [tuple(n) for n in names]
 
 class VeneerLinkConstituentActions(VeneerNetworkElementConstituentActions):
     def __init__(self,link):

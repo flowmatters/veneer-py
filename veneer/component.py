@@ -40,7 +40,7 @@ class VeneerComponentModelActions(object):
     def __init__(self,ironpy):
         self._ironpy = ironpy
 
-    def run_model(self,model_name,namespace=None,inputs={},parameters={},outputs=[]):
+    def run_model(self,model_name,namespace=None,inputs={},parameters={},outputs=[],extra_initialisation=''):
         '''
         Run the given component model with specified inputs, parameters and recorded outputs.
 
@@ -56,6 +56,7 @@ class VeneerComponentModelActions(object):
         tmpl = string.Template(MODEL_RUN_SCRIPT_PREFIX)
 
         run_script = tmpl.substitute(namespace=namespace,klass=model_name)
+        run_script += extra_initialisation
 
         for k,ts in inputs.items():
             run_script += _play(ts,k)
