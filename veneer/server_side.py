@@ -744,7 +744,8 @@ class VeneerNetworkElementActions(object):
         accessor = self._build_accessor(parameter,**kwargs)
         return self._ironpy.assign_time_series(accessor,values,from_list=fromList,
                                                literal=literal,column=column,
-                                               data_group=data_group)
+                                               data_group=data_group,
+                                               namespace=self._ns)
 
     def create_modelled_variable(self,parameter,element_name=None,**kwargs):
         '''
@@ -1072,7 +1073,8 @@ class VeneerRunoffActions(VeneerFunctionalUnitActions):
         accessor = self._build_accessor(parameter,catchments,fus)
         return self._ironpy.assign_time_series(accessor,values,from_list=fromList,
                                                literal=literal,column=column,
-                                               data_group=data_group)
+                                               data_group=data_group,
+                                               namespace=self._ns)
 
 class VeneerCatchmentGenerationActions(VeneerFunctionalUnitActions):
     '''
@@ -1224,7 +1226,8 @@ class VeneerNetworkElementConstituentActions(VeneerNetworkElementActions):
     def assign_time_series(self,parameter,values,data_group,column=0,
                            literal=True,fromList=False,aspect='played',**kwargs):
         '''
-        Assign an input time series to a rainfall runoff input
+        Assign an input time series to a model input/parameter
+        
         '''
         accessor = self._build_accessor(parameter,aspect=aspect,**kwargs)
         return self._ironpy.assign_time_series(accessor,values,from_list=fromList,
