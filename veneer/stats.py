@@ -59,6 +59,23 @@ def NSElogFDC(obs,pred):
 NSElogFDC.perfect=1
 NSElogFDC.maximise=True
 
+def mnse(obs,pred):
+    """
+    modified Nash-Sutcliffe Efficiency
+
+    See:
+    Muleta, M. Model Performance Sensitivity to Objective
+    Function during Automated Calibrations, 2010.
+    """
+    obs,pred = intersect(obs,pred)
+    pred = pred.ix[obs.index] # Filter values not present in
+    numerator = ((obs-pred).abs()).sum()
+    denominator = ((obs-obs.mean()).abs()).sum()
+    return 1 - numerator/denominator
+mnse.perfect=1
+mnse.maximise=True
+
+
 def intersect(obs,pred):
     """
     Return the input pair of dataframes (obs,pred) with a common index made up of the intersection of
@@ -80,6 +97,8 @@ def nse(obs,pred):
     return 1 - numerator/denominator
 nse.perfect=1
 nse.maximise=True
+
+
 
 def PBIAS(obs,pred):
     obs,pred = intersect(obs,pred)
