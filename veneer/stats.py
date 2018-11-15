@@ -17,6 +17,48 @@ All functions should work in various scenarios, such as:
 Broadly speaking, these statistics will work with data that
 """
 
+import numpy as np
+
+def compNFDC(obs, pred):
+	"""
+	Composite of NSE and NSE of log FDC
+	"""
+	x = 0.5
+	NSE = nse(obs, pred)
+	LOGFDC = NSElogFDC(obs, pred)
+	return x*NSE+(1-x)*LOGFDC
+compNFDC.perfect=1
+compNFDC.maximise=True
+
+def sort(obs, pred):
+	"""
+	Return sorted obs and pred time series'
+	"""
+	obs = obs.sort_values(ascending=True)
+	pred = pred.sort_values(ascending=True)
+	return obs,pred
+
+def log_10(obs, pred):
+	"""
+	Return log of obs and pred time series'
+	"""
+	obs = np.log10(obs+0.01)
+	pred = np.log10(pred+0.01)
+	return obs,pred
+
+def NSElogFDC(obs,pred):
+	"""
+	Return the Nash-Sutcliffe Efficiency of flow duration of log data
+	"""
+	obs,pred = intersect(obs,pred)
+	obs,pred = sort(obs,pred)
+	obs,pred = log_10(obs,pred)
+	numerator = ((obs.values-pred.values)**2).sum()
+	denominator = ((obs.values-obs.mean())**2).sum()
+	return 1 - numerator/denominator
+NSElogFDC.perfect=1
+NSElogFDC.maximise=True
+
 def intersect(obs,pred):
     """
     Return the input pair of dataframes (obs,pred) with a common index made up of the intersection of
