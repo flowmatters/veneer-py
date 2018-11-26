@@ -9,7 +9,7 @@ import json
 import re
 from .bulk import VeneerRetriever
 from .server_side import VeneerIronPython
-from .utils import SearchableList, _stringToList, read_veneer_csv, objdict, deprecate_async
+from .utils import SearchableList, _stringToList, read_veneer_csv, objdict#, deprecate_async
 import pandas as pd
 # Source
 from . import extensions
@@ -96,7 +96,7 @@ def _veneer_url_safe_id_string(s):
     return s.replace('#', '').replace('/', '%2F').replace(':', '')
 
 
-@deprecate_async
+#@deprecate_async
 class Veneer(object):
     '''
     Acts as a high level client to the Veneer web service within eWater Source.
@@ -192,7 +192,7 @@ class Veneer(object):
             print("")
         return result
 
-    @deprecate_async
+#    @deprecate_async
     def update_json(self, url, data, run_async=False):
         '''
         Issue a PUT request to the Veneer service to update the data held at url
@@ -207,18 +207,18 @@ class Veneer(object):
         '''
         return self.send_json(url, data, 'PUT', run_async)
 
-    @deprecate_async
+#    @deprecate_async
     def send_json(self, url, data, method, run_async=False):
         payload = json.dumps(data)
         headers = {'Content-type': 'application/json',
                    'Accept': 'application/json'}
         return self.send(url, method, payload, headers, run_async)
 
-    @deprecate_async
+#    @deprecate_async
     def post_json(self, url, data=None, run_async=False):
         return self.send_json(url, data, 'POST', run_async)
 
-    @deprecate_async
+#    @deprecate_async
     def send(self, url, method, payload=None, headers={}, run_async=False):
         conn = hc.HTTPConnection(self.host, port=self.port)
         conn.request(method, url, payload, headers=headers)
@@ -239,7 +239,7 @@ class Veneer(object):
     def status(self):
         return self.retrieve_json('/')
 
-    @deprecate_async
+#    @deprecate_async
     def run_server_side_script(self, script, run_async=False):
         '''
         Run an IronPython script within Source.
@@ -312,7 +312,7 @@ class Veneer(object):
                     'RecordAll': [translate(r) for r in enable]}
         self.update_json('/recorders', modifier)
 
-    @deprecate_async
+    #@deprecate_async
     def run_model(self, params=None, start=None, end=None, run_async=False, name=None, **kwargs):
         '''
         Trigger a run of the Source model
