@@ -33,7 +33,7 @@ def _transform_node_type_name(n):
     return n + 'NodeModel'
 
 
-@deprecate_async
+#@deprecate_async
 class VeneerIronPython(object):
     """
     Helper functions for manipulating the internals of the Source model itself.
