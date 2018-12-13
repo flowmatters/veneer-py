@@ -1027,6 +1027,10 @@ class VeneerCatchmentActions(VeneerNetworkElementActions):
         return self.get_param_values('characteristics.areaInSquareMeters', by_name=by_name, catchments=catchments)
 #        return self._ironpy.get('scenario.Network.Catchments.*characteristics.areaInSquareMeters')
 
+    def tabulate_areas(self,catchments=None):
+        tbl = self.functional_units.tabulate_parameters(model_type='RiverSystem.Catchments.StandardFunctionalUnit',catchments=catchments)
+        return tbl[['Catchment','Functional Unit','areaInSquareMeters']]
+
     def get_functional_unit_areas(self, catchments=None, fus=None):
         '''
         Return the area of each functional unit in each catchment:
