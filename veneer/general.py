@@ -796,7 +796,7 @@ class Veneer(object):
 
 
 def read_sdt(fn):
-    ts = pd.read_table(fn, sep=' +', engine='python',
+    ts = pd.read_table(fn, delim_whitespace=True, engine='python',
                        names=['Year', 'Month', 'Day', 'Val'])
     ts['Date'] = ts.apply(lambda row: pd.datetime(
         int(row.Year), int(row.Month), int(row.Day)), axis=1)
