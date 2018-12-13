@@ -430,11 +430,7 @@ class Veneer(object):
         nodes = network['features'].find_by_feature_type('node')
         node_names = nodes._unique_values('name')
         '''
-        result = objdict(self.retrieve_json('/network'))
-        result['features'] = SearchableList(
-            result['features'], ['geometry', 'properties'])
-        extensions.add_network_methods(result)
-        return result
+        return _extend_network(self.retrieve_json('/network'))
 
     def functions(self):
         '''
@@ -793,6 +789,14 @@ class Veneer(object):
             df = reduce(lambda l, r: l.join(r, how='outer'), dataFrames)
         extensions._apply_time_series_helpers(df)
         return df
+
+def _extend_network(nw):
+    nw = objdict(nw)
+
+    nw['features'] = SearchableList(
+        nw['features'], ['geometry', 'properties'])
+    extensions.add_network_methods(nw)
+    return nw
 
 
 def read_sdt(fn):
