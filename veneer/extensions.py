@@ -4,10 +4,15 @@ import inspect
 from types import MethodType
 from .utils import SearchableList
 
+_WU_ICON='/resources/WaterUserNodeModel'
+
 def _node_id(node):
     if hasattr(node,'keys'):
         return node['id']
     return node
+
+def _feature_list(lst):
+    return SearchableList(lst,nested=['properties'])
 
 def network_downstream_links(self,node_or_link):
     '''
@@ -101,8 +106,19 @@ def network_outlet_nodes(self):
     '''
     features = self['features']
     nodes = features.find_by_feature_type('node')
-    no_downstream = SearchableList([n for n in nodes if len(self.downstream_links(n))==0],nested=['properties'])
-    return no_downstream.find_by_icon('/resources/WaterUserNodeModel',op='!=')
+
+    no_downstream = _feature_list([n for n in nodes if len(self.downstream_links(n))==0])
+    no_downstream_excluding_water_user = no_downstream.find_by_icon(_WU_ICON,op='!=')
+
+    water_users = nodes.find_by_icon(_WU_ICON)
+    water_user_links = _feature_list([upstream_link for wu in water_users \
+                                                    for upstream_link in self.upstream_links(wu)])
+
+    nodes_to_water_users = [nodes.find_by_id(link['properties']['from_node'])[0] for link in water_user_links]
+
+    nodes_with_only_water_users = [n for n in nodes_to_water_users if len(self.downstream_links(n))==1]
+
+    return _feature_list(no_downstream_excluding_water_user._list+nodes_with_only_water_users)
 
 def network_as_dataframe(self):
     from geopandas import GeoDataFrame
