@@ -121,10 +121,15 @@ def network_outlet_nodes(self):
     return _feature_list(no_downstream_excluding_water_user._list+nodes_with_only_water_users)
 
 def network_as_dataframe(self):
-    from geopandas import GeoDataFrame
-    result = GeoDataFrame.from_features(self['features'])
-    result['id'] = [f['id'] for f in self['features']]
-    return result
+    try:
+        from geopandas import GeoDataFrame
+        result = GeoDataFrame.from_features(self['features'])
+        result['id'] = [f['id'] for f in self['features']]
+        return result
+    except:
+        pass
+
+    return self['features'].as_dataframe()
 
 def network_partition(self,key_features,new_prop):
     '''
