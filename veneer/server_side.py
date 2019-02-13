@@ -985,6 +985,14 @@ class VeneerFunctionalUnitActions(VeneerNetworkElementActions):
         catchment_names = self._catchment._ironpy.get(cname_accessor)
         return zip(catchment_names, fu_names)
 
+    def rename(self,*args,**kwargs):
+        all_pairs = list(args) + list(kwargs.items())
+
+        script = 'config=scenario.SystemFunctionalUnitConfiguration\n'
+        script += 'pairs = %s\n' % all_pairs
+        script += 'for existing_name,new_name in pairs:\n'
+        script += '  config.fuDefinitions.RenameItemInList(existing_name,new_name)'
+        return self._ironpy.run_script(script)
 
 class VeneerCatchmentActions(VeneerNetworkElementActions):
     '''
