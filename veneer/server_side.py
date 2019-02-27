@@ -147,7 +147,7 @@ class VeneerIronPython(object):
         else:
             return [d['Value'] for d in data['Response']['Value']]
 
-    def _generateLoop(self, theThing, innerLoop, first=False, names=None):
+    def _generateLoop(self, theThing, innerLoop, first=False, names=None,inner_exception=''):
         script = ''
         script += "have_succeeded = False\n"
         script += "ignoreExceptions = True\n"
@@ -175,14 +175,19 @@ class VeneerIronPython(object):
                                                         * substCount)
         script += '\n'
         script += indentText + "have_succeeded = True\n"
+        inner_most = True
         while indent > 0:
             indent -= 1
             indentText = ' ' * (indent * 4)
             script += indentText + "except:\n"
+            if inner_most:
+                script += indentText + '  %s\n'%inner_exception
+                inner_most = False
             script += indentText + '  if not ignoreExceptions: raise\n'
             if first:
                 script += indentText + "if have_succeeded: break\n"
             indent -= 1
+
         return script
 
     def find_model_type(self, model_type, must_be_model=True):
@@ -379,7 +384,7 @@ class VeneerIronPython(object):
     def process_response_dict(self, resp):
         return {self.simplify_response(e['Key']): self.simplify_response(e['Value']) for e in resp['Entries']}
 
-    def get(self, theThing, namespace=None, names=None, alt_expression=None):
+    def get(self, theThing, namespace=None, names=None, alt_expression=None,skip_nulls=True):
         """
         Retrieve a value, or list of values from Source using theThing as a query string.
 
@@ -393,7 +398,12 @@ class VeneerIronPython(object):
                 innerLoop = 'result.append(%s%s)'
             else:
                 innerLoop = 'result.append(%s)' % alt_expression
-            script += self._generateLoop(theThing, innerLoop, names=names)
+            
+            inner_exception = ''
+            if not skip_nulls:
+                inner_exception = 'result.append(None)'
+
+            script += self._generateLoop(theThing, innerLoop, inner_exception=inner_exception, names=names)
         else:
             script += "result = %s\n" % theThing
 #       return script
@@ -705,21 +715,21 @@ class VeneerNetworkElementActions(object):
             None, **kwargs).replace('.*', '.First().')
         return Queryable(self._ironpy._veneer, path=accessor, namespace=self._ns)
 
-    def get_models(self, by_name=False, **kwargs):
+    def get_models(self, by_name=False, skip_nulls=True, **kwargs):
         '''
         Return the models used in a particular context
         '''
-        resp = self.get_param_values('GetType().FullName', **kwargs)
+        resp = self.get_param_values('GetType().FullName', skip_nulls=skip_nulls, **kwargs)
         if by_name:
             return dict(zip(self.names(**kwargs), resp))
         return resp
 
-    def get_param_values(self, parameter, by_name=False, **kwargs):
+    def get_param_values(self, parameter, by_name=False, skip_nulls=True, **kwargs):
         '''
         Return the values of a particular parameter used in a particular context
         '''
         accessor = self._build_accessor(parameter, **kwargs)
-        resp = self._ironpy.get(accessor, kwargs.get('namespace', self._ns))
+        resp = self._ironpy.get(accessor, kwargs.get('namespace', self._ns),skip_nulls=skip_nulls)
         if by_name:
             return dict(zip(self.names(**kwargs), resp))
         return resp
@@ -870,7 +880,7 @@ class VeneerNetworkElementActions(object):
         Build a dataframe of models in use
         '''
         names = self.enumerate_names(**kwargs)
-        models = self.get_models(**kwargs)
+        models = self.get_models(skip_nulls=False,**kwargs)
         self.name_columns
         rows = [dict(list(zip(self.name_columns, n)) + [('model', m)])
                 for n, m in zip(names, models)]
@@ -902,22 +912,21 @@ class VeneerNetworkElementActions(object):
         return self._tabulate_properties(properties, values, model_type, **kwargs)
 
     def _tabulate_properties(self, property_getter, value_getter, model_type=None, _property_lookup=None, _names=None, **kwargs):
-        all_models = self.get_models(**kwargs)
+        all_models = self.get_models(skip_nulls=False,**kwargs)
         if _property_lookup is None:
-            _property_lookup = {m: property_getter(m) for m in set(all_models)}
+            _property_lookup = {m: [] if m is None else property_getter(m) for m in set(all_models)}
 
         if _names is None:
             _names = list(self.enumerate_names(**kwargs))
 
         if model_type is None:
             models = set(all_models)
-            return {m: self._tabulate_properties(property_getter, value_getter, m, _property_lookup, _names, **kwargs) for m in set(models)}
+            return {m: None if m is None else self._tabulate_properties(property_getter, value_getter, m, _property_lookup, _names, **kwargs) for m in set(models)}
 
         model_type = self._ironpy.expand_model(model_type)
         table = {}
         for i, col_name in enumerate(self.name_columns):
-            table[col_name] = [name_row[i] for j, name_row in enumerate(
-                _names) if all_models[j] == model_type]
+            table[col_name] = [name_row[i] for j, name_row in enumerate(_names) if all_models[j] == model_type]
 
         for p in _property_lookup[model_type]:
             table[p] = []
