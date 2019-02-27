@@ -243,7 +243,12 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=True,
     extras = ''
     if remote: extras += '-r '
     if script: extras += '-s '
-    if model: extras += '-m %s'%str(model)
+    if model is not None:
+        model = str(model)
+        if ' ' in model:
+            model = '"%s"'%model
+
+        extras += '-m %s '%model
 
     if len(additional_plugins):
         extras += '-l '+ ','.join(additional_plugins)
