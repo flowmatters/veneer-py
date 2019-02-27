@@ -7,6 +7,7 @@ import json
 import shutil
 import os
 from glob import glob
+from veneer.general import MODEL_TABLES
 
 class VeneerRetriever(object):
     '''
@@ -192,11 +193,17 @@ class VeneerRetriever(object):
             else:
                 raise Exception("Destination (%s) already exists. Use clean=True to overwrite"%self.destination)
         self.mkdirs(self.destination)
+
+        for tbl in MODEL_TABLES:
+            self.retrieve_csv('/tables/%s'%tbl)
+
         self.retrieve_runs()
         self.retrieve_json("/functions")
         self.retrieve_variables()
         self.retrieve_json("/inputSets")
         self.retrieve_json("/")
+
+
         network = self.retrieve_json("/network")
         icons_retrieved = []
         for f in network['features']:

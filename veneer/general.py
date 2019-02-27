@@ -7,7 +7,6 @@ except:
 
 import json
 import re
-from .bulk import VeneerRetriever
 from .server_side import VeneerIronPython
 from .utils import SearchableList, _stringToList, read_veneer_csv, objdict#, deprecate_async
 import pandas as pd
@@ -18,6 +17,7 @@ PRINT_URLS = False
 PRINT_ALL = False
 PRINT_SCRIPTS = False
 
+MODEL_TABLES = ['fus']
 
 def name_time_series(result):
     '''
@@ -431,6 +431,9 @@ class Veneer(object):
         node_names = nodes._unique_values('name')
         '''
         return _extend_network(self.retrieve_json('/network'))
+
+    def model_table(self,table='fus'):
+        return pd.read_csv(self.retrieve_csv('/tables/%s'%table))
 
     def functions(self):
         '''
@@ -846,6 +849,7 @@ def read_rescsv(fn):
 
 if __name__ == '__main__':
     # Output
+    from .bulk import VeneerRetriever
     destination = sys.argv[1] if len(
         sys.argv) > 1 else "C:\\temp\\veneer_download\\"
     print("Downloading all Veneer data to %s" % destination)
