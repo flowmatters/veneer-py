@@ -677,6 +677,7 @@ class VeneerNetworkElementActions(object):
         self._build_pvr_accessor = self._build_accessor
         self._pvr_attribute_prefix = ''
         self.name_columns = ['NetworkElement']
+        self.query_params = []
 
     def _instantiation_namespace(self, types, enum=False):
         if enum:
@@ -952,6 +953,7 @@ class VeneerFunctionalUnitActions(VeneerNetworkElementActions):
         super(VeneerFunctionalUnitActions, self).__init__(catchment._ironpy)
         self._build_pvr_accessor = self._build_fu_accessor
         self.name_columns = ['Catchment', 'Functional Unit']
+        self.query_params = ['catchments','fus']
 
     def _build_accessor(self, parameter=None, catchments=None, fus=None):
         return self._build_fu_accessor(parameter, catchments, fus)
@@ -1151,6 +1153,7 @@ class VeneerCatchmentGenerationActions(VeneerFunctionalUnitActions):
         self._ns = 'RiverSystem.Constituents.CatchmentElementConstituentData as CatchmentElementConstituentData'
         self.name_columns = ['Catchment', 'Functional Unit',
                              'Constituent', 'ConstituentSource']
+        self.query_params = self.query_params + ['constituents','sources']
 
     def _build_accessor(self, parameter, catchments=None, fus=None, constituents=None, sources=None):
         accessor = 'scenario.Network.ConstituentsManagement.Elements' + \
@@ -1284,6 +1287,7 @@ class VeneerNetworkElementConstituentActions(VeneerNetworkElementActions):
             'initial': '.*'
         }
         self.name_columns = ['NetworkElement', 'Constituent']
+        self.query_params = ['constituents']
 
     def assign_time_series(self, parameter, values, data_group, column=0,
                            literal=True, fromList=False, aspect='played', **kwargs):
@@ -1358,6 +1362,8 @@ class VeneerLinkConstituentActions(VeneerNetworkElementConstituentActions):
         self._link = link
         self._name_accessor = 'Link.DisplayName'
         super(VeneerLinkConstituentActions, self).__init__(link._ironpy)
+        self.name_columns =['Link','Constituent']
+        self.query_params=['links','constituents']
         self._ns = 'RiverSystem.Constituents.LinkElementConstituentData as LinkElementConstituentData'
         self._ns += '\nfrom RiverSystem.Constituents.ConstituentPlayedValue import ConstituentPlayedType as ConstituentPlayedType\n'
         self._default_aspect = 'model'
