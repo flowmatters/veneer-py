@@ -363,7 +363,7 @@ class VeneerIronPython(object):
         """ % (model_type, model_type)
         script = self.clean_script(script)
         for p in params:
-            script += '\nresult["%s"]=model.%s' % (p, p)
+            script += '\ntry: result["%s"]=model.%s\nexcept: pass' % (p, p)
         return self.simplify_response(self._safe_run(script)['Response'])
 
     def simplify_response(self, response):
