@@ -51,3 +51,18 @@ import FlowMatters.Source.HDF5IO.StreamingOutputManager as StreamingOutputManage
 StreamingOutputManager.DisableStreaming(scenario)
 '''
 	return v.model.run_script(script)
+
+
+def get_big_data_source(v,ds_name,data_sources=None,progress=print):
+    import pandas as pd
+    data_source = [ds for ds in data_sources if ds['FullName'].endswith(ds_name)][0]
+    ts_names = [ts['Name'] for ts in data_source['Items'][0]['Details']]
+    ts_dict = {}
+    for i, n in enumerate(ts_names):
+        ts_dict[n] = v.data_source_item(ds_name,n)[n]
+        if i and (i%50)==0:
+            progress('Got %d/%d timeseries from %s'%(i,len(ts_names),ds_name))
+    result = pd.DataFrame(ts_dict)
+    progress('Got all time series from %s'%ds_name)
+    return result
+
