@@ -20,7 +20,8 @@ class VeneerRetriever(object):
                  retrieve_slim_ts=True,retrieve_single_ts=True,
                  retrieve_single_runs=True,retrieve_daily_for=[],
                  retrieve_ts_json=True,retrieve_ts_csv=False,
-                 print_all = False, print_urls = False):
+                 print_all = False, print_urls = False,
+                 update_frequency = -1, logger=None):
         from .general import Veneer,log
         self.destination = destination
         self.port = port
@@ -39,7 +40,9 @@ class VeneerRetriever(object):
         self.print_urls = print_urls
         self.base_url = "%s://%s:%d" % (protocol,host,port)
         self._veneer = Veneer(host=self.host,port=self.port,protocol=self.protocol)
-        self.log = log
+        self.log = logger or log
+        self.last_update_at = 0
+        self.update_frequency = update_frequency
 
     def mkdirs(self,directory):
         import os
@@ -84,9 +87,13 @@ class VeneerRetriever(object):
 
     # Process Run list and results
     def retrieve_runs(self):
+        current_progress = 5
+        total_progress = 85
         run_list = self.retrieve_json("/runs")
         all_results = []
-        for run in run_list:
+        for ix,run in enumerate(run_list):
+            prog_per_run = total_progress / len(run_list)
+
             run_results = self.retrieve_json(run['RunUrl'])
             ts_results = run_results['Results']
             all_results += ts_results
@@ -95,11 +102,16 @@ class VeneerRetriever(object):
                 continue
 
             if self.retrieve_single_ts:
-                for result in ts_results:
+                for jx,result in enumerate(ts_results):
+                    prog_per_ts = prog_per_run / len(ts_results)
                     self.retrieve_ts(result['TimeSeriesUrl'])
+                    self.update('Downloaded %d/%d results in run %d'%(jx,len(ts_results),ix),current_progress+jx*prog_per_ts)
 
             if self.retrieve_slim_ts:
                 self.retrieve_multi_ts(ts_results)
+
+            current_progress += prog_per_run
+            self.update('Downloaded %d/%d runs'%(ix,len(run_list)),current_progress)
 
         if self.retrieve_slim_ts and len(run_list):
             all_results = self.unique_results_across_runs(all_results)
@@ -197,7 +209,10 @@ class VeneerRetriever(object):
         for tbl in MODEL_TABLES:
             self.retrieve_csv('/tables/%s'%tbl)
 
+        self.update('Downloading runs',5)
         self.retrieve_runs()
+        self.update('Downloaded runs',90)
+
         self.retrieve_json("/functions")
         self.retrieve_variables()
         self.retrieve_json("/inputSets")
@@ -212,6 +227,14 @@ class VeneerRetriever(object):
             if f['properties']['icon'] in icons_retrieved: continue
             self.retrieve_resource(f['properties']['icon'],'png')
             icons_retrieved.append(f['properties']['icon'])
+        self.update('Finished ',100)
+    
+    def update(self,msg,prog):
+        if self.update_frequency < 0:
+            return
+        if (prog >= 100) or (self.last_update_at + self.update_frequency < prog):
+            self.log(msg)
+            self.last_update_at = prog
 
 class PruneVeneer(object):
     def __init__(self,path,dry_run=False):
