@@ -126,8 +126,9 @@ def network_as_dataframe(self):
         result = GeoDataFrame.from_features(self['features'])
         result['id'] = [f['id'] for f in self['features']]
         return result
-    except:
-        pass
+    except Exception as e:
+        print('Could not create GeoDataFrame. Using regular DataFrame.')
+        print(str(e))
 
     return self['features'].as_dataframe()
 
