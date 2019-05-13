@@ -354,3 +354,19 @@ def _variable_safe_name(name):
 
 def _safe_filename(fn):
     return fn.replace('\\', '/')
+
+def split_network(network):
+    '''
+    Takes a Source network (GeoDataFrame) and returns separate GeoDataFrames for 
+
+    * links,
+    * nodes, and
+    * catchments
+
+    in that order
+    '''
+    links = network[network.feature_type=='link']
+    nodes = network[network.feature_type=='node']
+    catchments = network[network.feature_type=='catchment']
+    return links,nodes,catchments
+
