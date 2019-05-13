@@ -123,9 +123,9 @@ class Veneer(object):
         if self.live_source:
             self.data_ext = ''
         else:
-            if protocol == 'file':
-                self.base_url = '%s://%s' % (protocol, prefix)
-            self.data_ext = '.json'
+            if protocol and protocol.startswith('file'):
+                self.base_url = '%s://%s'%(protocol,prefix)
+            self.data_ext='.json'
         self.model = VeneerIronPython(self)
 
     def shutdown(self):
@@ -678,6 +678,11 @@ class Veneer(object):
         '''
         return self.send('/inputSets/%s/run' % (name.replace('%', '%25').replace(' ', '%20')), 'POST')
 
+    def timeseries_suffix(self,timestep='daily'):
+        if timestep == "daily":
+            return ""
+        return "/aggregated/%s" % timestep
+
     def retrieve_multiple_time_series(self, run='latest', run_data=None, criteria={}, timestep='daily', name_fn=name_element_variable):
         """
         Retrieve multiple time series from a run according to some criteria.
@@ -711,10 +716,7 @@ class Veneer(object):
           * veneer.name_for_location (just use the name of the network element)
           * veneer.name_for_variable (just use the name of the variable)
         """
-        if timestep == "daily":
-            suffix = ""
-        else:
-            suffix = "/aggregated/%s" % timestep
+        suffix = self.timeseries_suffix(timestep)
 
         if run_data is None:
             run_data = self.retrieve_run(run)
