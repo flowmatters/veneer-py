@@ -20,7 +20,7 @@ At this stage we haven't tagged releases so you just install from the latest ver
 To upgrade, uninstall the one you've got, then install again
 
 ```
-pip uninstall veneer-py
+pip uninstall -y veneer-py
 pip install https://github.com/flowmatters/veneer-py/archive/master.zip
 ```
 
