@@ -8,6 +8,8 @@ _WU_ICON='/resources/WaterUserNodeModel'
 
 def _node_id(node):
     if hasattr(node,'keys'):
+        if 'properties' in node:
+            return node['properties'].get('id',node['id'])
         return node['id']
     return node
 
@@ -25,7 +27,7 @@ def network_downstream_links(self,node_or_link):
     features = self['features']
     source = features.find_by_id(_node_id(node_or_link))[0]
     if source['properties']['feature_type']=='node':
-        node = source['id']
+        node = _node_id(source)
     else:
         node = source['properties']['to_node']
 
