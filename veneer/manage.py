@@ -115,7 +115,8 @@ def create_command_line(veneer_path,source_version="4.1.1",source_path='C:\\Prog
     else:
         chosen_one_full = source_path
 
-    source_files = list((Path(source_path)/chosen_one_full).glob('*.*'))
+    source_dir = Path(source_path)/chosen_one_full
+    source_files = list(source_dir.glob('*.*'))
     if not len(source_files):
         raise Exception('Source files not found at %s'%source_path)
 
@@ -132,6 +133,17 @@ def create_command_line(veneer_path,source_version="4.1.1",source_path='C:\\Prog
         if not f.is_file():
             continue
         shutil.copyfile(str(f),str(Path(dest)/_basename(f)))
+
+    extra_dirs = ['x86','x64']
+    for e in extra_dirs:
+        extra = source_dir / e
+        if not extra.exists():
+            continue
+        extra_dest = Path(dest) / e
+        if not extra_dest.exists():
+            extra_dest.mkdir()
+        for f in extra.glob('*.*'):
+            shutil.copy(f,extra_dest/_basename(f))
 
     exe_path = Path(dest)/'FlowMatters.Source.VeneerCmd.exe'
     assert exe_path.exists()
