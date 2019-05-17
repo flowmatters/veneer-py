@@ -203,6 +203,46 @@ def network_upstream_features(self,node):
         result += self.upstream_features(upstream_node['id'])
     return SearchableList(result,nested=['properties'])
 
+def network_plot(self,nodes=True,links=True,catchments=True,ax=None,zoom=0.05):
+    import matplotlib.pyplot as plt
+    from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+    import numpy as np
+    v = self['_v']
+
+    icons = set(self['features'].find_by_feature_type('node')._select(['icon']))
+
+    icon_images = {i:plt.imread(v.url(i+v.img_ext)) for i in icons}
+
+    if ax is None:
+        ax = plt.gca()
+
+    df = self.as_dataframe()
+
+    if catchments:
+        params = catchments if hasattr(catchments,'keys') else {}
+        df[df.feature_type=='catchment'].plot(ax=ax,**params)
+    
+    if links:
+        params = links if hasattr(links,'keys') else {}
+        df[df.feature_type=='link'].plot(ax=ax,**params)
+
+    if not nodes:
+        return ax
+
+    df_nodes = df[df.feature_type=='node']
+    points = df_nodes.geometry.tolist()
+    x = [p.x for p in points]
+    y = [p.y for p in points]
+    x, y = np.atleast_1d(x, y)
+    nodes = []
+    for x0, y0,icon in zip(x, y,df_nodes.icon):
+        im = OffsetImage(icon_images[icon], zoom=zoom)
+        ab = AnnotationBbox(im, (x0, y0), xycoords='data', frameon=False)
+        nodes.append(ax.add_artist(ab))
+    ax.update_datalim(np.column_stack([x, y]))
+    ax.autoscale()
+    return ax
+
 def add_network_methods(target):
     '''
     Attach extension methods to an object that represents a Veneer network.

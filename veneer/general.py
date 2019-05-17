@@ -122,10 +122,13 @@ class Veneer(object):
         self.live_source = live
         if self.live_source:
             self.data_ext = ''
+            self.img_ext = ''
         else:
             if protocol and protocol.startswith('file'):
                 self.base_url = '%s://%s'%(protocol,prefix)
             self.data_ext='.json'
+            self.img_ext='.png'
+
         self.model = VeneerIronPython(self)
 
     def shutdown(self):
@@ -141,6 +144,11 @@ class Veneer(object):
 
     def _replace_inf(self, text):
         return re.sub('":(-?)INF', '":\\1Infinity', text)
+
+    def url(self,url):
+        if self.protocol=='file':
+            return self.prefix + url
+        return '%s://%s:%d%s/%s'%(self.protocol,self.host,self.port,self.prefix,url)
 
     def retrieve_json(self, url):
         '''
@@ -430,7 +438,9 @@ class Veneer(object):
         nodes = network['features'].find_by_feature_type('node')
         node_names = nodes._unique_values('name')
         '''
-        return _extend_network(self.retrieve_json('/network'))
+        res = self.retrieve_json('/network')
+        res['_v']=self
+        return _extend_network(res)
 
     def model_table(self,table='fus'):
         return pd.read_csv(self.retrieve_csv('/tables/%s'%table))
