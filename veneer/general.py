@@ -270,6 +270,18 @@ class Veneer(object):
             raise Exception('Script disabled. Enable scripting in Veneer')
         return data
 
+    def source_version(self):
+        '''
+        Returns the version of Source we are connected to, if available.
+
+        Returns list of four integers [major,minor,build,revision] or
+        Returns [0,0,0,0] if unknown.
+        '''
+        info = self.retrieve_json('/')
+        if hasattr(info,'keys'):
+            return [int(i) for i in info['SourceVersion'].split('.')]
+        return [0,0,0,0]
+
     def configure_recording(self, enable=[], disable=[]):
         '''
         Enabled and disable time series recording in the Source model.
