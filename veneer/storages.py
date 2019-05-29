@@ -1,4 +1,5 @@
 from types import MethodType
+from .server_side import VeneerNetworkElementActions
 
 LOAD_LVA_SCRIPTLET = '''
 ignoreExceptions=False
@@ -37,9 +38,11 @@ RELEASE_CLASSES = {
     'pump':'ReleasePump'
 }
 
-class VeneerStorageActions(object):
+class VeneerStorageActions(VeneerNetworkElementActions):
     def __init__(self,node_actions):
         self.node_actions = node_actions
+        self._name_accessor = self.node_actions._name_accessor
+        super(VeneerStorageActions, self).__init__(node_actions._ironpy)
         for release in RELEASE_CLASSES.keys():
             def method(r):
                 def add_release_of_type(self,release_table=None,outlet=0,name=None,nodes=None):
@@ -47,6 +50,9 @@ class VeneerStorageActions(object):
                 add_release_of_type.__doc__ = self.add_release.__doc__
                 return add_release_of_type
             setattr(self,'add_%s'%release,MethodType(method(release), self))
+
+    def _build_accessor(self, parameter=None, nodes=None):
+        return self.node_actions._build_accessor(parameter,nodes=nodes,node_types='StorageNodeModel')
 
     def load_lva(self,lva_table,nodes=None):
         '''
@@ -91,3 +97,4 @@ class VeneerStorageActions(object):
             code = '\n'.join([code,setup_min,setup_max])
 
         return self.node_actions.apply(code,init='0',node_types='StorageNodeModel',nodes=nodes)
+
