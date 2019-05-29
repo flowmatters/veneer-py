@@ -1,4 +1,6 @@
 from types import MethodType
+import pandas as pd
+import numpy as np
 from .server_side import VeneerNetworkElementActions
 
 LOAD_LVA_SCRIPTLET = '''
@@ -37,6 +39,31 @@ RELEASE_CLASSES = {
     'culvert':'ReleaseCulvert',
     'pump':'ReleasePump'
 }
+
+GET_LVA_SCRIPTLET='''
+ignoreExcpeptions=False
+geo = target.StoreGeometry.DefiniedGeometrys[0].Geometry
+for row in geo:
+    result.append(row)
+'''
+
+GET_RELEASE_TABLE_SCRIPTLET='''
+ignoreExceptions=False
+prc = target.ProductReleaseContainer
+existing_release = prc.Releases.FirstOrDefault(lambda r:r.ReleaseItemName=='%s')
+mins = existing_release.MinimumRelease.ToArray()
+maxs = existing_release.MaximumRelease.ToArray()
+for minimum,maximum in zip(mins,maxs):
+    result.append((minimum.Key,minimum.Value,maximum.Key,maximum.Value))
+'''
+
+def path_query(path):
+    if path is None:
+        return ''
+    if isinstance(path,int):
+        return '[%d]'%path
+
+    return '.FirstOrDefault(lambda op:op.Link.Name=="%s")'%path
 
 class VeneerStorageActions(VeneerNetworkElementActions):
     def __init__(self,node_actions):
@@ -83,10 +110,7 @@ class VeneerStorageActions(VeneerNetworkElementActions):
             name = '"%s from script"'%release_type
 
         klass = RELEASE_CLASSES[release_type]
-        if isinstance(outlet,int):
-            get_outlet = '[%d]'%outlet
-        else:
-            get_outlet = '.FirstOrDefault(lambda op:op.Link.Name=="%s")'%outlet
+        get_outlet = path_query(outlet)
         code = ADD_RELEASE_SCRIPTLET%(klass,get_outlet,klass,name)
 
         def setup_release_curve(tbl,col):
@@ -97,4 +121,37 @@ class VeneerStorageActions(VeneerNetworkElementActions):
             code = '\n'.join([code,setup_min,setup_max])
 
         return self.node_actions.apply(code,init='0',node_types='StorageNodeModel',nodes=nodes)
+
+    def outlets(self,nodes=None):
+        return self.get_param_values('OutletPaths.*Link.Name',nodes=nodes)
+
+    def lva(self,node):
+        '''
+        Retrieve the Level/Volume/Area table for a given storage node
+        '''
+        code = GET_LVA_SCRIPTLET
+        res = self.apply(code,init='[]',nodes=[node])
+        vals = [eval(r) for r in res]
+        
+        return pd.DataFrame(vals,columns=['level','area','volume'])
+
+    def releases(self,nodes=None,path=None):
+        path_q = path_query(path)
+        if path_q == '':
+            indexer = '.*'
+        else:
+            indexer = '.'
+
+        return self.get_param_values('ProductReleaseContainer.Releases%s%sReleaseItemName'%(path_q,indexer),nodes=nodes)
+
+    def release_table(self,node,release):
+        code = GET_RELEASE_TABLE_SCRIPTLET%release
+        res = self.apply(code,init='[]',nodes=[node])
+
+        df = pd.DataFrame(res,columns=['level','minimum','level_from_max','maximum'])
+        if not np.all(df.level==df.level_from_max):
+            raise Exception('Inconsistent levels between minimum and maximum release curves')
+        return df[['level','minimum','maximum']]
+
+
 
