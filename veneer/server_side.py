@@ -1458,6 +1458,8 @@ class VeneerNodeActions(VeneerNetworkElementActions):
         super(VeneerNodeActions, self).__init__(ironpython)
         self._name_accessor = 'Node.Name'
         self.constituents = VeneerNodeConstituentActions(self)
+        from .storages import VeneerStorageActions
+        self.storages = VeneerStorageActions(self)
 
     def _refine_accessor(self, node_access='', nodes=None, node_types=None, splitter=False):
         accessor = ""
