@@ -233,6 +233,16 @@ class SearchableList(object):
         raise AttributeError(name + ' not allowed')
 
     def as_dataframe(self):
+        if len(self._list) and 'geometry' in self._list[0]:
+            try:
+                import geopandas as gpd
+                result = gpd.GeoDataFrame.from_features(self._list)
+                result['id'] = [f['id'] for f in self._list]
+                return result
+            except Exception as e:
+                # print("Thought we'd create a geodataframe, but it didn't work")
+                # print(e)
+                pass
         return pd.DataFrame(self._list)
 
 
