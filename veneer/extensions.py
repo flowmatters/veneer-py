@@ -243,6 +243,30 @@ def network_plot(self,nodes=True,links=True,catchments=True,ax=None,zoom=0.05):
     ax.autoscale()
     return ax
 
+def network_path_between(self,from_feature,to_feature):
+    from_id = _node_id(from_feature)
+    to_id = _node_id(to_feature)
+
+    if from_id==to_id:
+        return SearchableList([])
+
+    feature = self['features'].find_one_by_id(from_id)
+    if from_id.startswith('/network/catchments'):
+        immediate_down = self['features'].find_one_by_id(feature['properties']['link'])
+    elif from_id.startswith('/network/link'):
+        immediate_down = self['features'].find_one_by_id(feature['properties']['to_node'])
+    else: # node
+        possible_downs = self.downstream_links(feature)
+        for pd in possible_downs:
+            path_via = self.path_between(pd,to_feature)
+            if path_via is not None:
+                return SearchableList([pd]+path_via._list,nested=['properties'])
+        return None
+    path_to = self.path_between(immediate_down,to_feature)
+    if path_to is None:
+        return None
+    return SearchableList([immediate_down]+path_to._list,nested=['properties'])
+
 def add_network_methods(target):
     '''
     Attach extension methods to an object that represents a Veneer network.
