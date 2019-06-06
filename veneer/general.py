@@ -282,7 +282,7 @@ class Veneer(object):
             return [int(i) for i in info['SourceVersion'].split('.')]
         return [0,0,0,0]
 
-    def configure_recording(self, enable=[], disable=[]):
+    def configure_recording(self, enable=[], disable=[],run_async=False):
         '''
         Enabled and disable time series recording in the Source model.
 
@@ -330,7 +330,7 @@ class Veneer(object):
 
         modifier = {'RecordNone': [translate(r) for r in disable],
                     'RecordAll': [translate(r) for r in enable]}
-        self.update_json('/recorders', modifier)
+        return self.update_json('/recorders', modifier,run_async=run_async)
 
     #@deprecate_async
     def run_model(self, params=None, start=None, end=None, run_async=False, name=None, **kwargs):
