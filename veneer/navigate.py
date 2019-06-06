@@ -70,3 +70,10 @@ class Queryable(object):
             
         if not self._v.model.set('%s.%s'%(self._path,a),v):
             raise Exception("Couldn't set property")
+
+    def __int__(self):
+        return int(self._eval_())
+    
+    def __float__(self):
+        return float(self._eval_())
+
