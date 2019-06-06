@@ -620,6 +620,19 @@ class Veneer(object):
 
         return self.post_json('/dataSources', data=dummy_data_group)
 
+    def delete_data_source(self, group):
+        '''
+        Tell Source to drop/delete a specific set of results from memory.
+
+        run: Run number to delete. Default ='latest'. Valid values are 'latest' and integers from 1
+        '''
+        assert self.live_source
+        conn = hc.HTTPConnection(self.host, port=self.port)
+        conn.request('DELETE', '/dataSources/%s' % str(quote(group)))
+        resp = conn.getresponse()
+        code = resp.getcode()
+        return code
+
     def data_source_item(self, source, name=None, input_set='__all__'):
         if name:
             source = '/'.join([source, input_set,
