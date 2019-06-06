@@ -384,11 +384,14 @@ class BulkVeneerApplication(object):
         return self.clients.call_on_all(self.names,*pargs,**kwargs)
 
 class BulkVeneer(object):
-    def __init__(self,ports=[],clients=[]):
+    def __init__(self,ports=[],clients=[],verbose=False):
         self.veneers = [Veneer(port) for port in ports]
         self.veneers += clients
+        self.verbose = verbose
 
     def call_path(self,client,path,*pargs,**kwargs):
+        if self.verbose:
+            print('Calling %s on port %d'%('.'.join(path),client.port))
         target = client
         for p in path:
             target = getattr(target,p)
@@ -397,6 +400,10 @@ class BulkVeneer(object):
     def call_on_all(self,path,*pargs,**kwargs):
         result = [self.call_path(v,path,*pargs,**kwargs) for v in self.veneers]
         result = [r for r in result if not r is None]
+
+        if 'run_async' in kwargs and kwargs['run_async']:
+            return [r.getresponse().getcode() for r in result]
+
         if len(result):
             return result
         return None
