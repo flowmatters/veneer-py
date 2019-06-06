@@ -6,6 +6,7 @@ except:
 import json
 import shutil
 import os
+import sys
 from glob import glob
 from veneer.general import MODEL_TABLES
 
@@ -298,3 +299,32 @@ class PruneVeneer(object):
         run['Results'] = [res for res in run['Results'] if not res['TimeSeriesUrl'] in files]
         
         json.dump(run,open(run_fn,'w'))
+
+
+if __name__ == '__main__':
+    if len(sys.argv)>1:
+        config_fn = sys.argv[1]
+        config = json.load(open(config_fn,'r'))
+    else:
+        config = {}
+
+    port = config.get('port',9876)
+    slack = config.get('slack',None)
+
+    if slack is not None:
+        import nbslack
+        nbslack.notifying(slack)
+
+    def notify(msg):
+        print(msg)
+        if slack is not None:
+            import nbslack
+            nbslack.notify(msg)
+    
+    options = config.get('options',{})
+    dest = config.get('destination','C:\\temp\\veneer_download')
+    clean = config.get('clean',False)
+
+    vr = VeneerRetriever(dest,port,update_frequency=5,logger=notify,**options)
+    vr.retrieve_all(clean=clean)
+
