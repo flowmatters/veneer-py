@@ -153,5 +153,17 @@ class VeneerStorageActions(VeneerNetworkElementActions):
             raise Exception('Inconsistent levels between minimum and maximum release curves')
         return df[['level','minimum','maximum']]
 
+    def set_full_supply(self,val,by='Volume',fromList=False,nodes=None):
+        '''
+        Method to set full supply level or volume on storages
 
+        by= string: 'Volume' or 'Level'
+
+        '''
+        param = 'FullSupply%s'%by
+        self.set_param_values(param,val,fromList=fromList,nodes=nodes)
+        self.set_param_values('StorageDetailsSpecification',
+                              'RiverSystem.Nodes.StorageSpecifcation.%s'%by,
+                              nodes=nodes,
+                              enum=True)
 
