@@ -108,7 +108,7 @@ class VeneerStorageActions(VeneerNetworkElementActions):
             raise Exception("Unknown release type: %s"%release_type)
         if name is None:
             name = '"%s from script"'%release_type
-        if not (name.startswith('"') or names.startswith("'")):
+        if not (name.startswith('"') or name.startswith("'")):
             name = '"%s"'%name
 
         klass = RELEASE_CLASSES[release_type]
