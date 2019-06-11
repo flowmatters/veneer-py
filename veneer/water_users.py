@@ -81,3 +81,6 @@ class VeneerWaterUserActions(VeneerNetworkElementActions):
         code = ACTIVATE_DEMAND_SCRIPTLET%_quote_string(name)
         return self.node_actions.apply(code,init='0',node_types='WaterUserNodeModel',nodes=nodes)
 
+    def demands(self,nodes=None):
+        return self.get_param_values('AvailableConfiguredDemand.*Name',nodes=nodes)
+
