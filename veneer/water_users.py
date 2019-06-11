@@ -57,6 +57,8 @@ class VeneerWaterUserActions(VeneerNetworkElementActions):
 
         name: name for new demand. If not provided, will be '<demandtype> from script'.
               IF the name already exists on another demand on a particular water user, the existing demand will be replaced!
+
+        activate: if True, set the new demand model to be the active demand model on the water user
         '''
         if not demand_type in DEMAND_TYPES:
             raise Exception("Unknown demand type: %s"%demand_type)
