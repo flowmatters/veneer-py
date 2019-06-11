@@ -870,8 +870,13 @@ class VeneerNetworkElementActions(object):
         functions = _stringToList(functions)
         init = '{"success":0,"fail":0}\n'
         init += APPLY_FUNCTION_INIT % functions
+        param_path = parameter.split('.')
+        parameter = param_path[-1]
+        param_path = '.'.join(param_path[:-1])
+        if len(param_path):
+            param_path = '.'+param_path
+        code = APPLY_FUNCTION_LOOP % (param_path,parameter)
 
-        code = APPLY_FUNCTION_LOOP % parameter
         accessor = self._build_accessor('__init__.__self__', **kwargs)
         return self._ironpy.apply(accessor, code, 'target', init, self._ns)
 

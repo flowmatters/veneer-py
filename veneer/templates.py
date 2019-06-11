@@ -13,6 +13,7 @@ ignoreExceptions=False
 if not len(functions):
     functions = orig_fns[::-1]
 try:
+  target = target%s
   ri = ReflectedItem.NewItem('%s',target)
   fn = functions.pop()
   usage = FunctionUsage()
