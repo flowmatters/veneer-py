@@ -138,13 +138,14 @@ class VeneerStorageActions(VeneerNetworkElementActions):
         return pd.DataFrame(vals,columns=['level','area','volume'])
 
     def releases(self,nodes=None,path=None):
-        path_q = path_query(path)
-        if path_q == '':
-            indexer = '.*'
+        if path is None:
+            release_criteria = ''
+        elif isinstance(path,int):
+            release_criteria = '.Where(lambda rel:rel.OutletPath==i_0.NodeModel.OutletPaths[%d])'%path
         else:
-            indexer = '.'
+            release_criteria = '.Where(lambda rel:rel.OutletPath.Link.Name=="%s")'%path
 
-        return self.get_param_values('ProductReleaseContainer.Releases%s%sReleaseItemName'%(path_q,indexer),nodes=nodes)
+        return self.get_param_values('ProductReleaseContainer.Releases%s.*ReleaseItemName'%(release_criteria),nodes=nodes)
 
     def release_table(self,node,release):
         code = GET_RELEASE_TABLE_SCRIPTLET%release
