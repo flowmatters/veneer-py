@@ -1,5 +1,6 @@
 from .server_side import VeneerNetworkElementActions
 from types import MethodType
+from .utils import _quote_string
 
 DEMAND_TYPES={
     'timeseries':'RiverSystem.DemandModels.TimeSeries.TimeSeriesDemandNodeModel',
@@ -52,8 +53,7 @@ class VeneerWaterUserActions(VeneerNetworkElementActions):
             raise Exception("Unknown demand type: %s"%demand_type)
         if name is None:
             name = '"%s from script"'%demand_type
-        if not (name.startswith('"') or name.startswith("'")):
-            name = '"%s"'%name
+        name = _quote_string(name)
 
         klass = DEMAND_TYPES[demand_type]
         namespace = '.'.join(klass.split('.')[:-1])

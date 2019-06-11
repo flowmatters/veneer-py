@@ -380,3 +380,10 @@ def split_network(network):
     catchments = network[network.feature_type=='catchment']
     return links,nodes,catchments
 
+
+def _quote_string(s):
+    if not (s.startswith('"') or s.startswith("'")):
+        return '"%s"'%s
+    return s
+
+
