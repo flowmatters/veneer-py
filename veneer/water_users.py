@@ -25,6 +25,15 @@ if %s:
 result += 1
 '''
 
+ACTIVATE_DEMAND_SCRIPTLET='''
+ignoreExceptions=False
+
+existing_demand = target.AvailableConfiguredDemand.FirstOrDefault(lambda d:d.Name==%s)
+if existing_demand is not None:
+    target.DemandModel = existing_demand
+    result += 1
+'''
+
 class VeneerWaterUserActions(VeneerNetworkElementActions):
     def __init__(self,node_actions):
         self.node_actions = node_actions
@@ -62,3 +71,11 @@ class VeneerWaterUserActions(VeneerNetworkElementActions):
         code = ADD_DEMAND_SCRIPTLET%(namespace,klass,klass,name,activate)
 
         return self.node_actions.apply(code,init='0',node_types='WaterUserNodeModel',nodes=nodes)
+
+    def set_active_demand(self,name,nodes=None):
+        '''
+        Set the active demand model for the water user node
+        '''
+        code = ACTIVATE_DEMAND_SCRIPTLET%_quote_string(name)
+        return self.node_actions.apply(code,init='0',node_types='WaterUserNodeModel',nodes=nodes)
+
