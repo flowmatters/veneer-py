@@ -880,6 +880,20 @@ class VeneerNetworkElementActions(object):
         accessor = self._build_accessor('__init__.__self__', **kwargs)
         return self._ironpy.apply(accessor, code, 'target', init, self._ns)
 
+    def clear_function_usage(self,parameter,**kwargs):
+        '''
+        Remove any function usages applies to `parameter` on elements matching the query (kwargs)
+        '''
+        init = '{"success":0,"fail":0}\n'
+        param_path = parameter.split('.')
+        parameter = param_path[-1]
+        param_path = '.'.join(param_path[:-1])
+        if len(param_path):
+            param_path = '.'+param_path
+        code = CLEAR_FUNCTION_LOOP%(param_path,parameter)
+        accessor = self._build_accessor('__init__.__self__', **kwargs)
+        return self._ironpy.apply(accessor, code, 'target', init, self._ns)
+
     def model_table(self, **kwargs):
         '''
         Build a dataframe of models in use

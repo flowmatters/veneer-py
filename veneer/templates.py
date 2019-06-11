@@ -26,6 +26,19 @@ except:
   raise
 '''
 
+CLEAR_FUNCTION_LOOP='''
+import TIME.Tools.Reflection.ReflectedItem as ReflectedItem
+
+try:
+  target = target%s
+  ri = ReflectedItem.NewItem('%s',target)
+  scenario.Network.FunctionManager.RemoveUsage(ri)
+  result["success"] += 1
+except:
+  result["fail"] += 1
+  raise
+'''
+
 BUILD_PVR_LOOKUP='''
 pvt_lookup = {}
 for pvr in scenario.ProjectViewTable():
