@@ -41,11 +41,27 @@ import TIME.Tools.Reflection.ReflectedItem as ReflectedItem
 try:
   target = target%s
   ri = ReflectedItem.NewItem('%s',target)
-  scenario.Network.FunctionManager.RemoveUsage(ri)
+  existing_usage = scenario.Network.FunctionManager.GetFunctionUsage(ri)
+  if existing_usage is not None:
+    scenario.Network.FunctionManager.RemoveUsage(ri)
   result["success"] += 1
 except:
   result["fail"] += 1
   raise
+'''
+
+CLEAR_TIMESERIES_LOOP='''
+import TIME.Tools.Reflection.ReflectedItem as ReflectedItem
+
+target = %s__init__.__self__
+nested = '%s'.split('.')
+prop = nested[-1]
+for n in nested[:-1]:
+  target = getattr(target,n)
+ri = ReflectedItem.NewItem(prop,target)
+dm = scenario.Network.DataManager
+if dm.IsUsed(ri):
+  dm.RemoveUsage(ri)
 '''
 
 BUILD_PVR_LOOKUP='''

@@ -510,6 +510,9 @@ class VeneerIronPython(object):
             theValue = theValue[0]
         return self._assignment(theThing, theValue, namespace, literal, from_list, False, assignment, post_assignment)
 
+    def clear_time_series(self,theThing,namespace=None):
+        return self._assignment(theThing,None,namespace,False,False,False,CLEAR_TIMESERIES_LOOP)
+
     def call(self, theThing, parameter_tuple=None, literal=False, from_list=False, namespace=None):
         return self.get(theThing, namespace)
 
@@ -799,6 +802,14 @@ class VeneerNetworkElementActions(object):
                                                literal=literal, column=column,
                                                data_group=data_group,
                                                namespace=self._ns)
+
+    def clear_time_series(self, parameter, **kwargs):
+        '''
+        Assign an input time series to a model input input
+        '''
+        parameter = self._translate_property(parameter)
+        accessor = self._build_accessor(parameter, **kwargs)
+        return self._ironpy.clear_time_series(accessor,namespace=self._ns)
 
     def create_modelled_variable(self, parameter, element_name=None, **kwargs):
         '''
