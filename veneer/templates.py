@@ -5,6 +5,9 @@ import TIME.Tools.Reflection.ReflectedItem as ReflectedItem
 
 orig_fn_names = %s
 orig_fns = [scenario.Network.FunctionManager.Functions.Where(lambda f: f.Name==ofn).FirstOrDefault() for ofn in orig_fn_names]
+for i,fn in enumerate(orig_fns):
+  if fn is None:
+    raise Exception('Unknown function: '+orig_fn_names[i])
 functions = orig_fns[::-1]
 '''
 
@@ -14,12 +17,17 @@ if not len(functions):
     functions = orig_fns[::-1]
 try:
   target = target%s
+
   ri = ReflectedItem.NewItem('%s',target)
-  if ri:
+
+  existing_usage = scenario.Network.FunctionManager.GetFunctionUsage(ri)
+  if existing_usage is not None:
     scenario.Network.FunctionManager.RemoveUsage(ri)
+
   fn = functions.pop()
   usage = FunctionUsage()
   usage.ReflectedItem = ri
+
   fn.Usages.Add(usage)
   result["success"] += 1
 except:
