@@ -58,6 +58,11 @@ for minimum,maximum in zip(mins,maxs):
     result.append((minimum.Key,minimum.Value,maximum.Key,maximum.Value))
 '''
 
+STORAGE_PROPERTY_ALIASES = {
+    'RainfallInMetresPerSecond':'StorageInternal.RainfallInMetresPerSecond',
+    'EvaporationInMetresPerSecond':'StorageInternal.EvaporationInMetresPerSecond'
+}
+
 def path_query(path):
     if path is None:
         return ''
@@ -71,6 +76,8 @@ class VeneerStorageActions(VeneerNetworkElementActions):
         self.node_actions = node_actions
         self._name_accessor = self.node_actions._name_accessor
         super(VeneerStorageActions, self).__init__(node_actions._ironpy)
+        self._aliases.update(**STORAGE_PROPERTY_ALIASES)
+
         for release in RELEASE_CLASSES.keys():
             def method(r):
                 def add_release_of_type(self,release_table=None,outlet=0,name=None,nodes=None):

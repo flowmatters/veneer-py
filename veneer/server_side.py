@@ -686,6 +686,7 @@ class VeneerNetworkElementActions(object):
         self._pvr_element_name = ''
         self._build_pvr_accessor = self._build_accessor
         self._pvr_attribute_prefix = ''
+        self._aliases = {}
         self.name_columns = ['NetworkElement']
         self.query_params = []
 
@@ -696,6 +697,9 @@ class VeneerNetworkElementActions(object):
         if not self._ns is None:
             ns += ',' + (','.join(_stringToList(self._ns)))
         return ns
+
+    def _translate_property(self,prop):
+        return self._aliases.get(prop,prop)
 
     def help(self, param=None, **kwargs):
         if not param:
@@ -728,6 +732,7 @@ class VeneerNetworkElementActions(object):
         '''
         Return the values of a particular parameter used in a particular context
         '''
+        parameter = self._translate_property(parameter)
         accessor = self._build_accessor(parameter, **kwargs)
         resp = self._ironpy.get(accessor, kwargs.get('namespace', self._ns),skip_nulls=skip_nulls)
         if by_name:
@@ -744,6 +749,7 @@ class VeneerNetworkElementActions(object):
         '''
         Set the values of a particular parameter used in a particular context
         '''
+        parameter = self._translate_property(parameter)
         accessor = self._build_accessor(parameter, **kwargs)
         ns = self._ns
         if instantiate or enum:
@@ -753,6 +759,7 @@ class VeneerNetworkElementActions(object):
         return self._ironpy.set(accessor, values, ns, literal=literal, fromList=fromList, instantiate=instantiate)
 
     def add_to_list(self, parameter, value, instantiate=False, n=1, **kwargs):
+        parameter = self._translate_property(parameter)
         accessor = self._build_accessor(parameter, **kwargs)
         ns = value if instantiate else None
         return self._ironpy.add_to_list(accessor, value, namespace=ns, n=n, instantiate=True, allow_duplicates=True)
@@ -761,6 +768,7 @@ class VeneerNetworkElementActions(object):
         '''
         Return pointers (veneer URLs) to the data sources used as input to a particular parameter
         '''
+        parameter = self._translate_property(parameter)
         accessor = self._build_accessor(parameter, **kwargs)
         resp = self._ironpy.get_data_sources(
             accessor, kwargs.get('namespace', self._ns))
@@ -785,6 +793,7 @@ class VeneerNetworkElementActions(object):
         '''
         Assign an input time series to a model input input
         '''
+        parameter = self._translate_property(parameter)
         accessor = self._build_accessor(parameter, **kwargs)
         return self._ironpy.assign_time_series(accessor, values, from_list=fromList,
                                                literal=literal, column=column,
@@ -867,6 +876,7 @@ class VeneerNetworkElementActions(object):
         '''
         Apply a function, from the function manager to a given model parameter or input
         '''
+        parameter = self._translate_property(parameter)
         functions = _stringToList(functions)
         init = '{"success":0,"fail":0}\n'
         init += APPLY_FUNCTION_INIT % functions
@@ -884,6 +894,7 @@ class VeneerNetworkElementActions(object):
         '''
         Remove any function usages applies to `parameter` on elements matching the query (kwargs)
         '''
+        parameter = self._translate_property(parameter)
         init = '{"success":0,"fail":0}\n'
         param_path = parameter.split('.')
         parameter = param_path[-1]
