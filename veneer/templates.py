@@ -15,7 +15,8 @@ if not len(functions):
 try:
   target = target%s
   ri = ReflectedItem.NewItem('%s',target)
-  scenario.Network.FunctionManager.RemoveUsage(ri)
+  if ri:
+    scenario.Network.FunctionManager.RemoveUsage(ri)
   fn = functions.pop()
   usage = FunctionUsage()
   usage.ReflectedItem = ri
