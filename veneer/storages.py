@@ -2,6 +2,7 @@ from types import MethodType
 import pandas as pd
 import numpy as np
 from .server_side import VeneerNetworkElementActions
+from .utils import _quote_string
 
 LOAD_LVA_SCRIPTLET = '''
 ignoreExceptions=False
