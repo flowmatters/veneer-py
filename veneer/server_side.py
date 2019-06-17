@@ -1760,6 +1760,9 @@ class VeneerSimulationActions():
 #        data = result['Response']['Value'] if result['Response'] else result['Response']
         return self._ironpy.simplify_response(result['Response'])
 
+    def timestep_in_seconds(self):
+        return self._ironpy.get('scenario.CurrentConfiguration.TimeStep.span.TotalSeconds')
+
     def get_assurance_rules(self):
         columns = ['Category', 'Name', 'LogLevel']
 
