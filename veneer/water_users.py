@@ -4,7 +4,8 @@ from .utils import _quote_string
 
 DEMAND_TYPES={
     'timeseries':'RiverSystem.DemandModels.TimeSeries.TimeSeriesDemandNodeModel',
-    'irrigator':'RiverSystem.DemandModels.Irrigator.IrrigatorDemand'
+    'irrigator':'RiverSystem.DemandModels.Irrigator.IrrigatorDemand',
+    'monthly_pattern':'RiverSystem.DemandModels.MonthlyPattern.MonthlyDemandNodeModel'
 }
 
 ADD_DEMAND_SCRIPTLET='''
