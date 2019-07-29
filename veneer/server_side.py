@@ -1623,6 +1623,17 @@ class VeneerFunctionActions():
     def create_functions(self, names, general_equation, params=[[]], name_params=None):
         '''
         Create one function, or multiple functions based on a pattern
+
+        names: Either a list of function names OR a generic name to be filled in using the values of name_params
+
+        general_equation: A general equation with %%s, %%f, etc substitution characters where params will be included
+
+        params: A list of parameters to the general_equation.
+                These can be anything, but will often be the names of modelled variables, and/or scalars
+
+        name_params: A list of tuples, containing the name parameters to substitute into the names (if a template name is provided)
+
+        Returns a dictionary with keys created and failed, each a list of function names
         '''
         names = _stringToList(names)
         if len(names) == 1:
