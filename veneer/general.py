@@ -375,6 +375,9 @@ class Veneer(object):
         if run_async:
             return conn
 
+        return self._wait_for_run(conn)
+
+    def _wait_for_run(self,conn):
         resp = conn.getresponse()
         code = resp.getcode()
         if code == 302:
