@@ -952,17 +952,19 @@ class VeneerNetworkElementActions(object):
 
         return self._tabulate_properties(properties, values, model_type, **kwargs)
 
-    def _tabulate_properties(self, property_getter, value_getter, model_type=None, _property_lookup=None, _names=None, **kwargs):
+    def _tabulate_properties(self, property_getter, value_getter, model_type=None, _property_lookup=None, _all_properties=None, _names=None, **kwargs):
         all_models = self.get_models(skip_nulls=False,**kwargs)
         if _property_lookup is None:
             _property_lookup = {m: [] if m is None else property_getter(m) for m in set(all_models)}
+        if _all_properties is None:
+            _all_properties = {m: [] if m is None else self._ironpy.find_properties(m) for m in set(all_models)}
 
         if _names is None:
             _names = list(self.enumerate_names(**kwargs))
 
         if model_type is None:
             models = set(all_models)
-            return {m: None if m is None else self._tabulate_properties(property_getter, value_getter, m, _property_lookup, _names, **kwargs) for m in set(models)}
+            return {m: None if m is None else self._tabulate_properties(property_getter, value_getter, m, _property_lookup, _all_properties, _names, **kwargs) for m in set(models)}
 
         model_type = self._ironpy.expand_model(model_type)
         table = {}
@@ -974,7 +976,7 @@ class VeneerNetworkElementActions(object):
             values = value_getter(p, **kwargs)
 
             for m in all_models:
-                if not p in _property_lookup[m]:
+                if not p in _all_properties[m]:
                     continue
 
                 if m == model_type:
