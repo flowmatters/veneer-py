@@ -67,3 +67,11 @@ def name_for_fu(result):
     '''
     return name_for_fu_and_sc(result).split(':')[0]
 
+def name_template(template):
+    import string
+    template = string.Template(template)
+    def fn(result):
+        return template.substitute(result)
+    return fn
+
+
