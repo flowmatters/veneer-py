@@ -1642,8 +1642,8 @@ class VeneerFunctionActions():
             if name_params:
                 names = ['$' + _variable_safe_name(names[0] % name_param_set)
                          for name_param_set in name_params]
-        else:
-            names = ['%s_%d' % (names[0], d) for d in range(len(params))]
+            else:
+                names = ['%s_%d' % (names[0], d) for d in range(len(params))]
 
         functions = list(
             zip(names, [general_equation % param_set for param_set in params]))
