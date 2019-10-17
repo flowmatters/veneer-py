@@ -1649,6 +1649,7 @@ class VeneerFunctionActions():
             zip(names, [general_equation % param_set for param_set in params]))
         script = self._ironpy._init_script()
         script += 'import RiverSystem.Functions.Function as Function\n'
+        script += 'import RiverSystem.Utils.UnitLibrary as UnitLibrary\n'
         script += VALID_IDENTIFIER_FN
         script += 'functions=%s\n\n' % functions
         script += 'result={"created":[],"failed":[]}\n'
@@ -1729,6 +1730,7 @@ class VeneerFunctionActions():
     def set_options(self, option, values, fromList=False, functions=None, literal=False):
         accessor = self._accessor(option, functions)
         ns = 'RiverSystem.Management.ExpressionBuilder.TimeOfEvaluation as TimeOfEvaluation'
+        ns += '\nimport RiverSystem.Utils.UnitLibrary as UnitLibrary\n'
         return self._ironpy.set(accessor, values, ns, literal=literal, fromList=fromList)
 
     def set_time_of_evaluation(self, toe, fromList=False, functions=None):
