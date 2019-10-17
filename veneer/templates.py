@@ -103,9 +103,19 @@ elif len(pvrs)>1:
 name_exists = scenario.Network.FunctionManager.Variables.Any(lambda v: v.Name==var_name)
 if match and valid_identifier(var_name) and not name_exists:
     mv = ModelledVariable()
-    mv.AttributeRecordingStateName = attribute_name
+    try:
+      mv.AttributeRecordingStateName = attribute_name
+    except:
+      from TIME.ScenarioManagement import RecordableItemTransitionUtil
+      strings = match.ElementRecorder.RecordableItems.Select(lambda ri: RecordableItemTransitionUtil.GetLegacyKeyString(ri)).ToList()
+
+      matching_item = match.ElementRecorder.RecordableItems.FirstOrDefault(lambda ri : RecordableItemTransitionUtil.GetLegacyKeyString(ri).endswith(attribute_name))
+
+      if matching_item is None:
+        mv.AssignedRecordableItemKey = RecordableItemTransitionUtil.GetKeyForDisplayName(match,attribute_name)
+      else:
+        mv.AssignedRecordableItemKey = matching_item.Key
     assert match.ElementRecorder
-    assert match.ElementRecorder.RecordableAttributes
     mv.ProjectViewRow = match
     mv.Name = var_name
     mv.DateRange = scenario.Network.FunctionManager.DateRanges[0]
