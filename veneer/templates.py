@@ -12,7 +12,10 @@ functions = orig_fns[::-1]
 '''
 
 APPLY_FUNCTION_LOOP='''
+ignoreExceptions=True
+assert target is not None
 ignoreExceptions=False
+
 if not len(functions):
     functions = orig_fns[::-1]
 try:
@@ -89,6 +92,7 @@ attribute_name = '%s'
 pvrs = [pvr for pvr in pvrs if System.String.IsNullOrEmpty(attribute_name) or pvr.ElementName.StartsWith(element_name)]
 match=None
 var_name = names.pop()
+
 if len(pvrs)==1:
     # Nested
     #print('Found one PVR')
