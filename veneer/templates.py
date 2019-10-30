@@ -154,3 +154,9 @@ for pvr in pvrs:
   for attr in pvr.ElementRecorder.RecordableAttributes:
     result[pvr.ElementName].append(attr.KeyString)
 '''
+
+
+GET_TIME_PERIODS='''
+from RiverSystem.Management.ExpressionBuilder import DateRangeListUtility
+result = DateRangeListUtility.DateRanges().Select(lambda dr: dr.Name)
+'''

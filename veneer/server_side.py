@@ -1760,6 +1760,9 @@ class VeneerFunctionActions():
         toe = ['TimeOfEvaluation.%s' % s for s in toe]
         return self.set_options('EvaluationTimes', toe, fromList=True, functions=functions)
 
+    def get_known_time_periods(self):
+        script = self._ironpy._init_script() + GET_TIME_PERIODS
+        return self._ironpy.simplify_response(self._ironpy._safe_run(script)['Response'])
 
 class VeneerSimulationActions():
     def __init__(self, ironpython):
