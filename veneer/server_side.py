@@ -681,6 +681,14 @@ class VeneerSourceUIHelpers(object):
 
         self._ironpy._safe_run(script)
 
+    def get_application_logs(self):
+        script='''
+        import TIME.Management.Log as Log
+        messages = Log.GetAllMessages()
+        result = [m.Message for m in messages]
+        '''
+        logs = [val['Value'] for val in self.runScript(script)['Response']['Value']]
+        return logs
 
 class VeneerNetworkElementActions(object):
     def __init__(self, ironpython):
