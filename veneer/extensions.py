@@ -126,6 +126,7 @@ def network_as_dataframe(self):
     try:
         from geopandas import GeoDataFrame
         result = GeoDataFrame.from_features(self['features'])
+        result['veneer_id'] = result['id']
         result['id'] = [f['id'] for f in self['features']]
         return result
     except Exception as e:
