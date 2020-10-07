@@ -6,10 +6,17 @@ from .utils import SearchableList
 
 _WU_ICON='/resources/WaterUserNodeModel'
 
+def _feature_id(f):
+    if hasattr(f,'keys'):
+        if 'properties' in f:
+            return f['properties'].get('id',f.get('id',None))
+        return f.get('id',None)
+    return f
+
 def _node_id(node):
     if hasattr(node,'keys'):
         if 'properties' in node:
-            return node['properties'].get('id',node['id'])
+            return node['properties'].get('id',node.get('id',None))
         return node['id']
     return node
 
@@ -45,7 +52,7 @@ def network_upstream_links(self,node_or_link):
     features = self['features']
     source = features.find_by_id(_node_id(node_or_link))[0]
     if source['properties']['feature_type']=='node':
-        node = source['id']
+        node = _feature_id(source)
     else:
         node = source['properties']['from_node']
 
@@ -127,7 +134,7 @@ def network_as_dataframe(self):
         from geopandas import GeoDataFrame
         result = GeoDataFrame.from_features(self['features'])
         result['veneer_id'] = result['id']
-        result['id'] = [f['id'] for f in self['features']]
+        result['id'] = [_feature_id(f) for f in self['features']]
         return result
     except Exception as e:
         print('Could not create GeoDataFrame. Using regular DataFrame.')
@@ -180,7 +187,7 @@ def network_partition(self,key_features,new_prop):
                 return downstream_links[0]['properties'][new_prop]
 
             # Just one downstream link, usual case
-            ds_feature_id = downstream_links[0]['id']
+            ds_feature_id = _feature_id(downstream_links[0])
 
         ds_feature = features.find_by_id(ds_feature_id)[0]
         key = attribute_next_down(ds_feature)
@@ -195,13 +202,13 @@ def network_upstream_features(self,node):
     links = self.upstream_links(node)
     result += links._list
     for l in links:
-        catchment = self['features'].find_by_link(l['id'])
+        catchment = self['features'].find_by_link(_feature_id(l))
         if catchment is not None:
             result += catchment._list
         
         upstream_node = self['features'].find_by_id(l['properties']['from_node'])[0]
         result.append(upstream_node)
-        result += self.upstream_features(upstream_node['id'])._list
+        result += self.upstream_features(_feature_id(upstream_node))._list
     return SearchableList(result,nested=['properties'])
 
 def network_plot(self,nodes=True,links=True,catchments=True,ax=None,zoom=0.05):
