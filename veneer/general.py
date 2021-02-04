@@ -812,9 +812,10 @@ def read_rescsv(fn):
 
     attribute_names = config.splitlines()[-1].split(',')
     attributes = pd.DataFrame(
-        [dict(zip(attribute_names, line.split(','))) for line in headers.splitlines()[1:]])
+        [dict(zip(attribute_names, line.split(','))) for line in headers.splitlines()[1:-1]])
 
-    columns = ['Date'] + list(attributes.Name)
+    columns = attributes.WaterFeatureType + ': ' + attributes.Site + ': ' + attributes.Structure
+    columns = ['Date'] + list(columns)
     data = pd.read_csv(io.StringIO(body), header=None, index_col=0,
                        parse_dates=True, dayfirst=True, names=columns)
 
