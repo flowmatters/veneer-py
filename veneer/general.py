@@ -119,14 +119,20 @@ class Veneer(object):
 
         NOTE: CSV responses are currently only available for time series results
         '''
+        query_url = self.prefix + url
         if PRINT_URLS:
-            print("*** %s ***" % (url))
+            print("*** %s - %s ***" % (url, query_url))
 
-        conn = hc.HTTPConnection(self.host, port=self.port)
-        conn.request('GET', quote(url + self.data_ext),
-                     headers={"Accept": "text/csv"})
-        resp = conn.getresponse()
-        text = resp.read().decode('utf-8')
+        if self.protocol == 'file':
+            query_url += '.csv'
+            print(query_url)
+            text = open(query_url)
+        else:
+            conn = hc.HTTPConnection(self.host, port=self.port)
+            conn.request('GET', quote(url + self.data_ext),
+                        headers={"Accept": "text/csv"})
+            resp = conn.getresponse()
+            text = resp.read().decode('utf-8')
 
         result = read_veneer_csv(text)
         if PRINT_ALL:
@@ -392,7 +398,9 @@ class Veneer(object):
         return _extend_network(res)
 
     def model_table(self,table='fus'):
-        return pd.read_csv(self.retrieve_csv('/tables/%s'%table))
+        df = pd.read_csv(self.retrieve_csv('/tables/%s'%table))
+        df = df.set_index('Catchment')
+        return df
 
     def functions(self):
         '''
