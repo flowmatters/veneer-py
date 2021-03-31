@@ -30,6 +30,8 @@ def _transform_node_type_name(n):
         return n
     if n.endswith('Node'):
         return n + 'Model'
+    if n=='InjectedFlow':
+        return n
     return n + 'NodeModel'
 
 
