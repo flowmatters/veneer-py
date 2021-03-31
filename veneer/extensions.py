@@ -91,6 +91,21 @@ def network_models(self):
 
     return node_elements
 
+def network_headwater_nodes(self):
+    return [f for f in self['features'] if f['properties']['feature_type']=='node' and len(self.upstream_links(f))==0]
+
+def network_headwater_links(self):
+    hw_nodes = self.headwater_nodes()
+    return sum([self.downstream_links(n)._list for n in hw_nodes],[])
+
+def network_headwater_catchments(self):
+    hw_links = self.headwater_links()
+    hw_catchments = [(l['id'],self['features'].find_by_link(l['id'])) for l in hw_links]
+    for lnk,catchments in hw_catchments:
+        if not len(catchments):
+            print('No catchment draining to link',lnk)
+    return [catchments[0] for _,catchments in hw_catchments if len(catchments)]
+
 def find_network_model(self, model_name):
     '''
     Find information about a node type by its resource name
