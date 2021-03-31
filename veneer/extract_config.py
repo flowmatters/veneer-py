@@ -4,6 +4,7 @@ import os
 import pandas as pd
 from veneer.actions import get_big_data_source
 import veneer
+from string import Template
 
 def _BEFORE_BATCH_NOP(slf,x,y):
     pass
@@ -46,6 +47,7 @@ class SourceExtractor(object):
     def __init__(self,v,dest,results=None,climate_data_sources=['Climate Data'],progress=print):
         self.v=v
         self.dest=dest
+        self.current_dest=None
         self.results = results
         if self.results is None:
             self.results = os.path.join(self.dest,'Results')
@@ -221,6 +223,61 @@ class SourceExtractor(object):
         for (storage,release),table in releases.items():
             self.write_csv('storage_release_%s_%s'%(storage,release),table)
 
+    def _write_data_source_timeseries(self,data_source_map,ref_col,fn_template):
+        fn_template = Template(fn_template)
+        SEC_TO_DAY=24*60*60
+        ML_TO_M3 = 1e3
+        ML_PER_DAY_TO_M3_PER_SEC=ML_TO_M3/SEC_TO_DAY
+        MG_TO_KG=1e-6
+        L_TO_M3=1e-3
+        MG_PER_LITER_TO_KG_PER_M3 = MG_TO_KG/L_TO_M3
+        for _,row in data_source_map.iterrows():
+            data_source_path = row[ref_col]
+            if (data_source_path is None) or not data_source_path.startswith('/dataSources/'):
+                continue
+                
+            comp = data_source_path.split('/')
+            data_source = comp[2]
+            input_set = comp[3]
+            column = comp[4]
+
+            df = self.v.data_source_item(data_source,column,input_set)
+
+            for col in df.columns:
+                if not hasattr(df[col],'units'):
+                    print('No units on ',col)
+                    continue
+                units = df[col].units
+                if units=='ML/d':
+                    df[col] *= ML_PER_DAY_TO_M3_PER_SEC
+                elif units=='mg/L':
+                    df[col] *= MG_PER_LITER_TO_KG_PER_M3
+                df[col].units = units
+
+            self.write_csv(fn_template.substitute(row),df)
+
+    def _extract_external_inflows(self):
+        inflow_params = self.v.model.node.tabulate_parameters(node_types='InjectedFlow')
+
+        if not len(inflow_params):
+            self.progress('No inflow nodes in model')
+            return
+
+        inflow_params = inflow_params['RiverSystem.Nodes.Inflow.InjectedFlow']
+        inflow_data_sources = self.v.model.node.tabulate_inputs('InjectedFlow')
+        self._write_data_source_timeseries(inflow_data_sources,'Flow','timeseries-inflow-${NetworkElement}')
+
+        played_constituents = self.v.model.node.constituents.tabulate_inputs(node_types='InjectedFlow',aspect='played')
+        played_constituents = played_constituents['RiverSystem.Constituents.ConstituentPlayedValue']
+
+        self._write_data_source_timeseries(played_constituents,
+                                           'ConstituentConcentration',
+                                           'timeseries-inflow-concentration-${Constituent}-${NetworkElement}')
+
+        self._write_data_source_timeseries(played_constituents,
+                                           'ConstituentLoad',
+                                           'timeseries-inflow-load-${Constituent}-${NetworkElement}')
+
     def extract_source_config(self):
         self.current_dest = self.dest
         self._ensure()
@@ -231,6 +288,7 @@ class SourceExtractor(object):
         self._extract_structure()
         self._extract_storage_configuration()
         self._extract_demand_configuration()
+        self._extract_external_inflows()
 
         self._extract_runoff_configuration()
         self._extract_generation_configuration()
