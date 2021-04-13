@@ -67,7 +67,8 @@ class SourceExtractor(object):
 
     def write_csv(self,fn,df):
         self._ensure()
-        df.to_csv(os.path.join(self.current_dest,fn+'.csv'))
+        fn = os.path.join(self.current_dest,fn+'.csv')+'.gz'
+        df.to_csv(fn,compression='gzip')
 
     def _extract_structure(self):
         fus = set(self.v.model.catchment.get_functional_unit_types())
