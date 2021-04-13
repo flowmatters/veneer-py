@@ -43,6 +43,13 @@ CONSTITUENT_VARIABLE_LABELS=[
     'storage_mass'
 ]
 
+CONSTITUENT_NAME_FN=[
+    veneer.name_for_location,
+    veneer.name_for_fu_and_sc,
+    veneer.name_for_location,
+    veneer.name_for_location
+]
+
 class SourceExtractor(object):
     def __init__(self,v,dest,results=None,climate_data_sources=['Climate Data'],progress=print):
         self.v=v
