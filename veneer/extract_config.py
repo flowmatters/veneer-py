@@ -106,12 +106,12 @@ class SourceExtractor(object):
 
         # self.write_csv('climate',climate)
 
-    def _extract_models_and_parameters(self,path,model_fn,param_prefix):
+    def _extract_models_and_parameters(self,path,model_fn,param_prefix,**kwargs):
         source = self.v.model
         for p in path.split('.'):
             source = getattr(source,p)
-        models = source.model_table()
-        params = source.tabulate_parameters()
+        models = source.model_table(**kwargs)
+        params = source.tabulate_parameters(**kwargs)
         self.write_csv(model_fn,models)
         for model_type, table in params.items():
             self.write_csv('%s-%s'%(param_prefix,model_type),table)
@@ -197,12 +197,13 @@ class SourceExtractor(object):
             self.progress('No storages in model')
             return
 
-        self.progress('Extracting information for %d storages'%len(params))
         params = params['RiverSystem.Nodes.StorageNodeModel']
+        self.progress('Extracting information for %d storages'%len(params))
 
         self.write_csv('storage_params',params)
 
         for storage in list(params['NetworkElement']):
+            self.progress('Extracting information for storage %s'%storage)
             lva = self.v.model.node.storages.lva(storage)
             self.write_csv('storage_lva_%s'%storage,lva)
 
@@ -223,6 +224,9 @@ class SourceExtractor(object):
 
         for (storage,release),table in releases.items():
             self.write_csv('storage_release_%s_%s'%(storage,release),table)
+
+        self.progress('Extracting storage water quality configuration')
+        self._extract_models_and_parameters('node.constituents','storage-wq','swq',nodes=list(params.NetworkElement),aspect='model')
 
     def _write_data_source_timeseries(self,data_source_map,ref_col,fn_template):
         fn_template = Template(fn_template)
