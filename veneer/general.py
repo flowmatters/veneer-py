@@ -750,6 +750,94 @@ class Veneer(object):
 
         return result
 
+    def summarise_timeseries(self,
+                             column_attr,
+                             run=None,
+                             run_data=None,
+                             criteria={},
+                             timestep='daily',
+                             index_attr=None,
+                             scale=1.0,
+                             renames={},
+                             report_interval=5000):
+        '''
+        column_attr: meta attribute (derived from criteria) used to name the columns of dataframes
+        run,
+        run_results
+        criteria: dict-like object with keys matching retrieval (eg NetworkElement, etc),
+                but where the values of these search criteria can be regular expressions with named groups.
+                These named groups are used in summarising the data and attributing the resulting tables
+        timestep: daily, monthly, annual, mean-monthly, mean-annual or None
+        index_attr: if timestep is None, index_attr should...
+        scale: A scaling factor for the data (eg to change units)
+        renames: A nested dictionary of tags and tag values to rename
+        report_interval
+        '''
+
+        def rename_tags(tags,renames):
+            result = {}
+            for k,v in tags.items():
+                result[k] = v
+                if not k in renames:
+                    continue
+                
+                lookup = renames[k]
+                if not v in lookup:
+                    continue
+                result[k] = lookup[v]
+            return result
+
+        units_seen = []
+        suffix = self.timeseries_suffix(timestep or 'annual')
+        count = 0
+        if run_data is None:
+            run_data = self.retrieve_run(run)
+
+        criteria = [(k,re.compile(v, re.IGNORECASE)) for k,v in criteria.items()]
+        tag_order = None
+        summaries = {}
+
+        for ix,result in enumerate(run_data['Results']):
+            matching = True
+            tags = {}
+            for criteria_key, criteria_pattern in criteria:
+                match = criteria_pattern.match(result[criteria_key])
+                if match is None:
+                    matching = False
+                    break
+                tags.update(rename_tags(match.groupdict(),renames))
+
+            if not matching:
+                continue
+            
+            column = tags.pop(column_attr)
+            if tag_order is None:
+                tag_order = list(tags.keys())
+
+            tag_values = tuple([tags[k] for k in tag_order])
+            
+            if not tag_values in summaries:
+                summaries[tag_values] = {}
+            table = summaries[tag_values]
+
+            data = self.retrieve_json(result['TimeSeriesUrl'] + suffix)
+            assert 'Events' in data
+            
+            units = data['Units']
+            if not units in units_seen:
+                print('Units from %s = %s'%(result['TimeSeriesUrl'],units))
+                units_seen.append(units)
+
+            table[column] = data['Events']
+
+            count += 1
+            if count and (count % report_interval)==0:
+                print('Match %d, (row %d/%d)'%(count,ix,len(run_data['Results'])),result['TimeSeriesUrl'],'matches',column, tags)
+        print('Units seen: %s'%(','.join(units_seen),))
+
+        return [(dict(zip(tag_order,tags)),self._create_timeseries_dataframe(table)*scale) for tags,table in summaries.items()]
+
+
     def parse_veneer_date(self, txt):
         if hasattr(txt, 'strftime'):
             return txt
