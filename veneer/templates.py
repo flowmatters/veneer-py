@@ -184,5 +184,21 @@ for pvr in pvrs:
 
 GET_TIME_PERIODS='''
 from RiverSystem.Management.ExpressionBuilder import DateRangeListUtility
-result = DateRangeListUtility.DateRanges().Select(lambda dr: dr.Name)
+#result = DateRangeListUtility.DateRanges().Select(lambda dr: dr.Name)
+result = scenario.Network.FunctionManager.DateRanges.Select(lambda dr: dr.Name)
+'''
+
+SET_TIME_PERIODS='''
+from RiverSystem.Management.ExpressionBuilder import DateRangeListUtility
+date_range = scenario.Network.FunctionManager.DateRanges.First(lambda dr: dr.Name=='%s')
+targets = %s
+
+fm = scenario.Network.FunctionManager
+result = []
+for variable in fm.Variables:
+    if (targets is not None) and variable.Name not in targets:
+        result.append('%%s not in targets'%%variable.Name)
+        continue
+    result.append('Updating %%s to DateRange=%%s'%%(variable.Name,date_range.Name))
+    variable.DateRange = date_range
 '''

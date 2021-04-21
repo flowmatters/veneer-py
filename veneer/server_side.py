@@ -1786,6 +1786,11 @@ class VeneerFunctionActions():
         script = self._ironpy._init_script() + GET_TIME_PERIODS
         return self._ironpy.simplify_response(self._ironpy._safe_run(script)['Response'])
 
+    def set_modelled_variable_time_period(self,tp,variables=None):
+        template = self._ironpy._init_script() + SET_TIME_PERIODS
+        script = template%(tp,variables)
+        self._ironpy._safe_run(script)
+
 class VeneerSimulationActions():
     def __init__(self, ironpython):
         self._ironpy = ironpython
