@@ -1632,7 +1632,7 @@ class VeneerFunctionActions():
 
         return accessor
 
-    def create_functions(self, names, general_equation, params=[[]], name_params=None):
+    def create_functions(self, names, general_equation, params=[[]], name_params=None, use_format=False):
         '''
         Create one function, or multiple functions based on a pattern
 
@@ -1655,8 +1655,13 @@ class VeneerFunctionActions():
             else:
                 names = ['%s_%d' % (names[0], d) for d in range(len(params))]
 
-        functions = list(
-            zip(names, [general_equation % param_set for param_set in params]))
+        if use_format:
+            functions = list(
+                zip(names, [general_equation.format(**param_set) for param_set in params]))
+        else:
+            functions = list(
+                zip(names, [general_equation % param_set for param_set in params]))
+
         script = self._ironpy._init_script()
         script += 'import RiverSystem.Functions.Function as Function\n'
         script += 'import RiverSystem.Utils.UnitLibrary as UnitLibrary\n'
