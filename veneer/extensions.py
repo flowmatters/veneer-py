@@ -226,6 +226,19 @@ def network_upstream_features(self,node):
         result += self.upstream_features(_feature_id(upstream_node))._list
     return SearchableList(result,nested=['properties'])
 
+def network_is_downstream_of(self,feature,possibly_upstream_feature):
+    path = self.path_between(possibly_upstream_feature,feature)
+    return path is not None
+
+def network_catchment_for_link(self,link):
+    link = _feature_id(link)
+    for f in self['features']:
+        if f['properties']['feature_type'] != 'catchment':
+            continue
+        if f['properties']['link'] == link:
+            return f
+    return None
+
 def network_plot(self,nodes=True,links=True,catchments=True,ax=None,zoom=0.05):
     import matplotlib.pyplot as plt
     from matplotlib.offsetbox import OffsetImage, AnnotationBbox
@@ -310,6 +323,8 @@ def add_network_methods(target):
     for f_name, f in funcs.items():
         if f_name.startswith('network_'):
             f_name = f_name.replace('network_', '')
+        else:
+            continue
         setattr(target, f_name, MethodType(f, target))
 
 def _apply_time_series_helpers(dataframe):
