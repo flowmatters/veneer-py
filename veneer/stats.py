@@ -84,14 +84,14 @@ def intersect(obs,pred):
     if hasattr(obs,'intersect'):
         return obs.intersect(pred)
     idx = obs.index.intersection(pred.index)
-    return obs.ix[idx],pred.ix[idx]
+    return obs.loc[idx],pred.loc[idx]
 
 def nse(obs,pred):
     """
     Nash-Sutcliffe Efficiency
     """
     obs,pred = intersect(obs,pred)
-    pred = pred.ix[obs.index] # Filter values not present in
+    pred = pred.loc[obs.index] # Filter values not present in
     numerator = ((obs-pred)**2).sum()
     denominator = ((obs-obs.mean())**2).sum()
     return 1 - numerator/denominator
