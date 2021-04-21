@@ -129,6 +129,32 @@ else:
     result['failed'].append(var_name)
 '''
 
+CREATE_TS_VARIABLE_SCRIPT='''
+from RiverSystem.Functions.Variables import TimeSeriesVariable
+
+fm = scenario.Network.FunctionManager
+grp='%s'
+variables = %s
+columns = %s
+new_variables = []
+existing_variables = []
+for var_name, column in zip(variables,columns):
+    new_var = fm.Variables.FirstOrDefault(lambda v: v.Name==var_name)
+    if new_var is None:
+        new_var = TimeSeriesVariable()
+        new_var.Name = var_name
+        new_variables.append(var_name)
+    else:
+        existing_variables.append(var_name)
+
+    H.AssignTimeSeries(scenario,new_var,'Value',grp,column)
+    fm.Variables.Add(new_var)
+result = {
+    'created':new_variables,
+    'updated':existing_variables
+}
+'''
+
 VALID_IDENTIFIER_FN='''
 def valid_identifier(nm):
   from System.Text import RegularExpressions

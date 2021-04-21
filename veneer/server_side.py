@@ -1682,6 +1682,13 @@ class VeneerFunctionActions():
 #        data = result['Response']['Value'] if result['Response'] else result['Response']
         return self._ironpy.simplify_response(result['Response'])
 
+    def create_time_series_variables(self,variable_names,data_source,columns):
+        script=self._ironpy._init_script() + CREATE_TS_VARIABLE_SCRIPT%(data_source,variable_names,columns)
+        result = self._ironpy.run_script(script)
+        if not result['Exception'] is None:
+            raise Exception(result['Exception'])
+        return self._ironpy.simplify_response(result['Response'])
+
     def delete_variables(self, names):
         script = self._ironpy._init_script()
         script += 'names = %s\n' % names
