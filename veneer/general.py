@@ -517,16 +517,23 @@ class Veneer(object):
             if 'Events' in details[0]['TimeSeries']:
                 data_dict = {d['Name']: d['TimeSeries']['Events']
                              for d in details}
-                return self._create_timeseries_dataframe(data_dict, common_index=False)
+                df = self._create_timeseries_dataframe(data_dict, common_index=False)
+                for d in details:
+                    df[d['Name']].units = d['TimeSeries']['Units']
+                return df
 
             # Slim Time Series...
             ts = details[0]['TimeSeries']
+
             start_t = self.parse_veneer_date(ts['StartDate'])
             end_t = self.parse_veneer_date(ts['EndDate'])
             freq = ts['TimeStep'][0]
             index = pd.date_range(start_t, end_t, freq=freq)
             data_dict = {d['Name']: d['TimeSeries']['Values'] for d in details}
             df = pd.DataFrame(data_dict, index=index)
+            for d in details:
+                df[d['Name']].units = d['TimeSeries']['Units']
+
             extensions._apply_time_series_helpers(df)
             return df
 
@@ -592,21 +599,29 @@ class Veneer(object):
 
         def _transform(res):
             if 'TimeSeries' in res:
-                return self._create_timeseries_dataframe({name: res['TimeSeries']['Events']}, common_index=False)
+                df = self._create_timeseries_dataframe({name: res['TimeSeries']['Events']}, common_index=False)
+                df[df.columns[0]].units = res['TimeSeries']['Units']
+                return df
             elif 'Items' in res:
                 data_dict = {}
                 suffix = ''
+                units = {}
                 for item in res['Items']:
                     if len(res['Items']) > 1:
                         suffix = " (%s)" % item['Name']
 
                     if 'Details' in item:
+                        keys = ["%s%s" % (d['Name'], suffix) for d in item['Details']]
                         update = {
-                            ("%s%s" % (d['Name'], suffix)): d['TimeSeries']['Events'] for d in item['Details']}
-
+                            (key): d['TimeSeries']['Events'] for key,d in zip(keys,item['Details'])}
+                        for k,d in zip(keys,items['Details']):
+                            units[k] = d['TimeSeries']['Units']
                         data_dict.update(update)
 
-                return self._create_timeseries_dataframe(data_dict, common_index=False)
+                df = self._create_timeseries_dataframe(data_dict, common_index=False)
+                for k, v in units:
+                    df[k].units = v
+                return df
             return res
 
         if isinstance(result, list):
