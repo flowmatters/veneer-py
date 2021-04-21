@@ -96,22 +96,14 @@ class SourceExtractor(object):
 
     def _extract_runoff_configuration(self):
         self._extract_models_and_parameters('catchment.runoff','runoff_models','rr')
-        # runoff_models = self.v.model.catchment.runoff.model_table()
-        # runoff_params = self.v.model.catchment.runoff.tabulate_parameters()
-        # for model_type, table in runoff_params.items():
-        #     self.write_csv('rr-%s'%model_type,table)
-        # self.write_csv('runoff_models',runoff_models)
 
-        # runoff_inputs = self.v.model.catchment.runoff.tabulate_inputs('Dynamic_SedNet.Models.Rainfall.DynSedNet_RRModelShell')
+        self.progress('Getting climate data')
+        climate = pd.DataFrame()
+        for ds_name in self.climate_data_sources:
+            ds = get_big_data_source(self.v,ds_name,self.data_sources,self.progress)
+            climate = pd.concat([climate,ds],axis=1)
 
-        self.progress('!!!! Skipping climate data')
-        # self.progress('Getting climate data')
-        # climate = pd.DataFrame()
-        # for ds_name in self.climate_data_sources:
-        #     ds = get_big_data_source(self.v,ds_name,self.data_sources,self.progress)
-        #     climate = pd.concat([climate,ds],axis=1)
-
-        # self.write_csv('climate',climate)
+        self.write_csv('climate',climate)
 
     def _extract_models_and_parameters(self,path,model_fn,param_prefix,**kwargs):
         source = self.v.model
