@@ -94,6 +94,25 @@ class SourceExtractor(object):
         self.writeable('network.json').write(network_df.to_json())
         self.write_csv('fu_areas',fu_areas)
 
+    def _retrieve_input_timeseries(self,input_table,name_columns=['NetworkElement'],name_join=':'):
+        result = pd.DataFrame()
+        cols = set(input_table.columns) - set(name_columns)
+
+        for _,row in input_table.iterrows():
+            row_name = name_join.join([row[nc] for nc in name_columns])
+            for col in cols:
+                if pd.isna(row[col]) or not row[col]:
+                    continue
+                path = row[col]
+                name = f'{row_name} {col}'
+                path_components = path.split('/')
+                data_source = path_components[2]
+                input_set = path_components[3]
+                item = path_components[4]
+                time_series = self.v.data_source_item(data_source,item,input_set=input_set)
+                result[name] = time_series[time_series.columns[0]]
+        return result
+
     def _extract_runoff_configuration(self):
         self._extract_models_and_parameters('catchment.runoff','runoff_models','rr')
 
@@ -226,6 +245,13 @@ class SourceExtractor(object):
 
         self.progress('Extracting storage water quality configuration')
         self._extract_models_and_parameters('node.constituents','storage-wq','swq',nodes=list(params.NetworkElement),aspect='model')
+
+        self.progress('Extracting storage climate data')
+        input_map =  v.model.node.storages.tabulate_inputs()
+        if len(input_map):
+            input_map = input_map['RiverSystem.Nodes.StorageNodeModel']
+        storage_climate = self._retrieve_input_timeseries(input_map)
+        self.write_csv('storage_climate',storage_climate)
 
     def _write_data_source_timeseries(self,data_source_map,ref_col,fn_template):
         fn_template = Template(fn_template)
