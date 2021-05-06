@@ -45,7 +45,7 @@ GET_LVA_SCRIPTLET='''
 ignoreExcpeptions=False
 geo = target.StoreGeometry.DefiniedGeometrys[0].Geometry
 for row in geo:
-    result.append(row)
+    result.append((row.height,row.volume,row.surfaceArea))
 '''
 
 GET_RELEASE_TABLE_SCRIPTLET='''
@@ -139,8 +139,7 @@ class VeneerStorageActions(VeneerNetworkElementActions):
         Retrieve the Level/Volume/Area table for a given storage node
         '''
         code = GET_LVA_SCRIPTLET
-        res = self.apply(code,init='[]',nodes=[node])
-        vals = [eval(r) for r in res]
+        vals = self.apply(code,init='[]',nodes=[node])
         
         return pd.DataFrame(vals,columns=['level','volume','area'])
 
