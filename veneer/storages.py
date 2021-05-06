@@ -142,7 +142,7 @@ class VeneerStorageActions(VeneerNetworkElementActions):
         res = self.apply(code,init='[]',nodes=[node])
         vals = [eval(r) for r in res]
         
-        return pd.DataFrame(vals,columns=['level','area','volume'])
+        return pd.DataFrame(vals,columns=['level','volume','area'])
 
     def releases(self,nodes=None,path=None):
         if path is None:
