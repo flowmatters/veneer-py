@@ -303,6 +303,35 @@ def network_path_between(self,from_feature,to_feature):
         return None
     return SearchableList([immediate_down]+path_to._list,nested=['properties'])
 
+def network_connectivity_table(self):
+    import pandas as pd
+    nw_df = self.as_dataframe()
+
+    nodes = nw_df[nw_df.feature_type=='node']
+    relevant_nodes = nodes[~nodes.icon.str.contains('WaterUserNodeModel')]
+    links = nw_df[nw_df.feature_type=='link']
+
+    node_names = list(relevant_nodes.name)
+    link_names = list(links.name)
+    all_names = node_names + link_names
+    result = pd.DataFrame(index=all_names,columns=all_names,dtype='i8').fillna(0)
+    for _,link in links.iterrows():
+        link_name = link['name']
+        to_node_id = link.to_node
+        to_node = nodes[nodes.id==to_node_id].name.values[0]
+        to_node_type = nodes[nodes.id==to_node_id].icon.values[0].split('/')[-1]
+        if 'WaterUser' in to_node_type:
+            result = result[result.index!=link_name]
+            result = result[[c for c in result.columns if c != link_name]]
+            continue
+        result.loc[link_name,to_node]=1
+
+        from_node_id = link.from_node
+        from_node = nodes[nodes.id==from_node_id].name.values[0]
+        result.loc[from_node,link_name]=1
+
+    return result
+
 def add_network_methods(target):
     '''
     Attach extension methods to an object that represents a Veneer network.
