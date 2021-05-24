@@ -134,12 +134,26 @@ class SourceExtractor(object):
         for model_type, table in params.items():
             self.write_csv('%s-%s'%(param_prefix,model_type),table)
 
+    def _extract_piecewise_routing_tables(self):
+        piecewise_links = self.v.model.link.routing.get_param_values('link.Name if not i_0.FlowRouting.IsGeneric else None')
+        piecewise_links = [p for p in piecewise_links if p is not None]
+        res = {}
+        for pl in piecewise_links:
+            flows = self.v.model.link.routing.get_param_values('Piecewises.*IndexFlow',links=pl)
+            travel_times = self.v.model.link.routing.get_param_values('Piecewises.*TravelTime',links=pl)
+            df = pd.DataFrame({'IndexFlow':flows,'TravelTime':travel_times})
+            res[pl] = df
+            if not len(df):
+                self.progress(f'Expected piecewise routing table for link {pl}, but no rows')
+                continue
+            self.write_csv('piecewise-routing-%s'%(pl),df)
+
     def _extract_routing_configuration(self):
         self._extract_models_and_parameters('link.routing','routing_models','fr')
         self._extract_models_and_parameters('link.constituents','transportmodels','cr')
 
+        self._extract_piecewise_routing_tables()
         # link_models = self.v.model.link.routing.model_table()
-        # link_params = self.v.model.link.routing.tabulate_parameters() #'RiverSystem.Flow.StorageRouting')
 
         # transport_models = self.v.model.link.constituents.model_table()
         # transport_params = self.v.model.link.constituents.tabulate_parameters()
