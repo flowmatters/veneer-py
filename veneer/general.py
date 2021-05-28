@@ -222,6 +222,9 @@ class Veneer(object):
             return [int(i) for i in info['SourceVersion'].split('.')]
         return [0,0,0,0]
 
+    def scenario_info(self):
+        return self.retrieve_json('/')
+
     def configure_recording(self, enable=[], disable=[],run_async=False):
         '''
         Enabled and disable time series recording in the Source model.
