@@ -935,6 +935,23 @@ def read_rescsv(fn):
 
     return attributes, data
 
+def expand_run_results_metadata(run,network):
+    '''
+    Use to add additional metadata to a run results set. Useful for making more specific queries to
+    v.retrieve_multiple_time_series
+
+    Currently:
+    * Expands NetworkElement column to add 'feature_type' and 'node_type'
+
+    '''
+    features = network['features'].as_dataframe()
+    features['node_type'] = features['icon'].str.split('/',expand=True)[2]
+    features = features[['name','feature_type','node_type']]
+    results = run['Results'].as_dataframe()
+    merged = pd.merge(results,features,how='left',left_on='NetworkElement',right_on='name')
+    run = run.copy()
+    run['Results'] = merged.to_dict(orient='records')
+    return run
 
 if __name__ == '__main__':
     # Output
