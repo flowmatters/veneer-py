@@ -261,7 +261,7 @@ class SourceExtractor(object):
         self._extract_models_and_parameters('node.constituents','storage-wq','swq',nodes=list(params.NetworkElement),aspect='model')
 
         self.progress('Extracting storage climate data')
-        input_map =  v.model.node.storages.tabulate_inputs()
+        input_map =  self.v.model.node.storages.tabulate_inputs()
         if len(input_map):
             input_map = input_map['RiverSystem.Nodes.StorageNodeModel']
         storage_climate = self._retrieve_input_timeseries(input_map)
