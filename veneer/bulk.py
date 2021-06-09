@@ -9,6 +9,7 @@ import os
 import sys
 from glob import glob
 from veneer.general import MODEL_TABLES
+from veneer.actions import get_big_data_source
 
 class VeneerRetriever(object):
     '''
@@ -21,6 +22,7 @@ class VeneerRetriever(object):
                  retrieve_slim_ts=True,retrieve_single_ts=True,
                  retrieve_single_runs=True,retrieve_daily_for=[],
                  retrieve_ts_json=True,retrieve_ts_csv=False,
+                 retrieve_data_sources=True,
                  print_all = False, print_urls = False,
                  update_frequency = -1, logger=None):
         from .general import Veneer,log
@@ -37,6 +39,7 @@ class VeneerRetriever(object):
         self.retrieve_daily_for = retrieve_daily_for
         self.retrieve_ts_json=retrieve_ts_json
         self.retrieve_ts_csv=retrieve_ts_csv
+        self.retrieve_data_sources=retrieve_data_sources
         self.print_all = print_all
         self.print_urls = print_urls
         self.base_url = "%s://%s:%d" % (protocol,host,port)
@@ -50,12 +53,16 @@ class VeneerRetriever(object):
         if not os.path.exists(directory):
             os.makedirs(directory)
 
-    def save_data(self,base_name,data,ext,mode="b"):
+    def make_dest(self,base_name,ext):
         import os
-        base_name = os.path.join(self.destination,base_name + "."+ext)
-        directory = os.path.dirname(base_name)
+        full_name = os.path.join(self.destination,base_name + "."+ext)
+        directory = os.path.dirname(full_name)
         self.mkdirs(directory)
-        f = open(base_name,"w"+mode)
+        return full_name
+
+    def save_data(self,base_name,data,ext,mode="b"):
+        full_name = self.make_dest(base_name,ext)
+        f = open(full_name,"w"+mode)
         f.write(data)
         f.close()
     
@@ -199,6 +206,18 @@ class VeneerRetriever(object):
             if var['TimeSeries']: self.retrieve_json(var['TimeSeries'])
             if var['PiecewiseFunction']: self.retrieve_json(var['PiecewiseFunction'])
 
+    def retrieve_data_sources_values(self):
+        data_sources = self._veneer.data_sources()
+        for ds_spec in data_sources:
+            ds_name = ds_spec['Name']
+            try:
+                ds = get_big_data_source(self.v,ds_name,data_sources)
+            except:
+                self.log(f'Unable to retrieve datasource: {ds_name}. Skipping')
+                continue
+            fn = self.make_dest(f'dataSources/{ds_name}','csv')
+            ds.to_csv(fn)
+
     def retrieve_all(self,clean=False):
         if os.path.exists(self.destination):
             if clean:
@@ -210,6 +229,9 @@ class VeneerRetriever(object):
         for tbl in MODEL_TABLES:
             self.retrieve_csv('/tables/%s'%tbl)
 
+        if self.retrieve_data_sources:
+            self.retrieve_data_sources_values()
+
         self.update('Downloading runs',5)
         self.retrieve_runs()
         self.update('Downloaded runs',90)
@@ -218,7 +240,6 @@ class VeneerRetriever(object):
         self.retrieve_variables()
         self.retrieve_json("/inputSets")
         self.retrieve_json("/")
-
 
         network = self.retrieve_json("/network")
         icons_retrieved = []
