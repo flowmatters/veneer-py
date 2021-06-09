@@ -211,9 +211,10 @@ class VeneerRetriever(object):
         for ds_spec in data_sources:
             ds_name = ds_spec['Name']
             try:
-                ds = get_big_data_source(self.v,ds_name,data_sources)
-            except:
+                ds = get_big_data_source(self._veneer,ds_name,data_sources)
+            except Exception as e:
                 self.log(f'Unable to retrieve datasource: {ds_name}. Skipping')
+                self.log(str(e))
                 continue
             fn = self.make_dest(f'dataSources/{ds_name}','csv')
             ds.to_csv(fn)
