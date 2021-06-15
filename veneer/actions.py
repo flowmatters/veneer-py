@@ -56,6 +56,7 @@ StreamingOutputManager.DisableStreaming(scenario)
 def get_big_data_source(v,ds_name,data_sources=None,progress=print):
     import pandas as pd
     data_source = [ds for ds in data_sources if ds['FullName'].endswith(ds_name)][0]
+    ds_name = data_source['id'].split('/')[-1]
     ts_names = [ts['Name'] for ts in data_source['Items'][0]['Details']]
     ts_dict = {}
     for i, n in enumerate(ts_names):
