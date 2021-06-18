@@ -905,7 +905,7 @@ def to_source_date(the_date):
     return the_date
 
 
-def read_rescsv(fn):
+def read_rescsv(fn,header_attributes=['WaterFeatureType','Site','Structure']):
     '''
     Read a .res.csv file saved from Source
 
@@ -928,7 +928,10 @@ def read_rescsv(fn):
     attributes = pd.DataFrame(
         [dict(zip(attribute_names, line.split(','))) for line in headers.splitlines()[1:-1]])
 
-    columns = attributes.WaterFeatureType + ': ' + attributes.Site + ': ' + attributes.Structure
+    columns = attributes[header_attributes[0]].copy()
+    for ha in header_attributes[1:]:
+        columns += ': ' + attributes[ha]
+
     columns = ['Date'] + list(columns)
     data = pd.read_csv(io.StringIO(body), header=None, index_col=0,
                        parse_dates=True, dayfirst=True, names=columns)
