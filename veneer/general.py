@@ -513,8 +513,11 @@ class Veneer(object):
         Note: Will include the each time series associated with the data source IN FULL
         '''
         prefix = '/dataSources/'
+        name = name.replace('%2F','%252F')
+
         if not name.startswith(prefix):
             name = prefix + name
+
         result = self.retrieve_json(name)
 
         def _transform_details(details):
