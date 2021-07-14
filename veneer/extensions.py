@@ -2,7 +2,7 @@ import sys
 import inspect
 
 from types import MethodType
-from .utils import SearchableList
+from .utils import SearchableList, objdict
 
 _WU_ICON='/resources/WaterUserNodeModel'
 
@@ -226,6 +226,16 @@ def network_upstream_features(self,node):
         result += self.upstream_features(_feature_id(upstream_node))._list
     return SearchableList(result,nested=['properties'])
 
+def network_subset_upstream_of(self,node):
+    features = self.upstream_features(node)
+    node = self['features'].find_by_id(_node_id(node))[0]
+    features._list.append(node)
+    result = {
+        'features':features
+    }
+    result = _extend_network(result)
+    return result
+
 def network_is_downstream_of(self,feature,possibly_upstream_feature):
     path = self.path_between(possibly_upstream_feature,feature)
     return path is not None
@@ -331,6 +341,14 @@ def network_connectivity_table(self):
         result.loc[from_node,link_name]=1
 
     return result
+
+def _extend_network(nw):
+    nw = objdict(nw)
+
+    nw['features'] = SearchableList(
+        nw['features'], ['geometry', 'properties'])
+    add_network_methods(nw)
+    return nw
 
 def add_network_methods(target):
     '''

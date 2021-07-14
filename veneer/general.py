@@ -12,6 +12,7 @@ from .utils import SearchableList, _stringToList, read_veneer_csv, objdict#, dep
 import pandas as pd
 # Source
 from . import extensions
+from .extensions import _extend_network
 from .ts_naming_functions import *
 
 PRINT_URLS = False
@@ -880,15 +881,6 @@ class Veneer(object):
             df = reduce(lambda l, r: l.join(r, how='outer'), dataFrames)
         extensions._apply_time_series_helpers(df)
         return df
-
-def _extend_network(nw):
-    nw = objdict(nw)
-
-    nw['features'] = SearchableList(
-        nw['features'], ['geometry', 'properties'])
-    extensions.add_network_methods(nw)
-    return nw
-
 
 def read_sdt(fn):
     ts = pd.read_table(fn, delim_whitespace=True, engine='python',
