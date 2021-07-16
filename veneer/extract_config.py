@@ -5,6 +5,8 @@ import pandas as pd
 from veneer.actions import get_big_data_source
 import veneer
 from string import Template
+import logging
+logger = logging.getLogger(__name__)
 
 def _BEFORE_BATCH_NOP(slf,x,y):
     pass
@@ -51,7 +53,7 @@ CONSTITUENT_NAME_FN=[
 ]
 
 class SourceExtractor(object):
-    def __init__(self,v,dest,results=None,climate_data_sources=['Climate Data'],progress=print):
+    def __init__(self,v,dest,results=None,climate_data_sources=['Climate Data'],progress=logger.info):
         self.v=v
         self.dest=dest
         self.current_dest=None
@@ -214,7 +216,7 @@ class SourceExtractor(object):
                 continue
 
             if demand == '':
-                print('No demand time series configured for node: %s'%node)
+                logger.info('No demand time series configured for node: %s'%node)
                 continue
 
             data_source = demand.split('/')[2]
@@ -226,7 +228,7 @@ class SourceExtractor(object):
         params = self.v.model.node.storages.tabulate_parameters()
 
         if not len(params):
-            self.progress('No storages in model')
+            logger.info('No storages in model')
             return
 
         params = params['RiverSystem.Nodes.StorageNodeModel']
@@ -289,7 +291,7 @@ class SourceExtractor(object):
 
             for col in df.columns:
                 if not hasattr(df[col],'units'):
-                    print('No units on ',col)
+                    logger.debug('No units on ',col)
                     continue
                 units = df[col].units
                 if units=='ML/d':
