@@ -781,7 +781,8 @@ class Veneer(object):
                              index_attr=None,
                              scale=1.0,
                              renames={},
-                             report_interval=5000):
+                             report_interval=5000,
+                             reporting_window=(None,None)):
         '''
         column_attr: meta attribute (derived from criteria) used to name the columns of dataframes
         run,
@@ -795,7 +796,7 @@ class Veneer(object):
         renames: A nested dictionary of tags and tag values to rename
         report_interval
         '''
-
+        reporting_window = slice(*reporting_window)
         def rename_tags(tags,renames):
             result = {}
             for k,v in tags.items():
@@ -857,7 +858,7 @@ class Veneer(object):
                 print('Match %d, (row %d/%d)'%(count,ix,len(run_data['Results'])),result['TimeSeriesUrl'],'matches',column, tags)
         print('Units seen: %s'%(','.join(units_seen),))
 
-        return [(dict(zip(tag_order,tags)),self._create_timeseries_dataframe(table)*scale) for tags,table in summaries.items()]
+        return [(dict(zip(tag_order,tags)),self._create_timeseries_dataframe(table)*scale)[reporting_window] for tags,table in summaries.items()]
 
 
     def parse_veneer_date(self, txt):
