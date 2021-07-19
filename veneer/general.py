@@ -858,7 +858,7 @@ class Veneer(object):
                 print('Match %d, (row %d/%d)'%(count,ix,len(run_data['Results'])),result['TimeSeriesUrl'],'matches',column, tags)
         print('Units seen: %s'%(','.join(units_seen),))
 
-        return [(dict(zip(tag_order,tags)),self._create_timeseries_dataframe(table)*scale)[reporting_window] for tags,table in summaries.items()]
+        return [(dict(zip(tag_order,tags)),self._create_timeseries_dataframe(table)[reporting_window]*scale) for tags,table in summaries.items()]
 
 
     def parse_veneer_date(self, txt):
