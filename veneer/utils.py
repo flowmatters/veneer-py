@@ -201,7 +201,7 @@ class SearchableList(object):
             SearchableList([])
         elif len(result[0]) == 1:
             key = list(result[0].keys())[0]
-            return [r[key] for r in result]
+            return SearchableList([r[key] for r in result])
 
         return SearchableList(result)
 
