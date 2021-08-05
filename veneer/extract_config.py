@@ -222,6 +222,8 @@ class SourceExtractor(object):
             data_source = demand.split('/')[2]
             # print(data_source)
             ds = self.v.data_source(data_source)['Items'][0]['Details']
+            ds = ensure_units(ds,'m3/s')
+
             self.write_csv('timeseries-demand-%s'%node,ds)
 
     def _extract_storage_configuration(self):
@@ -436,3 +438,30 @@ class SourceExtractor(object):
         #     self.write_csv(sv.replace(' ','_').lower(),ts)
 
 
+UNIT_CONVERSIONS={
+    'ML':{
+        'm3':1e3
+    },
+    'd':{
+        's':86400
+    }
+}
+
+def conversion_factor(src_units,dest_units):
+    dest_units = dest_units.split('/')
+    src_units = src_units.split('/')
+
+    conversions = [1.0 if src==dest else UNIT_CONVERSIONS[src][dest] for src,dest in zip(src_units,dest_units)]
+    if len(conversions)>1:
+        return conversions[0]/conversions[1]
+    return conversions[0]
+
+def ensure_units(dataframe,dest_units):
+    for col in dataframe.columns:
+        factor = conversion_factor(dataframe[col].units,dest_units)
+        if factor != 1.0:
+            print(f'Converting {col} with factor {factor}')
+            dataframe[col] *= factor
+            dataframe[col].units = dest_units
+        print(col,dataframe[col].units)
+    return dataframe
