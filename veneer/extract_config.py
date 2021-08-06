@@ -1,6 +1,7 @@
 import io
 import json
 import os
+from typing import DefaultDict
 import pandas as pd
 from veneer.actions import get_big_data_source
 import veneer
@@ -208,9 +209,6 @@ class SourceExtractor(object):
                 raise Exception('Unsupported demand model: %s'%d)
 
         for node,demand in demands.items():
-            # print(demand)
-            # demand = demand.replace('%2F','/')
-            # print(node,"'%s'"%demand)
             if isinstance(demand,pd.DataFrame):
                 self.write_csv('monthly-pattern-demand-%s'%node,demand)
                 continue
@@ -219,10 +217,9 @@ class SourceExtractor(object):
                 logger.info('No demand time series configured for node: %s'%node)
                 continue
 
-            data_source = demand.split('/')[2]
-            # print(data_source)
+            data_source = '/'.join(demand.split('/')[2:-2])
             ds = self.v.data_source(data_source)['Items'][0]['Details']
-            ds = ensure_units(ds,'m3/s')
+            ds = ensure_units(ds,'m3/s',lbl=data_source)
 
             self.write_csv('timeseries-demand-%s'%node,ds)
 
@@ -439,6 +436,7 @@ class SourceExtractor(object):
 
 
 UNIT_CONVERSIONS={
+    'None':DefaultDict(lambda: None),
     'ML':{
         'm3':1e3
     },
@@ -447,21 +445,25 @@ UNIT_CONVERSIONS={
     }
 }
 
-def conversion_factor(src_units,dest_units):
+def conversion_factor(src_units,dest_units,lbl):
     dest_units = dest_units.split('/')
     src_units = src_units.split('/')
 
     conversions = [1.0 if src==dest else UNIT_CONVERSIONS[src][dest] for src,dest in zip(src_units,dest_units)]
+    if None in conversions:
+        lbl = '' if lbl is None else f' in {lbl}'
+        logger.warn(f'Missing source units {lbl}, assuming no conversion factor')
+        return 1.0
+
     if len(conversions)>1:
         return conversions[0]/conversions[1]
     return conversions[0]
 
-def ensure_units(dataframe,dest_units):
+def ensure_units(dataframe,dest_units,lbl=None):
     for col in dataframe.columns:
-        factor = conversion_factor(dataframe[col].units,dest_units)
+        factor = conversion_factor(dataframe[col].units,dest_units,lbl)
         if factor != 1.0:
-            print(f'Converting {col} with factor {factor}')
+            logger.info(f'Converting {col} with factor {factor}')
             dataframe[col] *= factor
             dataframe[col].units = dest_units
-        print(col,dataframe[col].units)
     return dataframe
