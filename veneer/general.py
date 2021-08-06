@@ -35,6 +35,12 @@ def _veneer_url_safe_id_string(s):
 class Veneer(object):
     '''
     Acts as a high level client to the Veneer web service within eWater Source.
+
+    Property Options
+    ----------------
+    double_escape_slashes: boolean (default: True)
+      True: Replace forward slash in identifer with %252F (eg for data sources in folders)
+      False: Replace forward slash in identifer with %2F
     '''
 
     def __init__(self, port=9876, host='localhost', protocol='http', prefix='', live=True):
@@ -65,6 +71,7 @@ class Veneer(object):
             self.img_ext='.png'
 
         self.model = VeneerIronPython(self)
+        self.double_escape_slashes = True
 
     def shutdown(self):
         '''
@@ -513,10 +520,18 @@ class Veneer(object):
         Note: Will include the each time series associated with the data source IN FULL
         '''
         prefix = '/dataSources/'
-        name = name.replace('%2F','%252F')
 
-        if not name.startswith(prefix):
-            name = prefix + name
+        if name.startswith(prefix):
+            name = name.replace(prefix,'')
+
+        if name.startswith('/'):
+            name = name[1:]
+
+        name = name.replace('/','%2F')
+        if self.double_escape_slashes:
+            name = name.replace('%2F','%252F')
+
+        name = prefix + name
 
         result = self.retrieve_json(name)
 
