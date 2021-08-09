@@ -202,3 +202,29 @@ for variable in fm.Variables:
     result.append('Updating %%s to DateRange=%%s'%%(variable.Name,date_range.Name))
     variable.DateRange = date_range
 '''
+
+CREATE_FUNCTIONAL_UNIT='''
+import RiverSystem.Catchments.FunctionalUnitDefinition as FunctionalUnitDefinition
+import  RiverSystem.Catchments.StandardFunctionalUnit as StandardFunctionalUnit
+the_list = scenario.SystemFunctionalUnitConfiguration.fuDefinitions
+new_fu = '%s'
+fud = None
+if the_list.Any(lambda fud: fud.Name==new_fu):
+  print('Existing')
+  fud = the_list.First(lambda fud:fud.Name==new_fu)
+else:
+  fud = FunctionalUnitDefinition(new_fu)
+  the_list.Add(fud)
+  print('Not existing')
+
+for c in scenario.Network.Catchments:
+  fu = StandardFunctionalUnit()
+  fu.definition = fud
+  fu.catchment = c
+  c.FunctionalUnits.AddIfNeeded(fu)
+
+H.EnsureElementsHaveConstituentProviders(scenario)
+H.InitialiseModelsForConstituentSource(scenario)
+
+'''
+

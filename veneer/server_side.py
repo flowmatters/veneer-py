@@ -1139,6 +1139,14 @@ class VeneerCatchmentActions(VeneerNetworkElementActions):
         '''
         return self.get_param_values('FunctionalUnits.*definition.Name')
 
+    def add_functional_unit_type(self,fu_type):
+        '''
+        Add a new functional unit type, if it doesn't already exist in the model.
+        '''
+        script = self._ironpy._init_script()
+        script += CREATE_FUNCTIONAL_UNIT%fu_type
+        return self._ironpy._safe_run(script)
+
     def remove(self, name):
         '''
         Remove named catchment from the network
