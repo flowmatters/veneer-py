@@ -313,7 +313,10 @@ class SourceExtractor(object):
         self._write_data_source_timeseries(inflow_data_sources,'Flow','timeseries-inflow-${NetworkElement}')
 
         played_constituents = self.v.model.node.constituents.tabulate_inputs(node_types='InjectedFlow',aspect='played')
-        played_constituents = played_constituents['RiverSystem.Constituents.ConstituentPlayedValue']
+        played_constituents = played_constituents.get('RiverSystem.Constituents.ConstituentPlayedValue',None)
+
+        if played_constituents is None:
+            return
 
         self._write_data_source_timeseries(played_constituents,
                                            'ConstituentConcentration',
