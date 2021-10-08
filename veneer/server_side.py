@@ -1525,6 +1525,9 @@ class VeneerNodeActions(VeneerNetworkElementActions):
         from .water_users import VeneerWaterUserActions
         self.water_users = VeneerWaterUserActions(self)
 
+        from .losses import VeneerLossNodeActions
+        self.losses = VeneerLossNodeActions(self)
+
     def _refine_accessor(self, node_access='', nodes=None, node_types=None, splitter=False):
         accessor = ""
         if not nodes is None:
