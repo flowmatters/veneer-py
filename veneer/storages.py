@@ -42,7 +42,7 @@ RELEASE_CLASSES = {
 }
 
 GET_LVA_SCRIPTLET='''
-ignoreExcpeptions=False
+ignoreExceptions=False
 geo = target.StoreGeometry.DefiniedGeometrys[0].Geometry
 for row in geo:
     result.append((row.height,row.volume,row.surfaceArea))
