@@ -197,16 +197,17 @@ class SourceExtractor(object):
 
         demands={}
         for wu in water_users:
-            d = self.v.model.node.water_users.get_param_values('DemandModel.Name',nodes=wu)[0]
+            # d = self.v.model.node.water_users.get_param_values('DemandModel.Name',nodes=wu)[0]
+            demand_type = self.v.model.node.water_users.get_param_values('DemandModel',nodes=wu)[0]
         #     assert len(d) == 1
         #     d = d[0]
-            if d.startswith('Time Series Demand #'):
+            if demand_type.endswith('TimeSeriesDemandNodeModel'):
                 demands[wu] = self.v.model.node.water_users.get_data_sources('DemandModel.Order',nodes=wu)[0]
-            elif d.startswith('Monthly Pattern #'):
+            elif demand_type.endswith('MonthlyDemandNodeModel'):
                 txt = self.v.model.node.water_users.get_param_values('DemandModel.Quantities',nodes=wu)[0]       
                 demands[wu] = pd.DataFrame([{'month':ln[0],'volume':float(ln[1])} for ln in [ln.split(' ') for ln in txt.splitlines()]])
             else:
-                raise Exception('Unsupported demand model: %s'%d)
+                raise Exception('Unsupported demand model: %s'%demand_type)
 
         for node,demand in demands.items():
             if isinstance(demand,pd.DataFrame):
