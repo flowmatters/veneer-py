@@ -797,7 +797,8 @@ class Veneer(object):
                              scale=1.0,
                              renames={},
                              report_interval=5000,
-                             reporting_window=(None,None)):
+                             reporting_window=(None,None),
+                             constraint={}):
         '''
         column_attr: meta attribute (derived from criteria) used to name the columns of dataframes
         run,
@@ -848,6 +849,16 @@ class Veneer(object):
             if not matching:
                 continue
             
+            filter_out = False
+            for k,v in constraint.items():
+                if k not in tags:
+                    continue # Keep timeseries if the timeseries doesn't have the tag in the constraint
+                if tags[k] not in v:
+                    filter_out = True
+                    break
+
+            if filter_out: continue
+
             column = tags.pop(column_attr)
             if tag_order is None:
                 tag_order = list(tags.keys())
