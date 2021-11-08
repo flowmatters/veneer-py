@@ -224,6 +224,15 @@ class SourceExtractor(object):
 
             self.write_csv('timeseries-demand-%s'%node,ds)
 
+    def _extract_loss_configuration(self):
+        loss_nodes = self.v.model.node.losses.names()
+        if len(loss_nodes):
+            self.progress('Extracting information for %d loss nodes'%len(loss_nodes))
+
+        for loss in loss_nodes:
+            loss_table = self.v.model.node.losses.loss_table(loss)
+            self.write_csv('loss-table-%s'%loss,loss_table)
+
     def _extract_storage_configuration(self):
         params = self.v.model.node.storages.tabulate_parameters()
 
@@ -338,6 +347,7 @@ class SourceExtractor(object):
         self._extract_storage_configuration()
         self._extract_demand_configuration()
         self._extract_external_inflows()
+        self._extract_loss_configuration()
 
         self._extract_runoff_configuration()
         self._extract_generation_configuration()
