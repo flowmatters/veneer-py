@@ -407,7 +407,11 @@ class SourceExtractor(object):
 
             for r in batch:
                 retriever = r.get('retriever',r['recorder'])
-                ts_results = self.v.retrieve_multiple_time_series(run_data=run_summary,criteria=retriever,name_fn=veneer.name_for_location)
+                name_fn = veneer.name_for_location
+                rv = retriever.get('RecordingVariable','')
+                if rv.endswith(' Flow') or r['label'].endswith('generation'):
+                    name_fn = veneer.name_for_fu_and_sc
+                ts_results = self.v.retrieve_multiple_time_series(run_data=run_summary,criteria=retriever,name_fn=name_fn)
                 self.write_csv(r['label'],ts_results)
 
             # self.write_csv('results',results_df)
