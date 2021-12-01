@@ -225,7 +225,7 @@ def network_upstream_features(self,node):
         upstream_node = self['features'].find_by_id(l['properties']['from_node'])[0]
         result.append(upstream_node)
         result += self.upstream_features(_feature_id(upstream_node))._list
-    return add_geodataframe_method(SearchableList(result,nested=['properties']))
+    return add_geodataframe_method_to_list(SearchableList(result,nested=['properties']))
 
 def network_subset_upstream_of(self,node):
     features = self.upstream_features(node)
@@ -375,8 +375,14 @@ def add_network_methods(target):
             continue
         setattr(target, f_name, MethodType(f, target))
 
-def add_geodataframe_method(target):
-    setattr(target, 'as_dataframe', MethodType(network_as_dataframe, target))
+def add_geodataframe_method_to_list(target):
+    def as_dataframe(self):
+        feature_collection = {
+            'type':'FeatureCollection',
+            'features':self._list
+        }
+        return network_as_dataframe(feature_collection)
+    setattr(target, 'as_dataframe', MethodType(as_dataframe, target))
     return target
 
 def _apply_time_series_helpers(dataframe):
