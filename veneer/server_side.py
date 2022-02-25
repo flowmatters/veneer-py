@@ -6,6 +6,7 @@ from .component import VeneerComponentModelActions
 
 import os
 import pandas as pd
+import json
 
 NODE_TYPES = {
     'inflow': 'RiverSystem.Nodes.Inflow.InjectedFlow',
@@ -63,6 +64,7 @@ class VeneerIronPython(object):
         self.functions = VeneerFunctionActions(self)
         self.simulation = VeneerSimulationActions(self)
         self.component = VeneerComponentModelActions(self)
+        self.spatial = VeneerGeographicDataActions(self)
         self.deferred_scripts = []
         self.deferring = False
 
@@ -1844,6 +1846,31 @@ class VeneerSimulationActions():
         script = self._ironpy._init_script(
         ) + 'H.ConfigureAssuranceRule(scenario,%s,%s,%s)' % (level, rule, category)
         return self._ironpy.run_script(script)
+
+class VeneerGeographicDataActions(object):
+    def __init__(self,ironpython):
+        self._ironpy = ironpython
+
+    def has_raster(self,r):
+        try:
+            return self._ironpy.get(f'scenario.GeographicData.{r}.Columns') > 0
+        except:
+            return False
+
+    def raster_categories(self,r):
+        kvps = [kvp['Value'][1:-1].split(', ',1) for kvp in self._ironpy.get(f'scenario.GeographicData.{r}.Categories')]
+        kvps = [(int(c),v) for c,v in kvps]
+        return dict(kvps)
+
+    def save_raster(self,r,fn,categories=False):
+        script = SAVE_RASTER_SCRIPT%(os.path.abspath(fn),r)
+        res = self._ironpy.run_script(script)
+
+        if categories:
+            raster_categories = self.raster_categories(r)
+            with open(f'{fn}.json','w') as fp:
+                json.dump(raster_categories,fp,indent=2)
+        return res
 
 # all_names=v.model.catchment.enumerate_names()
 # var_names=v.model.name_subst("tss_load_%s_%s",all_names)

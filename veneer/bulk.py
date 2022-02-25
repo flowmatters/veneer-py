@@ -11,6 +11,8 @@ from glob import glob
 from veneer.general import MODEL_TABLES
 from veneer.actions import get_big_data_source
 
+STANDARD_RASTERS=[('DEM',False),('FunctionalUnitMap',True),('StreamMap',False)]
+
 class VeneerRetriever(object):
     '''
     Retrieve all information from a Veneer web service and write it out to disk in the same path structure.
@@ -22,7 +24,7 @@ class VeneerRetriever(object):
                  retrieve_slim_ts=True,retrieve_single_ts=True,
                  retrieve_single_runs=True,retrieve_daily_for=[],
                  retrieve_ts_json=True,retrieve_ts_csv=False,
-                 retrieve_data_sources=True,
+                 retrieve_data_sources=True,retrieve_spatial=False,
                  print_all = False, print_urls = False,
                  update_frequency = -1, logger=None):
         from .general import Veneer,log
@@ -40,6 +42,7 @@ class VeneerRetriever(object):
         self.retrieve_ts_json=retrieve_ts_json
         self.retrieve_ts_csv=retrieve_ts_csv
         self.retrieve_data_sources=retrieve_data_sources
+        self.retrieve_spatial=retrieve_spatial
         self.print_all = print_all
         self.print_urls = print_urls
         self.base_url = "%s://%s:%d" % (protocol,host,port)
@@ -219,6 +222,16 @@ class VeneerRetriever(object):
             fn = self.make_dest(f'dataSources/{ds_name}','csv')
             ds.to_csv(fn)
 
+    def retrieve_spatial_data(self):
+        # List of rasters. Check which are present and write. Check which have attribute tables and write
+        # List of vectors. Write... (columns?)
+
+        for r,categories in STANDARD_RASTERS:
+            if not self._veneer.model.spatial.has_raster(r):
+                continue
+
+            self._veneer.model.spatial.save_raster(r,self.make_dest(f'spatial/{r}','asc'),categories)
+
     def retrieve_all(self,clean=False):
         if os.path.exists(self.destination):
             if clean:
@@ -232,6 +245,9 @@ class VeneerRetriever(object):
 
         if self.retrieve_data_sources:
             self.retrieve_data_sources_values()
+
+        if self.retrieve_spatial:
+            self.retrieve_spatial_data()
 
         self.update('Downloading runs',5)
         self.retrieve_runs()

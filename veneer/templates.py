@@ -228,3 +228,8 @@ H.InitialiseModelsForConstituentSource(scenario)
 
 '''
 
+SAVE_RASTER_SCRIPT='''
+from TIME.Management import NonInteractiveIO
+NonInteractiveIO.Save(r"%s",scenario.GeographicData.%s)
+'''
+
