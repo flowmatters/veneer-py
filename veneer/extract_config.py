@@ -325,16 +325,14 @@ class SourceExtractor(object):
         played_constituents = self.v.model.node.constituents.tabulate_inputs(node_types='InjectedFlow',aspect='played')
         played_constituents = played_constituents.get('RiverSystem.Constituents.ConstituentPlayedValue',None)
 
-        if played_constituents is None:
-            return
+        if played_constituents is not None:
+            self._write_data_source_timeseries(played_constituents,
+                                            'ConstituentConcentration',
+                                            'timeseries-inflow-concentration-${Constituent}-${NetworkElement}')
 
-        self._write_data_source_timeseries(played_constituents,
-                                           'ConstituentConcentration',
-                                           'timeseries-inflow-concentration-${Constituent}-${NetworkElement}')
-
-        self._write_data_source_timeseries(played_constituents,
-                                           'ConstituentLoad',
-                                           'timeseries-inflow-load-${Constituent}-${NetworkElement}')
+            self._write_data_source_timeseries(played_constituents,
+                                            'ConstituentLoad',
+                                            'timeseries-inflow-load-${Constituent}-${NetworkElement}')
 
     def extract_source_config(self):
         self.current_dest = self.dest
