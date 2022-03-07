@@ -795,6 +795,7 @@ class Veneer(object):
                              timestep='daily',
                              index_attr=None,
                              scale=1.0,
+                             expected_units=None,
                              renames={},
                              report_interval=5000,
                              reporting_window=(None,None),
@@ -883,6 +884,13 @@ class Veneer(object):
             if count and (count % report_interval)==0:
                 print('Match %d, (row %d/%d)'%(count,ix,len(run_data['Results'])),result['TimeSeriesUrl'],'matches',column, tags)
         print('Units seen: %s'%(','.join(units_seen),))
+        if expected_units is not None:
+            if len(units_seen) != 1:
+                raise Exception(f'Expected units to be {expected_units} but got multiple: {units_seen}')
+            units_seen = units_seen[0]
+            units_seen = units_seen.replace('Â³','^3')
+            if units_seen != expected_units:
+                raise Exception(f'Expected units to be {expected_units} but got {units_seen}')
 
         return [(dict(zip(tag_order,tags)),self._create_timeseries_dataframe(table)[reporting_window]*scale) for tags,table in summaries.items()]
 
