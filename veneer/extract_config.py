@@ -1,12 +1,17 @@
 import io
 import json
 import os
+import tempfile
 from typing import DefaultDict
 import pandas as pd
 from veneer.actions import get_big_data_source
 import veneer
 from string import Template
+import argparse
 import logging
+
+from veneer.manage import VENEER_EXE_FN, create_command_line, kill_all_now
+import veneer.manage as manage
 logger = logging.getLogger(__name__)
 
 def _BEFORE_BATCH_NOP(slf,x,y):
@@ -483,3 +488,109 @@ def ensure_units(dataframe,dest_units,lbl=None):
             dataframe[col] *= factor
             dataframe[col].units = dest_units
     return dataframe
+
+def _base_arg_parser():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-c','--config',help='JSON configuration file')
+    parser.add_argument('-e','--extractedfiles',help='Parent directory for model files extracted from Source',default='.')
+
+    parser.add_argument('model',type=str,help='Name of model to be converted (eg the name of the RSPROJ file without the file extension)')
+
+    return parser
+
+def _arg_parser():
+    parser = _base_arg_parser()
+    parser.add_argument('-s','--sourceversion',help='Source version number',default='4.5.0')
+    parser.add_argument('--port',help='Port number of running Veneer instance',type=int,default=0)
+    parser.add_argument('-p','--plugins',type=str,nargs='*',help='Path to plugin (DLL) file to load',default=[])
+    parser.add_argument('-v','--veneerpath',help='Path (directory) containing Veneer command line files. If not provided, or not existing, will attempt to create using sourceversion and build paths')
+    parser.add_argument('-b','--buildpath',help='Path (directory) containing Veneer builds')
+    return parser
+
+def _parsed_args(parser):
+    args = vars(parser.parse_args())
+    config_path = args['config'] or ''
+    if config_path:
+        print(f'Reading from {config_path}')
+        with open(config_path,'r') as fp:
+            config_vals = json.load(fp)
+            for k,v in args.items():
+                if (k not in config_vals) or (v != parser.get_default(k)):
+                    config_vals[k]=v
+            # config_vals.update(args)
+            args = config_vals
+    else:
+        print('No config file')
+    return args
+
+# def _get_veneer_command_line(veneer=None,sourceversion=None,buildpath=None,**kwargs):
+#     pass
+
+def _get_veneer(model_fn,port,veneerpath,sourceversion,buildpath,plugins,**kwargs):
+    if port:
+        client = veneer.Veneer(port)
+        def _nop():pass
+        def _get():
+            return client
+        return _get, _nop
+
+    if not veneerpath:
+        veneerpath = tempfile.mkdtemp('-veneer-extract-config')
+
+    exe_path = os.path.join(veneerpath,VENEER_EXE_FN)
+    if not os.path.exists(exe_path):
+        cmd = create_command_line(buildpath,source_version=sourceversion,dest=veneerpath)
+        assert str(cmd)==exe_path
+    
+    process_details = {}
+    def start():
+        proc,port = manage.start(model_fn,1,debug=True,veneer_exe=exe_path,additional_plugins=plugins)
+        process_details['pid'] = proc[0]
+        client = veneer.Veneer(port[0])
+        return client
+
+    def stop():
+        logging.info('Stopping veneer process with PID:%d',process_details['pid'])
+        kill_all_now([process_details['pid']])
+
+    return start,stop
+
+def extract(converter_constructor,model,extractedfiles,**kwargs): # port,buildpath,veneerpath,sourceversion,plugins
+    print(f'Extracting {model}...')
+    # BUT... how to also use
+    for k,v in kwargs.items():
+        print(k,v)
+
+    model_fn = model
+    model = model.split('/')[-1].split('\\')[-1].split('.')[0]
+    start_veneer, stop_veneer = _get_veneer(model_fn,**kwargs)
+
+    veneer_client = start_veneer() #port,buildpath,veneerpath,sourceversion,plugins)
+
+    scenario_info = veneer_client.scenario_info()
+    print(scenario_info)
+
+    converter = converter_constructor(veneer_client,
+                                      os.path.join(extractedfiles,model),
+                                      progress=logging.info)
+
+    converter.extract_source_config()
+
+    def between_batches(extractor,ix,batch):
+        print('Running batch %d for %s'%(ix,model))
+        if ix > 0:
+            stop_veneer()
+            v = start_veneer()
+            v.drop_all_runs()
+        converter.v = v
+
+    converter.extract_source_results(batches=True,before_batch=between_batches)
+
+    stop_veneer()
+
+    # TODO: Delete veneer command line
+
+if __name__=='__main__':
+    args = _parsed_args(_arg_parser())
+    extract(SourceExtractor,**args)
