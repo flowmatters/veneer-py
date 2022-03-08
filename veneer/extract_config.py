@@ -583,7 +583,7 @@ def extract(converter_constructor,model,extractedfiles,**kwargs): # port,buildpa
             stop_veneer()
             v = start_veneer()
             v.drop_all_runs()
-        converter.v = v
+            converter.v = v
 
     converter.extract_source_results(batches=True,before_batch=between_batches)
 
