@@ -772,33 +772,35 @@ class Veneer(object):
 
         units_store = {}
         for result in run_data['Results']:
-            if self.result_matches_criteria(result, criteria):
-                d = self.retrieve_json(result['TimeSeriesUrl'] + suffix)
-                result.update(d)
-                col_name = name_column(result)
-#                    raise Exception("Duplicate column name: %s"%col_name)
-                if 'Events' in d:
-                    retrieved[col_name] = d['Events']
-                    units_store[col_name] = result['Units']
-                else:
-                    all_ts = d['TimeSeries']
-                    for ts in all_ts:
-                        col_name = name_column(ts)
-                        units_store[col_name] = ts['Units']
+            if not self.result_matches_criteria(result, criteria):
+              continue
 
-                        vals = ts['Values']
-                        s = self.parse_veneer_date(ts['StartDate'])
-                        e = self.parse_veneer_date(ts['EndDate'])
-                        if ts['TimeStep'] == 'Daily':
-                            f = 'D'
-                        elif ts['TimeStep'] == 'Monthly':
-                            f = 'M'
-                        elif ts['TimeStep'] == 'Annual':
-                            f = 'A'
-                        dates = pd.date_range(s, e, freq=f)
-                        retrieved[col_name] = [
-                            {'Date': d, 'Value': v} for d, v in zip(dates, vals)]
-                    # Multi Time Series!
+            d = self.retrieve_json(result['TimeSeriesUrl'] + suffix)
+            result.update(d)
+            col_name = name_column(result)
+  #                    raise Exception("Duplicate column name: %s"%col_name)
+            if 'Events' in d:
+                retrieved[col_name] = d['Events']
+                units_store[col_name] = result['Units']
+            else:
+                all_ts = d['TimeSeries']
+                for ts in all_ts:
+                    col_name = name_column(ts)
+                    units_store[col_name] = ts['Units']
+
+                    vals = ts['Values']
+                    s = self.parse_veneer_date(ts['StartDate'])
+                    e = self.parse_veneer_date(ts['EndDate'])
+                    if ts['TimeStep'] == 'Daily':
+                        f = 'D'
+                    elif ts['TimeStep'] == 'Monthly':
+                        f = 'M'
+                    elif ts['TimeStep'] == 'Annual':
+                        f = 'A'
+                    dates = pd.date_range(s, e, freq=f)
+                    retrieved[col_name] = [
+                        {'Date': d, 'Value': v} for d, v in zip(dates, vals)]
+                # Multi Time Series!
 
         result = self._create_timeseries_dataframe(retrieved)
         for k, u in units_store.items():
