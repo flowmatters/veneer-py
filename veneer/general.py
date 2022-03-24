@@ -967,10 +967,10 @@ def read_rescsv(fn,header_attributes=['WaterFeatureType','Site','Structure']):
     import io
     text = open(fn, 'r').read()
 
-    r = re.compile('\nEOH\n')
+    r = re.compile('\nEOH,*\n')
     header, body = r.split(text)
 
-    r = re.compile('\nEOC\n')
+    r = re.compile('\nEOC,*\n')
     config, headers = r.split(header)
 
     attribute_names = config.splitlines()[-1].split(',')
