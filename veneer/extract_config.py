@@ -489,13 +489,13 @@ def ensure_units(dataframe,dest_units,lbl=None):
             dataframe[col].units = dest_units
     return dataframe
 
-def _base_arg_parser():
+def _base_arg_parser(model=True):
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('-c','--config',help='JSON configuration file')
     parser.add_argument('-e','--extractedfiles',help='Parent directory for model files extracted from Source',default='.')
-
-    parser.add_argument('model',type=str,help='Name of model to be converted (eg the name of the RSPROJ file without the file extension)')
+    if model:
+      parser.add_argument('model',type=str,help='Name of model to be converted (eg the name of the RSPROJ file without the file extension)')
 
     return parser
 
