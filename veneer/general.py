@@ -7,6 +7,7 @@ except:
 
 import json
 import re
+from datetime import datetime
 from .server_side import VeneerIronPython
 from .utils import SearchableList, _stringToList, read_veneer_csv, objdict#, deprecate_async
 import pandas as pd
@@ -898,7 +899,7 @@ class Veneer(object):
     def parse_veneer_date(self, txt):
         if hasattr(txt, 'strftime'):
             return txt
-        return pd.datetime.strptime(txt, '%m/%d/%Y %H:%M:%S')
+        return datetime.strptime(txt, '%m/%d/%Y %H:%M:%S')
 
     def convert_dates(self, events):
         return [{'Date': self.parse_veneer_date(e['Date']), 'Value':e['Value']} for e in events]
@@ -923,7 +924,7 @@ class Veneer(object):
 def read_sdt(fn):
     ts = pd.read_table(fn, delim_whitespace=True, engine='python',
                        names=['Year', 'Month', 'Day', 'Val'])
-    ts['Date'] = ts.apply(lambda row: pd.datetime(
+    ts['Date'] = ts.apply(lambda row: datetime(
         int(row.Year), int(row.Month), int(row.Day)), axis=1)
     ts = ts.set_index(ts.Date)
     return ts.Val
