@@ -31,6 +31,22 @@ def log(text):
 def _veneer_url_safe_id_string(s):
     return s.replace('#', '').replace('/', '%2F').replace(':', '')
 
+def from_url(url,live=None):
+  protocol,path = url.split('://')
+  if protocol=='file':
+    return Veneer(protocol=protocol,prefix=path,port=None,host=None,live=False)
+
+  if live is None:
+    live = True # assume live for http url
+
+  path = path.split('/')
+  host = path[0]
+  path = '/'.join(path[1:])
+  host = host.split(':')
+  if len(host)>1:
+    port = int(host[1])
+  host = host[0] or 'localhost'
+  return Veneer(port=port,host=host,prefix=path,live=live)
 
 #@deprecate_async
 class Veneer(object):
@@ -60,14 +76,16 @@ class Veneer(object):
         self.host = host
         self.protocol = protocol
         self.prefix = prefix
-        self.base_url = "%s://%s:%d%s" % (protocol, host, port, prefix)
         self.live_source = live
+        if protocol and protocol.startswith('file'):
+          self.base_url = '%s://%s'%(protocol,prefix)
+        else:
+          self.base_url = "%s://%s:%d%s" % (protocol, host, port, prefix)
+
         if self.live_source:
             self.data_ext = ''
             self.img_ext = ''
         else:
-            if protocol and protocol.startswith('file'):
-                self.base_url = '%s://%s'%(protocol,prefix)
             self.data_ext='.json'
             self.img_ext='.png'
 
