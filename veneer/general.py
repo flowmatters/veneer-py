@@ -771,17 +771,21 @@ class Veneer(object):
             return col_name
 
         units_store = {}
+        dates = None
         for result in run_data['Results']:
+            res = result.copy()
             if not self.result_matches_criteria(result, criteria):
               continue
 
             d = self.retrieve_json(result['TimeSeriesUrl'] + suffix)
-            result.update(d)
-            col_name = name_column(result)
+            res.update(d)
+            col_name = name_column(res)
   #                    raise Exception("Duplicate column name: %s"%col_name)
             if 'Events' in d:
-                retrieved[col_name] = d['Events']
-                units_store[col_name] = result['Units']
+                if dates is None:
+                    dates = [ev['Date'] for ev in d['Events']]
+                retrieved[col_name] = [ev['Value'] for ev in d['Events']]
+                units_store[col_name] = res['Units']
             else:
                 all_ts = d['TimeSeries']
                 for ts in all_ts:
@@ -802,7 +806,7 @@ class Veneer(object):
                         {'Date': d, 'Value': v} for d, v in zip(dates, vals)]
                 # Multi Time Series!
 
-        result = self._create_timeseries_dataframe(retrieved)
+        result = self._create_timeseries_dataframe(retrieved,dates)
         for k, u in units_store.items():
             result[k].units = u
 
@@ -927,12 +931,15 @@ class Veneer(object):
     def _create_timeseries_dataframe(self, data_dict, common_index=True):
         if len(data_dict) == 0:
             df = pd.DataFrame()
-        elif common_index:
+        elif common_index == True:
             index = [self.parse_veneer_date(event['Date'])
                      for event in list(data_dict.values())[0]]
             data = {k: [event['Value'] for event in result]
                     for k, result in data_dict.items()}
             df = pd.DataFrame(data=data, index=index)
+        elif common_index is not None:
+          index = [self.parse_veneer_date(d) for d in common_index]
+          df = pd.DataFrame(data=data_dict,index=index)
         else:
             from functools import reduce
             dataFrames = [pd.DataFrame(self.convert_dates(ts)).set_index(
