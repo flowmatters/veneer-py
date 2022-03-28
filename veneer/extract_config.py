@@ -186,13 +186,17 @@ class SourceExtractor(object):
         # self.write_csv('cgmodels',generation_models)
 
     def _extract_demand_configuration(self):
-        extraction_params = self.v.model.node.tabulate_parameters(node_types='ExtractionNodeModel')
+        constraint = dict(node_types='ExtractionNodeModel')
+        extraction_params = self.v.model.node.tabulate_parameters(**constraint)
         
         if not len(extraction_params):
             self.progress('No extraction points. Skipping water user extraction')
             return
 
         extraction_params = extraction_params['RiverSystem.Nodes.SupplyPoint.ExtractionNodeModel']
+        names = self.v.model.node.names(**constraint)
+        is_extractive = self.v.model.node.get_param_values('IsExtractive',**constraint)
+        extraction_params['IsExtractive'] = extraction_params.NetworkElement.map(dict(zip(names,is_extractive)))
         # extractions = list(extraction_params['NetworkElement'])
         self.write_csv('extraction_point_params',extraction_params)
 
