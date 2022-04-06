@@ -509,6 +509,7 @@ def _arg_parser():
     parser.add_argument('--port',help='Port number of running Veneer instance',type=int,default=0)
     parser.add_argument('-p','--plugins',type=str,nargs='*',help='Path to plugin (DLL) file to load',default=[])
     parser.add_argument('-v','--veneerpath',help='Path (directory) containing Veneer command line files. If not provided, or not existing, will attempt to create using sourceversion and build paths')
+    parser.add_argument('--remote',help='Start Veneer command line with "allow remote connections"',action='store_true',default=False)
     parser.add_argument('-b','--buildpath',help='Path (directory) containing Veneer builds')
     return parser
 
@@ -549,7 +550,7 @@ def _get_veneer(model_fn,port,veneerpath,sourceversion,buildpath,plugins,**kwarg
     
     process_details = {}
     def start():
-        proc,port = manage.start(model_fn,1,debug=True,veneer_exe=exe_path,additional_plugins=plugins)
+        proc,port = manage.start(model_fn,1,debug=True,remote=kwargs.get('remote',True),veneer_exe=exe_path,additional_plugins=plugins)
         process_details['pid'] = proc[0]
         client = veneer.Veneer(port[0])
         return client
