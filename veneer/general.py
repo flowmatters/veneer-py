@@ -7,7 +7,7 @@ except:
 
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from .server_side import VeneerIronPython
 from .utils import SearchableList, _stringToList, read_veneer_csv, objdict#, deprecate_async
 import pandas as pd
@@ -819,6 +819,7 @@ class Veneer(object):
                              run_data=None,
                              criteria={},
                              timestep='daily',
+                             time_shift=0,
                              index_attr=None,
                              scale=1.0,
                              expected_units=None,
@@ -918,7 +919,7 @@ class Veneer(object):
             if units_seen != expected_units:
                 raise Exception(f'Expected units to be {expected_units} but got {units_seen}')
 
-        return [(dict(zip(tag_order,tags)),self._create_timeseries_dataframe(table)[reporting_window]*scale) for tags,table in summaries.items()]
+        return [(dict(zip(tag_order,tags)),self._create_timeseries_dataframe(table,time_shift_hours=time_shift)[reporting_window]*scale) for tags,table in summaries.items()]
 
 
     def parse_veneer_date(self, txt):
@@ -949,6 +950,8 @@ class Veneer(object):
           df = pd.DataFrame(data=data_dict,index=index)
 
         extensions._apply_time_series_helpers(df)
+        if time_shift_hours:
+            df.index += timedelta(hours=time_shift_hours)
         return df
 
 def read_sdt(fn):
