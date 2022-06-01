@@ -11,6 +11,7 @@ from datetime import datetime
 from .server_side import VeneerIronPython
 from .utils import SearchableList, _stringToList, read_veneer_csv, objdict#, deprecate_async
 import pandas as pd
+import numpy as np
 # Source
 from . import extensions
 from .extensions import _extend_network
@@ -928,16 +929,17 @@ class Veneer(object):
     def convert_dates(self, events):
         return [{'Date': self.parse_veneer_date(e['Date']), 'Value':e['Value']} for e in events]
 
-    def _create_timeseries_dataframe(self, data_dict, common_index=True):
+    def _create_timeseries_dataframe(self, data_dict, common_index=True,time_shift_hours=0):
+        common_index_simple = common_index if (np.shape(common_index)==tuple()) else None
         if len(data_dict) == 0:
             df = pd.DataFrame()
-        elif common_index == True:
+        elif common_index_simple == True:
             index = [self.parse_veneer_date(event['Date'])
                      for event in list(data_dict.values())[0]]
             data = {k: [event['Value'] for event in result]
                     for k, result in data_dict.items()}
             df = pd.DataFrame(data=data, index=index)
-        elif (common_index == False) or (common_index is None):
+        elif (common_index_simple == False) or (common_index is None):
             from functools import reduce
             dataFrames = [pd.DataFrame(self.convert_dates(ts)).set_index(
                 'Date').rename(columns={'Value': k}) for k, ts in data_dict.items()]
