@@ -937,14 +937,15 @@ class Veneer(object):
             data = {k: [event['Value'] for event in result]
                     for k, result in data_dict.items()}
             df = pd.DataFrame(data=data, index=index)
-        elif common_index is not None:
-          index = [self.parse_veneer_date(d) for d in common_index]
-          df = pd.DataFrame(data=data_dict,index=index)
-        else:
+        elif (common_index == False) or (common_index is None):
             from functools import reduce
             dataFrames = [pd.DataFrame(self.convert_dates(ts)).set_index(
                 'Date').rename(columns={'Value': k}) for k, ts in data_dict.items()]
             df = reduce(lambda l, r: l.join(r, how='outer'), dataFrames)
+        else:
+          index = [self.parse_veneer_date(d) for d in common_index]
+          df = pd.DataFrame(data=data_dict,index=index)
+
         extensions._apply_time_series_helpers(df)
         return df
 
