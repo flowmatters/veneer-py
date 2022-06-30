@@ -99,8 +99,8 @@ def network_headwater_links(self):
     return sum([self.downstream_links(n)._list for n in hw_nodes],[])
 
 def network_headwater_catchments(self):
-    hw_links = self.headwater_links()
-    hw_catchments = [(l['id'],self['features'].find_by_link(l['id'])) for l in hw_links]
+    hw_links = [l.get('id',l['properties'].get('id',None)) for l in self.headwater_links()]
+    hw_catchments = [(l,self['features'].find_by_link(l)) for l in hw_links]
     for lnk,catchments in hw_catchments:
         if not len(catchments):
             print('No catchment draining to link',lnk)
