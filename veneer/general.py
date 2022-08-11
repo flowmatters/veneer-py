@@ -717,7 +717,9 @@ class Veneer(object):
 
     def timeseries_suffix(self,timestep='daily'):
         if timestep == "daily":
-            return ""
+            return ''
+        if not isinstance(timestep,str):
+            return ''
         return "/aggregated/%s" % timestep
 
     def retrieve_multiple_time_series(self, run='latest', run_data=None, criteria={}, timestep='daily', name_fn=name_element_variable):
@@ -739,7 +741,7 @@ class Veneer(object):
 
         These criteria are used to identify which time series to retrieve.
 
-        timestep should be one of 'daily' (default), 'monthly', 'annual'.
+        timestep should be one of 'daily' (default), 'monthly', 'annual', or a custom aggregation function.
         *WARNING*: The monthly and annual option uses the corresponding option in the Veneer plugin, which ALWAYS SUMS values,
         regardless of units. So, if you retrieve a rate variable (eg m^3/s) those values will be summed and you will need to
         correct this manually in the returned DataFrame.
@@ -811,6 +813,9 @@ class Veneer(object):
         for k, u in units_store.items():
             result[k].units = u
 
+        if hasattr(timestep,'__call__'):
+            return timestep(result)
+
         return result
 
     def summarise_timeseries(self,
@@ -834,7 +839,7 @@ class Veneer(object):
         criteria: dict-like object with keys matching retrieval (eg NetworkElement, etc),
                 but where the values of these search criteria can be regular expressions with named groups.
                 These named groups are used in summarising the data and attributing the resulting tables
-        timestep: daily, monthly, annual, mean-monthly, mean-annual or None
+        timestep: daily, monthly, annual, mean-monthly, mean-annual, a grouping function, or None
         index_attr: if timestep is None, index_attr should...
         scale: A scaling factor for the data (eg to change units)
         renames: A nested dictionary of tags and tag values to rename
@@ -919,8 +924,10 @@ class Veneer(object):
             if units_seen != expected_units:
                 raise Exception(f'Expected units to be {expected_units} but got {units_seen}')
 
-        return [(dict(zip(tag_order,tags)),self._create_timeseries_dataframe(table,time_shift_hours=time_shift)[reporting_window]*scale) for tags,table in summaries.items()]
-
+        result = [(dict(zip(tag_order,tags)),self._create_timeseries_dataframe(table,time_shift_hours=time_shift)[reporting_window]*scale) for tags,table in summaries.items()]
+        if hasattr(timestep,'__call__'):
+            return [(key_tuple,timestep(df)) for (key_tuple,df) in result]
+        return result
 
     def parse_veneer_date(self, txt):
         if hasattr(txt, 'strftime'):
