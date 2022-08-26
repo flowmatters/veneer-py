@@ -23,6 +23,7 @@ STANDARD_SOURCE_ELEMENTS=[
 ]
 
 STANDARD_SOURCE_VARIABLES=[
+    'Outflow'
     'Quick Flow',
     'Slow Flow',
     'Total Flow'
@@ -32,6 +33,7 @@ SOURCE_STORAGE_VARIABLES=[
     'Water Surface Area',
     'Water Surface Elevation',
     'Regulated Release Volume',
+    'Orders',
     'Spill Volume',
     'Total Inflow Volume',
     'Total Outflow Volume'
@@ -362,6 +364,14 @@ class SourceExtractor(object):
 
     def _get_recorder_batches(self):
         recorders = []
+        recorders.append([
+            {
+                'recorder':{
+                    'RecordingElement':'Functions'
+                },
+                'label':'functions'
+            }
+        ])
         for sse in STANDARD_SOURCE_ELEMENTS:
             recorders.append([{'recorder':{'RecordingElement':sse},'retriever':{'RecordingVariable':sse},'label':sse.replace(' ','_').lower()}])
         for ssv in STANDARD_SOURCE_VARIABLES:
