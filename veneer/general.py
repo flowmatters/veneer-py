@@ -139,7 +139,7 @@ class Veneer(object):
             raise Exception(
                 'Error parsing response as JSON. Retrieving %s and received:\n%s' % (url, text[:100]))
 
-    def retrieve_csv(self, url):
+    def retrieve_csv(self, url,**kwargs):
         '''
         Retrieve data from the Veneer service, at the given url path, in CSV format.
 
@@ -157,7 +157,12 @@ class Veneer(object):
             text = open(query_url)
         else:
             conn = hc.HTTPConnection(self.host, port=self.port)
-            conn.request('GET', quote(url + self.data_ext),
+            url = url + self.data_ext
+            url = quote(url)
+            if len(kwargs):
+                url += '?' + '&'.join([f'{key}={val}' for key,val in kwargs.items()])
+
+            conn.request('GET', url,
                         headers={"Accept": "text/csv"})
             resp = conn.getresponse()
             text = resp.read().decode('utf-8')
