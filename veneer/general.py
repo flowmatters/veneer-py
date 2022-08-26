@@ -154,7 +154,8 @@ class Veneer(object):
         if self.protocol == 'file':
             query_url += '.csv'
             print(query_url)
-            text = open(query_url)
+            with open(query_url) as fp:
+                text = fp.read()
         else:
             conn = hc.HTTPConnection(self.host, port=self.port)
             url = url + self.data_ext
