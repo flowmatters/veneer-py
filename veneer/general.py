@@ -434,7 +434,10 @@ class Veneer(object):
         return _extend_network(res)
 
     def model_table(self,table='fus'):
-        df = pd.read_csv(self.retrieve_csv('/tables/%s'%table))
+        from io import StringIO
+        txt = self.retrieve_csv('/tables/%s'%table)
+        sio = StringIO(txt)
+        df = pd.read_csv(sio)
         df = df.set_index('Catchment')
         return df
 
