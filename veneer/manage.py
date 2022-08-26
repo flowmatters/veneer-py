@@ -204,7 +204,7 @@ def overwrite_plugin_configuration(source_binaries,project_fn):
 
 def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=True,
           script=True, veneer_exe=None,overwrite_plugins=None,return_io=False,
-          model=None,additional_plugins=[]):
+          model=None,start_new_session=False,additional_plugins=[]):
     """
     Start one or more copies of the Veneer command line progeram with a given project file
 
@@ -273,7 +273,14 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=True,
     if debug:
         for cmd in cmd_lines:
             print('Starting %s'%cmd)
-    processes = [Popen(cmd_line%port,stdout=PIPE,stderr=PIPE,bufsize=1, close_fds=ON_POSIX) for port in ports]
+    kwargs={}
+    if start_new_session:
+        if ON_POSIX:
+            kwargs['start_new_session']=start_new_session
+        else:
+            cmd_line = 'start "Veneer server for %s" %s'%(os.path.basename(project_fn),cmd_line)
+            kwargs['shell']=True
+    processes = [Popen(cmd_line%port,stdout=PIPE,stderr=PIPE,bufsize=1, close_fds=ON_POSIX, **kwargs) for port in ports]
     std_out_queues,std_out_threads = configure_non_blocking_io(processes,'stdout')
     std_err_queues,std_err_threads = configure_non_blocking_io(processes,'stderr')
 
