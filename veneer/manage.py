@@ -129,10 +129,11 @@ def create_command_line(veneer_path,source_version="4.1.1",source_path='C:\\Prog
             continue
         shutil.copyfile(str(f),str(Path(dest)/_basename(f)))
 
-    for f in veneer_files:
-        if not f.is_file():
-            continue
-        shutil.copyfile(str(f),str(Path(dest)/_basename(f)))
+    if Path(veneer_path)!=dest:
+        for f in veneer_files:
+            if not f.is_file():
+                continue
+            shutil.copyfile(str(f),str(Path(dest)/_basename(f)))
 
     extra_dirs = ['x86','x64']
     for e in extra_dirs:
