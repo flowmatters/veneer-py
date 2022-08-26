@@ -46,7 +46,12 @@ class Queryable(object):
         return self._v.model._safe_run('%s\n%s'%(self._v.model._init_script(self._ns),script))
 
     def __call__(self,*args,**kwargs):
-        return self._v.model.call(self._path+str(tuple(args)))
+        arguments = [_format_for_script(a) for a in args]
+        definitions = 'clr\n'+'\n'.join([d for d,_ in arguments])
+
+        args = [a for _,a in arguments]
+        args = ','.join(args)
+        return self._v.model.call(f'{self._path}({args})',namespace=definitions)
 
     def __repr__(self):
         return str(self._eval_())
@@ -76,4 +81,32 @@ class Queryable(object):
     
     def __float__(self):
         return float(self._eval_())
+
+
+def _format_for_script(o):
+    import inspect
+    if o.__class__==inspect.getsource.__class__:
+        code = inspect.getsource(o).strip()
+        defn = ''
+        lines = code.splitlines()
+        if '= lambda' in lines[0]:
+            defn = code
+            fn_name = lines[0][:lines[0].index('=')].strip()
+            code = fn_name
+        elif lines[0].startswith('def'):
+            defn = code
+            fn_name = lines[0].replace('def ','')
+            fn_name = fn_name[:fn_name.index('(')]
+            code = fn_name
+        else:
+            assert len(lines)==1
+            code = code[code.index('lambda'):]
+            count_open = code.count('(')
+            count_closed = code.count(')')
+            while count_closed > count_open:
+                code = code.strip()
+                code = code[:-1]
+                count_closed = code.count(')')
+        return defn,code
+    return '',o
 
