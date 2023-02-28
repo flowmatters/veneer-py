@@ -166,6 +166,19 @@ def validate_dict(the_dict):
   if len(errors):
     raise Exception('Missing required value for %s in %s'%(str(errors),str(the_dict)))
 
+def dec_to_str(val):
+  if val is None:
+    return ''
+
+  if isinstance(val,float):
+    txt = '%0.4f'%val
+    txt = txt.rstrip('0')
+    if txt.endswith('.'):
+      txt +='0'
+    return txt
+
+  return str(val)
+
 class ConfigItemCollection(object):
   def __init__(self,template):
     self.template = template
@@ -191,7 +204,7 @@ class ConfigItemCollection(object):
 
   def declarations(self):
     self.validate()
-    return '\n'.join([' '.join(['' if v is None else str(v) for v in entry.values()]) for entry in self.items])
+    return '\n'.join([' '.join([dec_to_str(v) for v in entry.values()]) for entry in self.items])
 
 class PestParameter(object):
   def __init__(self,parnme,**kwargs):
