@@ -279,7 +279,7 @@ class CalibrationObservations(ConfigItemCollection):
     return self.data.script(store_ts) +'\n' + '\n'.join(instructions)
 
   def compare(self,ts_name,mod_ref,stat=stats.nse,target=None,aggregation=None,time_period=None,obsnme=None,
-              mod_scale=1,mod_transform='',mod_combine='sum'):
+              mod_scale=1,mod_transform='',mod_combine='sum',weight=1.0):
     if obsnme is None:
       obsnme = ts_name.replace(' ','_')
 
@@ -332,7 +332,7 @@ class CalibrationObservations(ConfigItemCollection):
       self.instructions.append('obs_ts = obs_ts[t_mask]')
 
 #    self.instructions.append('print(obs_ts);print(mod_ts)')
-    if hasattr(stat,'maximise') and stat.maximise:
+    if (weight != 0.0) and hasattr(stat,'maximise') and stat.maximise:
       if hasattr(stat,'maximise'):
         sign = '%f-'%stat.maximise
       else:
@@ -341,7 +341,7 @@ class CalibrationObservations(ConfigItemCollection):
       sign = '' 
     self.instructions.append('pest_observations.append(("%s",%s%s(obs_ts,mod_ts)))'%(obsnme,sign,stat.__name__))
 
-    self.add(obsnme,target)  
+    self.add(obsnme,target,weight)
 
   def penalise(self,penalty_name,penalty_equation,penalty_factor=1,multiplier=False):
     '''
