@@ -18,6 +18,7 @@ Broadly speaking, these statistics will work with data that
 """
 
 import numpy as np
+import math
 
 def compNFDC(obs, pred):
 	"""
@@ -98,14 +99,32 @@ def nse(obs,pred):
 nse.perfect=1
 nse.maximise=True
 
-
+def relative_bias(obs,pred):
+    """
+    Relative Bias
+    """
+    obs,pred = intersect(obs,pred)
+    return (pred.sum()-obs.sum())/obs.sum()
 
 def PBIAS(obs,pred):
-    obs,pred = intersect(obs,pred)
-    top = (obs-pred).sum()
-    bottom = obs.sum()
-    return (top/bottom)*100
-    
+    """
+    Percent Bias
+    """
+    return 100.0*relative_bias(obs,pred)
+
+def absolute_relative_bias(obs,pred):
+    """
+    Absolute Relative Bias
+    """
+    return abs(relative_bias(obs,pred))
+
+def bias_penalty(obs,pred):
+    """
+    Bias Penalty
+    """
+    abs_bias = absolute_relative_bias(obs,pred)
+    return 5 * abs(math.log(1+abs_bias))**2.5
+
 def rsr (obs,pred):
     obs,pred = intersect(obs,pred)
     rmse = (((obs-pred)**2).sum())**(1/2)
