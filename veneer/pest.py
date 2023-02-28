@@ -379,6 +379,7 @@ class CalibrationObservations(ConfigItemCollection):
 
 class Case(object):
   def __init__(self,name,optimiser='pest',model_servers=[9876],random_seed=1111,detailed_log=True):
+    self.custom_imports = []
     self.optimiser=optimiser.lower()
     self.random_seed=random_seed
     self.name=name
@@ -450,8 +451,22 @@ class Case(object):
     validate_dict(options)
     return PCF.substitute(options) 
 
+  def ptf_imports(self):
+    if not len(self.custom_imports):
+      return ''
+    result = [
+      '',
+      '# Custom imports',
+      'import sys'
+    ]
+    directories = set([os.path.dirname(i.__file__) for i in self.custom_imports])
+    result += [f'sys.path.append(r"{d}")' for d in directories]
+    result += [f'from {i.__name__} import *' for i in self.custom_imports]
+    result += ['']
+    return '\n'.join(result)
+
   def ptf_text(self):
-    full = (PTF_PREFIX%self.detailed_log + self.parameters.script() + PTF_RUN + self.observations.script() + PTF_ASSESS)
+    full = (PTF_PREFIX%self.detailed_log + self.ptf_imports() + self.parameters.script() + PTF_RUN + self.observations.script() + PTF_ASSESS)
 
     if self.detailed_log:
       full += '\n' + self.parameters.log_script() + WRITE_DETAILED_LOG
