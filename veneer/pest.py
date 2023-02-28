@@ -16,6 +16,7 @@ from .utils import DeferredActionCollection
 
 dict = OrderedDict
 
+FAILED_RUN_OBJ_FN= 1000000.0
 DEFAULT_PEST_DELIMITER='$'
 
 #
@@ -50,10 +51,20 @@ pest_observations=[]
 
 # Get results
 run_results = v.retrieve_run()
+
 if 'RunLog' in run_results:
   print(os.linesep.join(run_results['RunLog']))
 else:
   print('No run log. Consider upgrading Veneer plugin')
+
+failed = False
+if 'Status' in run_results:
+  if run_results['Status'] != 'RunSuccess':
+    print('Run failed')
+    with open('failed_run_log.txt','w') as fp:
+      fp.write(os.linesep.join(run_results['RunLog']))
+    failed = True
+
 # Compute stats
 '''
 
@@ -242,7 +253,17 @@ class CalibrationObservations(ConfigItemCollection):
     def store_ts(instruction):
       return "observed_ts.update(pd.%s.dropna(how='all').to_dict('series'))"%str(instruction)
 
-    return self.data.script(store_ts) +'\n' + '\n'.join(self.instructions)
+    instructions = [
+      'if failed:'
+    ]
+
+    instructions += [f'  pest_observations.append(("{obs["OBSNME"]}",{FAILED_RUN_OBJ_FN}))' for obs in self.items]
+    instructions += [
+      'else:'
+    ]
+    instructions += [f'  {i}' for i in self.instructions]
+
+    return self.data.script(store_ts) +'\n' + '\n'.join(instructions)
 
   def compare(self,ts_name,mod_ref,stat=stats.nse,target=None,aggregation=None,time_period=None,obsnme=None,
               mod_scale=1,mod_transform='',mod_combine='sum'):
