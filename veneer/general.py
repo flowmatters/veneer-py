@@ -699,7 +699,7 @@ class Veneer(object):
         '''
         return SearchableList(self.retrieve_json('/inputSets'))
 
-    def update_input_set(self, name, input_set):
+    def update_input_set(self, name, input_set,run_async=False):
         '''
         Modify the input set and send to Source.
 
@@ -707,7 +707,7 @@ class Veneer(object):
         input_set: A Python dictionary representing the updated input set. Should contain the same fields as the input set
                    returned from the input_sets method.
         '''
-        return self.send_json('/inputSets/%s' % (name.replace(' ', '%20')), method='PUT', data=input_set)
+        return self.send_json('/inputSets/%s' % (name.replace(' ', '%20')), method='PUT', data=input_set,run_async=run_async)
 
     def create_input_set(self, input_set):
         '''
@@ -718,11 +718,11 @@ class Veneer(object):
         '''
         return self.post_json('/inputSets', data=input_set)
 
-    def apply_input_set(self, name):
+    def apply_input_set(self, name, run_async=False):
         '''
         Have Source apply a given input set
         '''
-        return self.send('/inputSets/%s/run' % (name.replace('%', '%25').replace(' ', '%20')), 'POST')
+        return self.send('/inputSets/%s/run' % (name.replace('%', '%25').replace(' ', '%20')), 'POST',run_async=run_async)
 
     def timeseries_suffix(self,timestep='daily'):
         if timestep == "daily":
