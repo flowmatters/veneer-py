@@ -54,6 +54,18 @@ def kill_all_now(processes):
     for p in processes:
         p.wait()
 
+def kill_every_running_instance_of_veneer_cmd_line():
+    import psutil
+    for pid in psutil.pids():
+        proc = psutil.Process(pid)
+        try:
+            cmd = proc.cmdline()
+        except:
+            continue
+        if len(cmd) and 'FlowMatters.Source.VeneerCmd.exe' in proc.cmdline()[0]:
+            print(f'Killing {pid}')
+            proc.kill()
+
 def _enqueue_output(out, queue):
     for line in iter(out.readline, b''):
         queue.put(line)
