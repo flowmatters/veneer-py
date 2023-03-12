@@ -226,9 +226,12 @@ class ConfigItemCollection(object):
     for item in self.items:
       validate_dict(item)
 
+  def declaration(self,entry):
+    return ' '.join([dec_to_str(v) for v in entry.values()])
+
   def declarations(self):
     self.validate()
-    return '\n'.join([' '.join([dec_to_str(v) for v in entry.values()]) for entry in self.items])
+    return '\n'.join([self.declaration(entry) for entry in self.items])
 
 class PestParameter(object):
   def __init__(self,parnme,**kwargs):
@@ -285,6 +288,9 @@ class CalibrationObservations(ConfigItemCollection):
     self.data = ObservedData()
     self.instructions = []
     self.veneer_prefix = veneer_prefix
+
+  def __len__(self):
+    return len([i for i in self.items if i['WEIGHT']!=0])
 
   def script(self):
     def store_ts(instruction):
@@ -396,10 +402,16 @@ class CalibrationObservations(ConfigItemCollection):
     self.add(penalty_name,0)
 
   def pif_line(self,obs):
-    return '%s%s%s !%s!'%(self.delimiter,obs['OBSNME'],self.delimiter,obs['OBSNME'])
+    if obs['WEIGHT']:
+      return '%s%s%s !%s!'%(self.delimiter,obs['OBSNME'],self.delimiter,obs['OBSNME'])
+    return 'l1' #%s%s%s 0.0'%(self.delimiter,obs['OBSNME'],self.delimiter)
 
   def pif_text(self):
     return '\n'.join([PIF_PREFIX] + [self.pif_line(i) for i in self.items])
+
+  def declarations(self):
+    self.validate()
+    return '\n'.join([self.declaration(entry) for entry in self.items if entry['WEIGHT']])
 
 class Case(object):
   def __init__(self,name,optimiser='pest',model_servers=[9876],random_seed=1111,detailed_log=True):
