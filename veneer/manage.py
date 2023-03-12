@@ -16,6 +16,9 @@ ON_POSIX = 'posix' in sys.builtin_module_names
 VENEER_EXE_FN='FlowMatters.Source.VeneerCmd.exe'
 MANY_VENEERS='D:\\src\\projects\\Veneer\\Compiled'
 VENEER_EXE='D:\\src\\projects\\Veneer\\Output\\FlowMatters.Source.VeneerCmd.exe'
+IGNORE_LOGS=[
+    'log4net:ERROR Failed to find configuration section'
+]
 
 def _dirname(path):
     return os.path.dirname(str(path))
@@ -32,6 +35,12 @@ def _get_version_number (filename):
         return HIWORD (ms), LOWORD (ms), HIWORD (ls), LOWORD (ls)
     except:
         return 0,0,0,0
+
+def ignore_log(line:str):
+    for ignore in IGNORE_LOGS:
+        if ignore in line:
+            return True
+    return False
 
 def kill_all_on_exit(processes):
     def end_processes():
@@ -303,7 +312,8 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=True,
                     end = True
                     pass
                 else:
-                    print('ERROR[%d] %s'%(i,line))
+                    if not ignore_log(line):
+                        print('ERROR[%d] %s'%(i,line))
 
             if ready[i]:
                 continue
