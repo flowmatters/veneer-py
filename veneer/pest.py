@@ -157,6 +157,30 @@ INSTRUCTION_DEFAULTS=OrderedDict([('INSFLE',None),('OUTFLE',None)])
 PRF_DEFAULTS=OrderedDict([('NSLAVE',None),('IFLETYP',0),('WAIT',0.5),('PARLAM',1),('RUNREPEAT',0),('RUN_SLOW_FAC',1.5)])
 SLAVE_DEFAULTS=OrderedDict([('SLAVNAME',None),('SLAVDIR',None),('SLAVEGROUP','')])
 
+SCE_DEFAULTS=dict(
+  initial_complexes=10,
+  minimum_complexes=10,
+  parameter_sets_in_complex=9,
+  parameter_sets_per_subcomplex=5,
+  include_initial_parameter_set='y',
+  evolution_steps_before_shuffling=9,
+  max_iterations=10000,
+  verbose_output='v'
+)
+
+CMAES_DEFAULTS = {
+  'max_iters':5000,
+  'iterations_for_change':40,
+  'min_relative_param_change':0.001,
+  'rel_hi_low_object_fn':0.01,
+  'no_iterations_hi_lo':10,
+  'lambda_param':None,
+  'mu_param':None,
+  'random_seed':1111,
+  'recombination_weights':'s',
+  'read_parameter_covariance_from_file':'n'
+}
+
 def validate_dict(the_dict):
   errors = []
   for k,v in the_dict.items():
@@ -490,40 +514,70 @@ class Case(object):
   def stdio_params(self,**kwargs):
     p={}
     p['min_relative_objective_fn_change'] = 0.001
-    p['iterations_for_change']=5
+    p['iterations_for_change']='' # was 5
     p['max_iters']=50000
     random_seed = self.random_seed
     if random_seed is None:
       random_seed = np.random.randint(2**15)
     random_seed = str(random_seed)
     if self.optimiser == 'sceua_p':
+      p.update(SCE_DEFAULTS)
+      p['initial_complexes']=max(10,len(self.veneer_ports))
+
       p.update(kwargs)
-      sce_params = [max(10,len(self.veneer_ports)),5,9,5,'y',9,random_seed,'n',p['min_relative_objective_fn_change'],p['iterations_for_change'],p['max_iters']]
+      # sce_params = [max(10,len(self.veneer_ports)),5,9,5,'y',9,random_seed,'n',p['min_relative_objective_fn_change'],p['iterations_for_change'],p['max_iters']]
+      sce_params = [
+        p['initial_complexes'],# Enter initial number of complexes: 
+        p['minimum_complexes'],# Minimum number of complexes (<Enter> if 5):
+        p['parameter_sets_in_complex'],# Parameter sets in each complex (<Enter> if 9):
+        p['parameter_sets_per_subcomplex'],# Parameter sets per sub-complex (<Enter> if 5):
+        p['include_initial_parameter_set'],# Include initial parameter set in population? [y/n] (<Enter> if n):
+        p['evolution_steps_before_shuffling'],# Evolution steps before shuffling (<Enter> if 9):
+        random_seed,# Random number seed (<Enter> if 555)
+        p['verbose_output'],#Verbose or non-verbose SCEUA printout? [v/n]: (<Enter> if "n"):
+        p['min_relative_objective_fn_change'],#Max relative obj fn change over N itns (<Enter> if 1.0000E-02):
+        p['iterations_for_change'],# No of itns over which this applies (<Enter> if 5):
+        p['max_iters']# Maximum number of model runs (<Enter> if 10000):
+      ]
+
       if len(self.observations)==1:
+        # Minimise model equiv or match to observation? [i/a] (<Enter> if "i"):
         sce_params = ['i']+sce_params
       return '\n'.join([str(p) for p in sce_params])
     elif self.optimiser == 'cmaes_p':
-      p['iterations_for_change']=40
-      p['min_relative_param_change']=0.001
-      p['rel_hi_low_object_fn']=0.01
-      p['no_iterations_hi_lo']=10
-      lambda_param = int(4 + 3*math.log(len(self.parameters)))
+      p.update(CMAES_DEFAULTS)
+      lambda_param = math.ceil(4 + 3*math.log(len(self.parameters)))
       p['lambda_param'] = max(lambda_param,len(self.veneer_ports))
-      p['mu_param'] = int(p['lambda_param']/2)
+      p['mu_param'] = math.ceil(p['lambda_param']/2)
       p.update(kwargs)
-      cmaes_params = [p['lambda_param'],p['mu_param'],'s',random_seed,'n']
+      cmaes_params = [
+        p['lambda_param'],
+        p['mu_param'],
+        p['recombination_weights'],
+        random_seed,
+        p['read_parameter_covariance_from_file']
+      ]
       
       if len(self.observations) > len(self.parameters):
         cmaes_params += ['n'] # Employ SVD hybridisation?
 
-      cmaes_params += ['n',p['min_relative_objective_fn_change'],
-                      p['iterations_for_change'],p['min_relative_param_change'],p['iterations_for_change'],
-                      p['rel_hi_low_object_fn'],p['no_iterations_hi_lo'],p['max_iters'],'y']
+      cmaes_params += [
+        'n', # Forgive model run failure
+        p['min_relative_objective_fn_change'],
+        p['iterations_for_change'],
+        p['min_relative_param_change'],
+        p['iterations_for_change'],
+        p['rel_hi_low_object_fn'],
+        p['no_iterations_hi_lo'],
+        p['max_iters'],
+        'y'
+      ]
 
       # lambda, mu, recombination weights, random seed, read covariance matrix from file, forgive model runs
       # ... named...
       # run model with initial,
       if len(self.observations)==1:
+        # Minimise model equiv or match to observation? [i/a] (<Enter> if "i"):
         cmaes_params = ['i'] + cmaes_params
       return '\n'.join([str(p) for p in cmaes_params]) + '\n'
     return None
