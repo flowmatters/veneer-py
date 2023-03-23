@@ -621,6 +621,7 @@ class Case(object):
     opt_exe=self.optimiser
     opt_args=''
 
+    slave_processes = []
     if len(self.veneer_ports)==1:
       working_dir='.'
       self.write_connection_file(working_dir,self.veneer_ports[0])
@@ -636,7 +637,6 @@ class Case(object):
       open(self.prf_fn(),'w').write(self.prf_text())
 
       cwd = os.getcwd()
-      slave_processes = []
       for slave in self.veneer_ports:
         os.chdir(cwd)
         name = self.slave_name(slave)
