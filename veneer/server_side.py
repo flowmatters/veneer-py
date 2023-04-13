@@ -1508,6 +1508,10 @@ class VeneerLinkRoutingActions(VeneerNetworkElementActions):
                                         assignment=assignment,
                                         post_assignment=post_assignment)
 
+    def piecewise_routing_table(self,link):
+        return self.tabulate_list_values('Piecewises',
+                                         ['IndexFlow','TravelTime'],
+                                         links=[link])
 
 class VeneerNodeActions(VeneerNetworkElementActions):
     '''
