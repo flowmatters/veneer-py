@@ -1512,6 +1512,10 @@ class VeneerNodeActions(VeneerNetworkElementActions):
 
     * node_types - the type(s) of nodes to match when querying/configuring
 
+    * splitter - whether to target splitter nodes
+
+    * raw - whether to target the node itself
+
     For example:
 
     v.model.nodes.get_models(nodes='Fish River')
@@ -1545,15 +1549,47 @@ class VeneerNodeActions(VeneerNetworkElementActions):
     def _model_property(self, splitter):
         return 'FlowPartitioning' if splitter else 'NodeModel'
 
-    def _build_accessor(self, parameter=None, nodes=None, node_types=None, splitter=False):
+    def _build_accessor(self, parameter=None, nodes=None, node_types=None, raw=False, splitter=False):
         accessor = 'scenario.Network.Nodes'
         accessor += self._refine_accessor(nodes=nodes, node_types=node_types)
 
-        accessor += '.*%s' % self._model_property(splitter)
+        next_wildcard='.'
+        if raw:
+            next_wildcard='.*'
+        else:
+            accessor += '.*%s' % self._model_property(splitter)
+
         if not parameter is None:
-            accessor += '.%s' % parameter
+            accessor += f'{next_wildcard}{parameter}'
 
         return accessor
+
+    def names(self, raw=True,**kwargs):
+        '''
+        Return the names of the network elements
+        '''
+        if raw:
+            return self.get_param_values('Name', raw=True,**kwargs)
+        return self.get_param_values(self._name_accessor, **kwargs)
+
+    def model_table(self, **kwargs):
+        '''
+        Build a dataframe of models in use
+        '''
+        kwargs['raw'] = True
+        names = self.enumerate_names(**kwargs)
+
+        kwargs['raw'] = False
+        kwargs['splitter'] = False
+        models = self.get_models(skip_nulls=False,**kwargs)
+
+        kwargs['splitter'] = True
+        splitters = self.get_models(skip_nulls=False, **kwargs)
+
+        self.name_columns
+        rows = [dict(list(zip(self.name_columns, n)) + [('model', m), ('splitter', s)])
+                for n, m, s in zip(names, models, splitters)]
+        return pd.DataFrame(rows)
 
     def create(self, name, node_type, location=None, schematic_location=None, splitter=False):
         script = self._ironpy._init_script('.'.join(node_type.split('.')[:-1]))
