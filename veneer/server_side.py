@@ -31,7 +31,7 @@ def _transform_node_type_name(n):
         return n
     if n.endswith('Node'):
         return n + 'Model'
-    if n=='InjectedFlow':
+    if n in ['InjectedFlow','RegulatedEffluentPartitioner']:
         return n
     return n + 'NodeModel'
 
@@ -1534,6 +1534,9 @@ class VeneerNodeActions(VeneerNetworkElementActions):
         from .nodes.losses import VeneerLossNodeActions
         self.losses = VeneerLossNodeActions(self)
 
+        from .nodes.partitioning import VeneerFlowPartitioningActions
+        self.partitioning = VeneerFlowPartitioningActions(self)
+
     def _refine_accessor(self, node_access='', nodes=None, node_types=None, splitter=False):
         accessor = ""
         if not nodes is None:
@@ -1551,7 +1554,7 @@ class VeneerNodeActions(VeneerNetworkElementActions):
 
     def _build_accessor(self, parameter=None, nodes=None, node_types=None, raw=False, splitter=False):
         accessor = 'scenario.Network.Nodes'
-        accessor += self._refine_accessor(nodes=nodes, node_types=node_types)
+        accessor += self._refine_accessor(nodes=nodes, node_types=node_types,splitter=splitter)
 
         next_wildcard='.'
         if raw:
