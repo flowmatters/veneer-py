@@ -1,14 +1,6 @@
 import pandas as pd
 from veneer.server_side import VeneerNetworkElementActions
 
-GET_EFFLUENT_RELATIONSHIP_SCRIPTLET='''
-ignoreExceptions=False
-tbl = target.EffluentRelationship
-for ix in range(tbl.Count):
-    row = tbl[ix]
-    result.append((row.UpstreamFlow,row.MinimumEffluent,row.MaximumEffluent))
-'''
-
 class VeneerFlowPartitioningActions(VeneerNetworkElementActions):
     def __init__(self,node_actions):
         self.node_actions = node_actions
@@ -23,7 +15,5 @@ class VeneerFlowPartitioningActions(VeneerNetworkElementActions):
         '''
         Retrieve the effluent relationship table for a given node
         '''
-        code = GET_EFFLUENT_RELATIONSHIP_SCRIPTLET
-        vals = self.apply(code,init='[]',nodes=[node])
-        return pd.DataFrame(vals,columns=['upstream_flow','minimum_effluent','maximum_effluent'])
+        return self.tabulate_list_values('EffluentRelationship',['UpstreamFlow','MinimumEffluent','MaximumEffluent'],nodes=[node])
 

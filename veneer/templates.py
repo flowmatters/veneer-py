@@ -233,3 +233,10 @@ from TIME.Management import NonInteractiveIO
 NonInteractiveIO.Save(r"%s",scenario.GeographicData.%s)
 '''
 
+TABULATION_SCRIPTLET='''
+ignoreExceptions=False
+tbl = target.{property_name}
+for row in tbl:
+    result.append(({values}))
+'''
+
