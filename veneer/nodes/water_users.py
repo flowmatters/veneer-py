@@ -1,6 +1,6 @@
-from .server_side import VeneerNetworkElementActions
+from veneer.server_side import VeneerNetworkElementActions
 from types import MethodType
-from .utils import _quote_string
+from veneer.utils import _quote_string
 
 DEMAND_TYPES={
     'timeseries':'RiverSystem.DemandModels.TimeSeries.TimeSeriesDemandNodeModel',

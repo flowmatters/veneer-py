@@ -1,8 +1,6 @@
-from types import MethodType
 import pandas as pd
 import numpy as np
-from .server_side import VeneerNetworkElementActions
-from .utils import _quote_string
+from veneer.server_side import VeneerNetworkElementActions
 
 GET_LOSS_TABLE_SCRIPTLET='''
 ignoreExceptions=False

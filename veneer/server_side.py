@@ -1521,13 +1521,13 @@ class VeneerNodeActions(VeneerNetworkElementActions):
         super(VeneerNodeActions, self).__init__(ironpython)
         self._name_accessor = 'Node.Name'
         self.constituents = VeneerNodeConstituentActions(self)
-        from .storages import VeneerStorageActions
+        from .nodes.storages import VeneerStorageActions
         self.storages = VeneerStorageActions(self)
 
-        from .water_users import VeneerWaterUserActions
+        from .nodes.water_users import VeneerWaterUserActions
         self.water_users = VeneerWaterUserActions(self)
 
-        from .losses import VeneerLossNodeActions
+        from .nodes.losses import VeneerLossNodeActions
         self.losses = VeneerLossNodeActions(self)
 
     def _refine_accessor(self, node_access='', nodes=None, node_types=None, splitter=False):
