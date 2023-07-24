@@ -250,7 +250,7 @@ def network_catchment_for_link(self,link):
             return f
     return None
 
-def network_plot(self,nodes=True,links=True,catchments=True,ax=None,zoom=0.05):
+def network_plot(self,nodes=True,links=True,catchments=True,ax=None,zoom=0.05,label_nodes=False):
     import matplotlib.pyplot as plt
     from matplotlib.offsetbox import OffsetImage, AnnotationBbox
     import numpy as np
@@ -282,10 +282,12 @@ def network_plot(self,nodes=True,links=True,catchments=True,ax=None,zoom=0.05):
     y = [p.y for p in points]
     x, y = np.atleast_1d(x, y)
     nodes = []
-    for x0, y0,icon in zip(x, y,df_nodes.icon):
+    for x0, y0,icon,name in zip(x, y,df_nodes.icon,df_nodes.name):
         im = OffsetImage(icon_images[icon], zoom=zoom)
         ab = AnnotationBbox(im, (x0, y0), xycoords='data', frameon=False)
         nodes.append(ax.add_artist(ab))
+        if label_nodes:
+            ax.annotate(name,xy=(x0,y0),xycoords='data',xytext=(x0+0.0001,y0+0.0001),textcoords='data',fontsize=8)
     ax.update_datalim(np.column_stack([x, y]))
     ax.autoscale()
     return ax
