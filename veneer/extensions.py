@@ -269,7 +269,13 @@ def network_plot(self,nodes=True,links=True,catchments=True,ax=None,zoom=0.05,la
         params = catchments if hasattr(catchments,'keys') else {}
         df[df.feature_type=='catchment'].plot(ax=ax,**params)
     
-    if links:
+    if links == 'arrow':
+        for _,row in df[df.feature_type=='link'].iterrows():
+            start= row.geometry.coords[0]
+            end = row.geometry.coords[1]
+            delta = (end[0]-start[0],end[1]-start[1])
+            plt.arrow(*start,*delta, length_includes_head=True,head_width=abs(max(start))*0.005, head_length=abs(max(start))*0.01)
+    else:
         params = links if hasattr(links,'keys') else {}
         df[df.feature_type=='link'].plot(ax=ax,**params)
 
