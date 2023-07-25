@@ -205,6 +205,9 @@ class SearchableList(object):
 
         return SearchableList(result)
 
+    def where(self, fn):
+        return SearchableList(list(filter(fn, self._list)), self._nested)
+
     def __getattr__(self, name):
         FIND_PREFIX = 'find_by_'
         if name.startswith(FIND_PREFIX):
