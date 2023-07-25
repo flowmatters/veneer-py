@@ -254,7 +254,7 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=True,
 
     - return_io - Return Queues and Threads for asynchronous IO - for reading output of servers (boolean, default: False)
 
-    - model - Specify the model (scenario) to use. Default None (use first scenario)
+    - model - Specify the model (scenario) to use. Default None (use first scenario). Can specify by scenario name or 1-based index.
 
     - additional_plugins - List of plugin files (DLLs) to load
 
@@ -278,6 +278,9 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=True,
     if remote: extras += '-r '
     if script: extras += '-s '
     if model is not None:
+        if isinstance(model,int) and model <= 0:
+            raise Exception('Model index must be 1-based')
+
         model = str(model)
         if ' ' in model:
             model = '"%s"'%model
