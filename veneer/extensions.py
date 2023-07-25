@@ -270,6 +270,18 @@ def network_subset_upstream_of(self,node):
     node = self['features'].find_by_id(_node_id(node))[0]
     features._list.append(node)
     result = {
+        'type':'FeatureCollection',
+        '_v':self['_v'],
+        'features':features
+    }
+    result = _extend_network(result)
+    return result
+
+def network_subset(self,filter):
+    features = self['features'].where(filter)
+    result = {
+        'type':'FeatureCollection',
+        '_v':self['_v'],
         'features':features
     }
     result = _extend_network(result)
