@@ -146,6 +146,18 @@ def network_outlet_nodes(self):
 
     return _feature_list(no_downstream_excluding_water_user._list+nodes_with_only_water_users)
 
+def network_use_schematic_coordinates(self):
+    for f in self['features']:
+        if f['properties']['feature_type']=='node':
+            f['geometry']['coordinates']=f['properties']['schematic_location']
+        elif f['properties']['feature_type']=='link':
+            from_node = self['features'].find_by_id(f['properties']['from_node'])[0]
+            to_node = self['features'].find_by_id(f['properties']['to_node'])[0]
+            f['geometry']['coordinates'] = [
+                from_node['properties']['schematic_location'],
+                to_node['properties']['schematic_location']
+            ]
+
 def network_as_dataframe(self):
     try:
         from geopandas import GeoDataFrame
