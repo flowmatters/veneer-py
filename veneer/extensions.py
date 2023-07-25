@@ -300,7 +300,10 @@ def network_catchment_for_link(self,link):
             return f
     return None
 
-def network_plot(self,nodes=True,links=True,catchments=True,ax=None,zoom=0.05,label_nodes=False):
+def network_plot(self,
+                 nodes=True,links=True,catchments=True,
+                 ax=None,zoom=0.05,label_nodes=False,
+                 arrow_options=None):
     import matplotlib.pyplot as plt
     from matplotlib.offsetbox import OffsetImage, AnnotationBbox
     import numpy as np
@@ -316,15 +319,23 @@ def network_plot(self,nodes=True,links=True,catchments=True,ax=None,zoom=0.05,la
     df = self.as_dataframe()
 
     if catchments:
-        params = catchments if hasattr(catchments,'keys') else {}
-        df[df.feature_type=='catchment'].plot(ax=ax,**params)
+        catchment_df = df[df.feature_type=='catchment']
+        if len(catchment_df):
+            params = catchments if hasattr(catchments,'keys') else {}
+            catchment_df.plot(ax=ax,**params)
     
     if links == 'arrow':
         for _,row in df[df.feature_type=='link'].iterrows():
             start= row.geometry.coords[0]
             end = row.geometry.coords[1]
             delta = (end[0]-start[0],end[1]-start[1])
-            plt.arrow(*start,*delta, length_includes_head=True,head_width=abs(max(start))*0.005, head_length=abs(max(start))*0.01)
+            link_arrow_options = {
+                'length_includes_head':True,
+                'head_width':abs(max(start))*0.005,
+                'head_length':abs(max(start))*0.005
+            }
+            link_arrow_options.update(arrow_options or {})
+            plt.arrow(*start,*delta,**link_arrow_options)
     else:
         params = links if hasattr(links,'keys') else {}
         df[df.feature_type=='link'].plot(ax=ax,**params)
