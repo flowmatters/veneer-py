@@ -5,6 +5,8 @@ from types import MethodType
 from .utils import SearchableList, objdict
 
 _WU_ICON='/resources/WaterUserNodeModel'
+_EP_ICON='/resources/ExtractionNodeModel'
+_RP_ICON='/resources/RegulatedEffluentPartitioner'
 
 def _feature_id(f):
     if hasattr(f,'keys'):
@@ -158,7 +160,11 @@ def network_as_dataframe(self):
 
     return self['features'].as_dataframe()
 
-def network_partition(self,key_features,new_prop):
+def network_partition(self,
+                      key_features,
+                      new_prop,
+                      reverse_water_users=False,
+                      reverse_regulated_partitioners=False):
     '''
     Partition the network by a list of feature names (key_features).
 
@@ -167,16 +173,21 @@ def network_partition(self,key_features,new_prop):
     Features in key_features are assigned to their own group.
 
     Features with no downstream key_feature (eg close to outlets) are attributed with their outlet node
+
+    By default, water users are treated as being downstream of the relevation extraction point.
+    Set reverse_water_users=True to reverse this behaviour.
     '''
     features = self['features']
+    links_to_redo = []
 
-    def attribute_next_down(feature):
-        if new_prop in feature['properties']:
-            return feature['properties'][new_prop]
+    def attribute_next_down(feature,force_key=None):
+        if force_key is None:
+            if new_prop in feature['properties']:
+                return feature['properties'][new_prop]
 
-        if feature['properties']['name'] in key_features:
-            feature['properties'][new_prop] = feature['properties']['name']
-            return feature['properties']['name']
+            if feature['properties']['name'] in key_features:
+                feature['properties'][new_prop] = feature['properties']['name']
+                return feature['properties'][new_prop]
 
         f_type = feature['properties']['feature_type']
 
@@ -188,30 +199,45 @@ def network_partition(self,key_features,new_prop):
             downstream_links = self.downstream_links(feature)
             if len(downstream_links)==0:
                 # Outlet and we didn't find one of the key features...
-                feature['properties'][new_prop] = feature['properties']['name']
-                return feature['properties']['name']
+                feature['properties'][new_prop] = force_key or feature['properties']['name']
+                return feature['properties'][new_prop]
             elif len(downstream_links)>1:
+                is_extraction_point = feature['properties']['icon']==_EP_ICON
+                is_regulated_partitioner = feature['properties']['icon']==_RP_ICON
+                found_key = None
+                links_without_key = []
                 for l in downstream_links:
-                    key = attribute_next_down(l)
+                    key = attribute_next_down(l,force_key=force_key)
                     if key in key_features:
-                        # If this link leads to a key_feature, return that name
-                        feature['properties'][new_prop] = key
-                        return key
-                # All downstream links terminate without reaching a key_feature
-                # Return the first one
-                feature['properties'][new_prop] = downstream_links[0]['properties'][new_prop] 
-                return downstream_links[0]['properties'][new_prop]
+                        found_key = found_key or key
+                        feature['properties'][new_prop] = found_key
+                    elif is_extraction_point and reverse_water_users:
+                        links_without_key.append(l)
+                    elif is_regulated_partitioner and reverse_regulated_partitioners:
+                        links_without_key.append(l)
+
+                if found_key is None:
+                    # All downstream links terminate without reaching a key_feature
+                    # Return the first one
+                    feature['properties'][new_prop] = downstream_links[0]['properties'][new_prop] 
+                    return downstream_links[0]['properties'][new_prop]
+                for l in links_without_key:
+                    links_to_redo.append((l,found_key))
+                return found_key
+
 
             # Just one downstream link, usual case
             ds_feature_id = _feature_id(downstream_links[0])
 
         ds_feature = features.find_by_id(ds_feature_id)[0]
-        key = attribute_next_down(ds_feature)
+        key = attribute_next_down(ds_feature,force_key=force_key)
         feature['properties'][new_prop] = key
         return key
 
     for f in features:
         attribute_next_down(f)
+    for (l,tag) in links_to_redo:
+        attribute_next_down(l,tag)
 
 def network_upstream_features(self,node):
     result = []
