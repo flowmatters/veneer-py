@@ -355,11 +355,12 @@ def network_plot(self,
         nodes.append(ax.add_artist(ab))
         if label_nodes:
             ax.annotate(name,xy=(x0,y0),xycoords='data',xytext=(x0+0.0001,y0+0.0001),textcoords='data',fontsize=8)
+
     ax.update_datalim(np.column_stack([x, y]))
     ax.autoscale()
     return ax
 
-def network_path_between(self,from_feature,to_feature):
+def network_path_between(self,from_feature,to_feature,include_start=False):
     from_id = _node_id(from_feature)
     to_id = _node_id(to_feature)
 
@@ -367,6 +368,8 @@ def network_path_between(self,from_feature,to_feature):
         return SearchableList([])
 
     feature = self['features'].find_one_by_id(from_id)
+    initial = [feature] if include_start else []
+
     if from_id.startswith('/network/catchments'):
         immediate_down = self['features'].find_one_by_id(feature['properties']['link'])
     elif from_id.startswith('/network/link'):
@@ -376,12 +379,12 @@ def network_path_between(self,from_feature,to_feature):
         for pd in possible_downs:
             path_via = self.path_between(pd,to_feature)
             if path_via is not None:
-                return SearchableList([pd]+path_via._list,nested=['properties'])
+                return SearchableList(initial+[pd]+path_via._list,nested=['properties'])
         return None
     path_to = self.path_between(immediate_down,to_feature)
     if path_to is None:
         return None
-    return SearchableList([immediate_down]+path_to._list,nested=['properties'])
+    return SearchableList(initial+[immediate_down]+path_to._list,nested=['properties'])
 
 def network_connectivity_table(self):
     import pandas as pd
