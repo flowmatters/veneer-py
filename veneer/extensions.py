@@ -300,6 +300,35 @@ def network_catchment_for_link(self,link):
             return f
     return None
 
+def network_remove_feature(self,_id):
+    assert isinstance(_id,str)
+    len_before = len(self['features'])
+    self['features'] = SearchableList([f for f in self['features'] if f['id'] != _id],nested=['properties'])
+    len_after = len(self['features'])
+    assert len_before == len_after + 1
+
+def network_by_name(self,name):
+    assert isinstance(name,str)
+    f = self['features'].find_one_by_name(name)
+    return f
+
+def network_by_id(self,f_id):
+    return self['features'].find_one_by_id(f_id)
+
+def network_downstream_nodes(self,feature):
+    feature_type = feature['properties']['feature_type']
+    if feature_type == 'link':
+        return [self.by_id(feature['properties']['to_node'])]
+    downstream_links = self.downstream_links(feature)
+    return sum([self.downstream_nodes(l) for l in downstream_links],[])
+
+def network_upstream_nodes(self,feature):
+    feature_type = feature['properties']['feature_type']
+    if feature_type == 'link':
+        return [self.by_id(feature['properties']['from_node'])]
+    upstream_links = self.upstream_links(feature)
+    return sum([self.upstream_nodes(l) for l in upstream_links],[])
+
 def network_plot(self,
                  nodes=True,links=True,catchments=True,
                  ax=None,zoom=0.05,label_nodes=False,
