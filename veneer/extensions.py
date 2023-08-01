@@ -158,6 +158,22 @@ def network_models(self):
 
     return node_elements
 
+def network_add_model_types(self):
+    v = self['_v']
+    node_models = v.model.node.model_table()
+    routing_models = v.model.link.routing.model_table()
+    for f in self['features']:
+        f_type = f['properties']['feature_type']
+        f['properties']['model'] = None
+        f['properties']['splitter'] = None
+        if f_type=='catchment':
+            continue
+        source = node_models if f_type=='node' else routing_models
+        match = source[source.NetworkElement==f['properties']['name']].iloc[0]
+        f['properties']['model'] = match.model
+        if f_type=='node':
+            f['properties']['splitter'] = match.splitter
+
 def network_headwater_nodes(self):
     return [f for f in self['features'] if f['properties']['feature_type']=='node' and len(self.upstream_links(f))==0]
 
