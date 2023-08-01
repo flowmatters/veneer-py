@@ -73,6 +73,71 @@ def network_node_names(self):
     '''
     return self['features'].find_by_feature_type('node')._all_values('name')
 
+def network_first_common_downstream(self,n1,n2,ignore=[]):
+    ds_nodes = self.downstream_nodes(n1)
+    for ds in ds_nodes:
+        if ds['properties']['name'] in ignore:
+            continue
+        if self.is_downstream_of(ds,n2):
+            return ds
+        found = self.first_common_downstream(ds,n2,ignore)
+        if found is not None:
+            return found
+    return None
+
+def network_add_feature(self,f):
+    feature_type = f['properties']['feature_type']
+    existing_ids = [int(f['id'].split('/')[-1]) for f in self['features'].find_by_feature_type(feature_type)]
+    max_id = max(existing_ids)
+    new_id = f'/{feature_type}s/{max_id+1}'
+    f['id'] = new_id
+    self['features']._list.append(f)
+
+def network_add_link(self,n1,n2):
+    new_link = {
+        'type':'Feature',
+        'geometry':{
+            'type':'LineString',
+            'coordinates':[
+                n1['geometry']['coordinates'],
+                n2['geometry']['coordinates']
+            ]
+        },
+        'id':'new_link',
+        'properties':{
+            'feature_type':'link',
+            'name':f'link from {n1["properties"]["name"]}',
+            'from_node':n1['id'],
+            'to_node':n2['id']
+        }
+    }
+    self.add_feature(new_link)
+
+def network_insert_node_between(self,n1,n2,node_name,node_icon):
+    coordinates = [(c1+c2)/2.0 for c1,c2 in zip(n1['geometry']['coordinates'],n2['geometry']['coordinates'])]
+    new_node = {
+        'type':'Feature',
+        'geometry':{
+            'type':'Point',
+            'coordinates':coordinates
+        },
+        'id':'new_node',
+        'properties':{
+            'feature_type':'node',
+            'name':node_name,
+            'icon':node_icon
+        }
+    }
+    self.add_feature(new_node)
+
+    link_to_adjust = self['features'].find_one_by_to_node(n2['id'])
+    link_to_adjust['properties']['to_node']=new_node['id']
+    link_to_adjust['geometry']['coordinates'][1] = coordinates
+
+    self.add_link(new_node,n2)
+
+    return new_node
+
 def network_models(self):
     '''
     Return a list of models within the network.
