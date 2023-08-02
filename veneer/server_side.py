@@ -402,7 +402,7 @@ class VeneerIronPython(object):
                 innerLoop = 'result.append(%s%s)'
             else:
                 innerLoop = 'result.append(%s)' % alt_expression
-            
+
             inner_exception = ''
             if not skip_nulls:
                 inner_exception = 'result.append(None)'
@@ -1373,7 +1373,7 @@ class VeneerNetworkElementConstituentActions(VeneerNetworkElementActions):
                            literal=True, fromList=False, aspect='played', **kwargs):
         '''
         Assign an input time series to a model input/parameter
-        
+
         '''
         accessor = self._build_accessor(parameter, aspect=aspect, **kwargs)
         return self._ironpy.assign_time_series(accessor, values, from_list=fromList,

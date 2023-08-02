@@ -50,7 +50,7 @@ def network_upstream_links(self,node_or_link):
     Parameters:
 
     * node_or_link  - the node or link to search on. Expects the node feature object
-    '''   
+    '''
     features = self['features']
     source = features.find_by_id(_node_id(node_or_link))[0]
     if source['properties']['feature_type']=='node':
@@ -312,7 +312,7 @@ def network_partition(self,
                 if found_key is None:
                     # All downstream links terminate without reaching a key_feature
                     # Return the first one
-                    feature['properties'][new_prop] = downstream_links[0]['properties'][new_prop] 
+                    feature['properties'][new_prop] = downstream_links[0]['properties'][new_prop]
                     return downstream_links[0]['properties'][new_prop]
                 for l in links_without_key:
                     links_to_redo.append((l,found_key))
@@ -340,7 +340,7 @@ def network_upstream_features(self,node):
         catchment = self['features'].find_by_link(_feature_id(l))
         if catchment is not None:
             result += catchment._list
-        
+
         upstream_node = self['features'].find_by_id(l['properties']['from_node'])[0]
         result.append(upstream_node)
         result += self.upstream_features(_feature_id(upstream_node))._list
@@ -433,7 +433,7 @@ def network_plot(self,
         if len(catchment_df):
             params = catchments if hasattr(catchments,'keys') else {}
             catchment_df.plot(ax=ax,**params)
-    
+
     if links == 'arrow':
         for _,row in df[df.feature_type=='link'].iterrows():
             start= row.geometry.coords[0]

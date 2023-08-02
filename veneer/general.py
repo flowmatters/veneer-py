@@ -863,7 +863,7 @@ class Veneer(object):
                 result[k] = v
                 if not k in renames:
                     continue
-                
+
                 lookup = renames[k]
                 if not v in lookup:
                     continue
@@ -892,7 +892,7 @@ class Veneer(object):
 
             if not matching:
                 continue
-            
+
             filter_out = False
             for k,v in constraint.items():
                 if k not in tags:

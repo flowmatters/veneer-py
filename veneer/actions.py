@@ -31,7 +31,7 @@ def enable_streaming(v,fn,overwrite='Fail'):
 
 	Optionally specify behaviour for when the file exists (overwrite string):
 	 * 'Fail' - default - Don't run the simulation if the output file already exists,
-	 * 'Overwrite' - attempt to overwrite the existing output file. 
+	 * 'Overwrite' - attempt to overwrite the existing output file.
 	                 Note This option will fail if the existing file is locked, such as if the previous run is
 					 still loaded in Source
      * 'Increment' - Change the filename by adding an incrementing integer
