@@ -67,3 +67,39 @@ def get_big_data_source(v,ds_name,data_sources=None,progress=print):
     progress('Got all time series from %s'%ds_name)
     return result
 
+def load_network(v,network,schematic_coords=False):
+    nodes = network['features'].find_by_feature_type('node')
+    links = network['features'].find_by_feature_type('link')
+
+    for n in nodes:
+        if 'model' not in n['properties']:
+            print('Incomplete node',n)
+            raise Exception('Incomplete node')
+        settings = {
+          'name':n['properties']['name'],
+          'node_type':n['properties']['model'] or n['properties']['splitter'],
+          'location':n['geometry']['coordinates'],
+          'splitter':n['properties']['model'] is None
+        }
+        if schematic_coords:
+            settings['schematic_location'] = settings['location']
+
+        try:
+            v.model.node.create(**settings)
+        except:
+            print('Error in node',n)
+            raise
+
+    for l in links:
+        if 'model' not in l['properties']:
+            print('Incomplete link',l)
+            raise Exception('Incomplete link')
+
+        try:
+            from_node = network.by_id(l['properties']['from_node'])['properties']['name']
+            to_node = network.by_id(l['properties']['to_node'])['properties']['name']
+            v.model.link.create(from_node,to_node,l['properties']['name'],routing=l['properties']['model'])
+        except:
+            print('Error in link',l)
+            raise
+
