@@ -78,6 +78,7 @@ class Veneer(object):
         self.protocol = protocol
         self.prefix = prefix
         self.live_source = live
+        self.last_script = None
         if protocol and protocol.startswith('file'):
           self.base_url = '%s://%s'%(protocol,prefix)
         else:
@@ -235,6 +236,7 @@ class Veneer(object):
         '''
         if PRINT_SCRIPTS:
             print(script)
+        self.last_script = script
         result = self.post_json('/ironpython', {'Script': script},
                                 run_async=run_async)
         if run_async:
