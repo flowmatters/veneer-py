@@ -93,7 +93,11 @@ def find_veneer_cmd_line_exe(project_fn=None,source_version=None):
                     return path_in_many
     return VENEER_EXE
 
-def create_command_line(veneer_path,source_version="4.1.1",source_path='C:\\Program Files\\eWater',dest=None,force=True):
+def create_command_line(veneer_path,source_version="4.1.1",
+                        source_path='C:\\Program Files\\eWater',
+                        dest=None,
+                        force=True,
+                        init_db=False):
     '''
     Copy all Veneer related files and all files from the relevant Source distribution to a third directory,
     for use as the veneer command line.
@@ -107,6 +111,9 @@ def create_command_line(veneer_path,source_version="4.1.1",source_path='C:\\Prog
     dest: Destination to copy Source and Veneer to. If not provided, a temporary directory will be created.
 
     force: (default True) copy all files even if the directory already exists
+
+    init_db: (default False) if True AND if the command line was created, start an instance in order to
+             initialise the database, then terminate.
 
     Returns: Full path to FlowMatters.Source.VeneerCmd.exe for use with start()
 
@@ -169,6 +176,11 @@ def create_command_line(veneer_path,source_version="4.1.1",source_path='C:\\Prog
 
     exe_path = Path(dest)/'FlowMatters.Source.VeneerCmd.exe'
     assert exe_path.exists()
+
+    if init_db:
+        _proc,_ = start(project_fn=None,n_instances=1,debug=False,veneer_exe=exe_path,ports=9878)
+        kill_all_now(_proc)
+
     return exe_path
 
 def clean_up_cmd_line_exe(path=None):
