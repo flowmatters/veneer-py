@@ -1003,7 +1003,7 @@ class VeneerNetworkElementActions(object):
             properties = columns[:]
         code = TABULATION_SCRIPTLET.format(property_name=property_name,values=','.join(['row.'+p for p in properties]))
         vals = self.apply(code,init='[]',**kwargs)
-        return pd.DataFrame(vals,columns=properties)
+        return pd.DataFrame(vals,columns=columns)
 
     def call(self, method, parameter_tuple=None, literal=False, fromList=False, **kwargs):
         accessor = self._build_accessor(method, **kwargs)
