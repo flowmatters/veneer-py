@@ -108,7 +108,8 @@ def network_add_link(self,n1,n2):
             'feature_type':'link',
             'name':f'link from {n1["properties"]["name"]}',
             'from_node':n1['id'],
-            'to_node':n2['id']
+            'to_node':n2['id'],
+            'model':'RiverSystem.Flow.StraightThroughRouting'
         }
     }
     self.add_feature(new_link)
