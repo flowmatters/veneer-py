@@ -63,6 +63,13 @@ STORAGE_PROPERTY_ALIASES = {
     'EvaporationInMetresPerSecond':'StorageInternal.EvaporationInMetresPerSecond'
 }
 
+CREATE_OUTLET_PATH_SCRIPTLET='''
+from RiverSystem.Storages import OutletPath
+op = OutletPath()
+op.Link = scenario.Network.Links.First(lambda l:l.Name=="%s")
+target.AddOutletPath(op)
+'''
+
 def path_query(path):
     if path is None:
         return ''
@@ -134,6 +141,10 @@ class VeneerStorageActions(VeneerNetworkElementActions):
     def outlets(self,nodes=None):
         return self.get_param_values('OutletPaths.*Link.Name',nodes=nodes)
 
+    def add_outlet_path(self,link_name,node):
+        code = CREATE_OUTLET_PATH_SCRIPTLET%link_name
+        return self.apply(code,nodes=node)
+
     def lva(self,node):
         '''
         Retrieve the Level/Volume/Area table for a given storage node
@@ -152,6 +163,18 @@ class VeneerStorageActions(VeneerNetworkElementActions):
             release_criteria = '.Where(lambda rel:rel.OutletPath.Link.Name=="%s")'%path
 
         return self.get_param_values('ProductReleaseContainer.Releases%s.*ReleaseItemName'%(release_criteria),nodes=nodes)
+
+    def release_types(self,nodes=None,path=None):
+        inv_dict = {v:k for k,v in RELEASE_CLASSES.items()}
+        if path is None:
+            release_criteria = ''
+        elif isinstance(path,int):
+            release_criteria = '.Where(lambda rel:rel.OutletPath==i_0.NodeModel.OutletPaths[%d])'%path
+        else:
+            release_criteria = '.Where(lambda rel:rel.OutletPath.Link.Name=="%s")'%path
+
+        classes = self.get_param_values('ProductReleaseContainer.Releases%s.*GetType().Name'%(release_criteria),nodes=nodes)
+        return [inv_dict[c] for c in classes]
 
     def release_table(self,node,release):
         code = GET_RELEASE_TABLE_SCRIPTLET%release
