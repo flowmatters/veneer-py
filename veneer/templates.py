@@ -240,3 +240,11 @@ for row in tbl:
     result.append(({values}))
 '''
 
+LOAD_PIECEWISE_ROUTING_TABLE_SCRIPTLET = '''
+from RiverSystem.Flow import Piecewise
+ignoreExceptions=False
+pw_table = target.Piecewises
+pw_table.Clear()
+%s
+result += 1
+'''

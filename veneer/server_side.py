@@ -1514,6 +1514,11 @@ class VeneerLinkRoutingActions(VeneerNetworkElementActions):
                                          ['IndexFlow','TravelTime'],
                                          links=[link])
 
+    def load_piecewise_routing_table(self,table,links):
+        piecewise_txt = '\n'.join(['pw_table.Add(Piecewise(IndexFlow=%f,TravelTime=%f))'%(r['IndexFlow'],r['TravelTime']) for _,r  in table.iterrows()])
+        code = LOAD_PIECEWISE_ROUTING_TABLE_SCRIPTLET%piecewise_txt
+        return self.apply(code,init='0',links=links)
+
 class VeneerNodeActions(VeneerNetworkElementActions):
     '''
     Queries and actions relating to nodes (incuding node models).
