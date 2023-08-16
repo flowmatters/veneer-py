@@ -79,7 +79,8 @@ def load_network(v,network,schematic_coords=False):
           'name':n['properties']['name'],
           'node_type':n['properties']['model'] or n['properties']['splitter'],
           'location':n['geometry']['coordinates'],
-          'splitter':n['properties']['model'] is None
+          'splitter':n['properties']['model'] is None,
+          'elevation':n['properties'].get('elevation',0.0) or 0.0
         }
         if schematic_coords:
             settings['schematic_location'] = settings['location']
