@@ -1606,10 +1606,14 @@ class VeneerNodeActions(VeneerNetworkElementActions):
                 for n, m, s in zip(names, models, splitters)]
         return pd.DataFrame(rows)
 
-    def create(self, name, node_type, location=None, schematic_location=None, splitter=False):
+    def create(self, name, node_type, location=None, schematic_location=None, splitter=False,**kwargs):
+        is_supply_point = 'ExtractionNodeModel' in node_type
+
         script = self._ironpy._init_script('.'.join(node_type.split('.')[:-1]))
         script += 'import RiverSystem.E2ShapeProperties as E2ShapeProperties\n'
         script += 'import RiverSystem.Utils.RiverSystemUtils as rsutils\n'
+        if is_supply_point:
+            script += 'from RiverSystem.Flow import ExtractionPartitioner\n'
         script += 'network = scenario.Network\n'
         script += 'new_node = RiverSystem.Node()\n'
         if location:
@@ -1617,7 +1621,13 @@ class VeneerNodeActions(VeneerNetworkElementActions):
             script += 'new_node.location.N = %f\n' % location[1]
 
         script += 'new_node.Name = "%s"\n' % name
+        for k, v in kwargs.items():
+            script += 'new_node.%s = %s\n' % (k, v)
+
         script += 'new_node.%s = %s()\n' % (self._model_property(splitter), node_type)
+        if is_supply_point:
+            script += 'new_node.FlowPartitioning = ExtractionPartitioner()\n'
+
         script += 'rsutils.SeedEntityTarget(new_node.%s,scenario)\n' % self._model_property(
             splitter)
         script += 'network.Add.Overloads[RiverSystem.INetworkElement](new_node)\n'
