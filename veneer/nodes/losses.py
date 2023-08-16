@@ -2,6 +2,14 @@ import pandas as pd
 import numpy as np
 from veneer.server_side import VeneerNetworkElementActions
 
+LOAD_LOSS_TABLE_SCRIPTLET = '''
+ignoreExceptions=False
+loss_table = target.lossFct
+loss_table.reset()
+%s
+result += 1
+'''
+
 class VeneerLossNodeActions(VeneerNetworkElementActions):
     def __init__(self,node_actions):
         self.node_actions = node_actions
@@ -16,3 +24,8 @@ class VeneerLossNodeActions(VeneerNetworkElementActions):
         Retrieve the Loss table for a given loss node
         '''
         return self.tabulate_list_values('lossFct',['Inflow','Loss'],['Key','Value'],nodes=[node])
+
+    def load_loss_table(self,loss_table,nodes):
+        losses_text = '\n'.join(['loss_table.Add(%f,%f)'%(r['Inflow'],r['Loss']) for _,r  in loss_table.iterrows()])
+        code = LOAD_LOSS_TABLE_SCRIPTLET%losses_text
+        return self.node_actions.apply(code,init='0',nodes=nodes)
