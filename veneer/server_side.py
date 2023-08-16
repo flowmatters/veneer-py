@@ -1611,6 +1611,7 @@ class VeneerNodeActions(VeneerNetworkElementActions):
 
         script = self._ironpy._init_script('.'.join(node_type.split('.')[:-1]))
         script += 'import RiverSystem.E2ShapeProperties as E2ShapeProperties\n'
+        script += 'import System.Drawing.PointF as PointF\n'
         script += 'import RiverSystem.Utils.RiverSystemUtils as rsutils\n'
         if is_supply_point:
             script += 'from RiverSystem.Flow import ExtractionPartitioner\n'
@@ -1634,13 +1635,14 @@ class VeneerNodeActions(VeneerNetworkElementActions):
 
         if(schematic_location):
             script += 'schematic = H.GetSchematic(scenario)\n'
-            script += 'if schematic:\n'
-            script += '  shp = E2ShapeProperties()\n'
-            script += '  shp.Feature = new_node\n'
-            script += '  shp.Location.X = %f\n' % schematic_location[0]
-            script += '  shp.Location.Y = %f\n' % schematic_location[1]
-            script += '  schematic.ExistingFeatureShapeProperties.Add(shp)\n'
-            script += '  print("Set location")\n'
+            # script += 'if schematic:\n'
+            script += 'shp = E2ShapeProperties()\n'
+            script += 'shp.Feature = new_node\n'
+            script += 'shp.Location = PointF(%f,%f)\n'%(schematic_location[0],schematic_location[1])
+            # script += 'shp.Location.X = %f\n' % schematic_location[0]
+            # script += 'shp.Location.Y = %f\n' % schematic_location[1]
+            script += 'schematic.ExistingFeatureShapeProperties.Add(shp)\n'
+            script += 'print("Set location")\n'
         script += 'result = new_node\n'
         return self._ironpy._safe_run(script)
         # schematic_location???
