@@ -703,7 +703,7 @@ class VeneerIronPython(object):
         fn - filename to save to. Should include .rsproj extension. If None, save using current filename
         '''
         if fn:
-            fn = "'%s'" % os.path.abspath(fn)
+            fn = "'%s'" % os.path.abspath(fn).replace('\\', '\\\\')
         else:
             fn = 'ph.ProjectMetaStructure.OutputFile'
         script = '''
