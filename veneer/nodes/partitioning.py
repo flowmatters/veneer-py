@@ -11,6 +11,7 @@ result += 1
 '''
 
 SET_EFFLUENT_LINK_SCRIPTLET='''
+ignoreExceptions=False
 target.EffluentLink = scenario.Network.Links.First(lambda l:l.Name=="%s")
 '''
 
