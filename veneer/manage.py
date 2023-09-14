@@ -1,4 +1,5 @@
 from subprocess import Popen, PIPE
+from psutil import Process
 from queue import Queue, Empty  # python 3.x
 from threading  import Thread
 import sys
@@ -49,6 +50,7 @@ def kill_all_on_exit(processes):
     atexit.register(end_processes)
 
 def kill_all_now(processes):
+    processes = [p if isinstance(p,Popen) else Process(p) for p in processes]
     for p in processes:
         p.kill()
     for p in processes:
