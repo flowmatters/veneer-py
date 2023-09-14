@@ -499,6 +499,31 @@ class VeneerIronPython(object):
             return [d['Value'] for d in data]
         return data
 
+    def get_functions(self, theThing, namespace=None):
+        '''
+        Get function names related to theThing
+        '''
+        script = self._init_script(namespace)
+        script += ''
+        listQuery = theThing.find(".*") != -1
+        if listQuery:
+            script += 'result = []\n'
+            innerLoop = 'result.append(H.FindFunction(scenario,%s__init__.__self__,"%s"))'
+            script += self._generateLoop(theThing, innerLoop)
+        else:
+            obj = '.'.join(theThing.split('.')[0:-1])
+            prop = theThing.split('.')[-1]
+            script += "result = H.FindFunction(%s,%s)\n" % (obj, prop)
+#       return script
+
+        resp = self.run_script(script)
+        if not resp['Exception'] is None:
+            raise Exception(resp['Exception'])
+        data = resp['Response']['Value']
+        if listQuery:
+            return [None if d is None else d['Value'] for d in data]
+        return data
+
     def _assignment(self, theThing, theValue, namespace=None, literal=False,
                     fromList=False, instantiate=False,
                     assignment="", post_assignment="",
@@ -845,6 +870,18 @@ class VeneerNetworkElementActions(object):
             return dict(zip(self.names(**kwargs), resp))
         return resp
 
+    def get_functions(self, parameter, by_name=False, **kwargs):
+        '''
+        Returns names of functions applied to a particular parameter
+        '''
+        parameter = self._translate_property(parameter)
+        accessor = self._build_accessor(parameter, **kwargs)
+        resp = self._ironpy.get_functions(
+            accessor, kwargs.get('namespace', self._ns))
+        if by_name:
+            return dict(zip(self.names(**kwargs), resp))
+        return resp
+
     def names(self, **kwargs):
         '''
         Return the names of the network elements
@@ -1015,6 +1052,15 @@ class VeneerNetworkElementActions(object):
 
         def values(p, **kwargs):
             return self.get_data_sources(p, **kwargs)
+
+        return self._tabulate_properties(properties, values, model_type, **kwargs)
+
+    def tabulate_functions(self, model_type=None, **kwargs):
+        def properties(m):
+            return self._ironpy.find_inputs(m)
+
+        def values(p, **kwargs):
+            return self.get_functions(p, **kwargs)
 
         return self._tabulate_properties(properties, values, model_type, **kwargs)
 
