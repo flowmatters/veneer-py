@@ -488,7 +488,7 @@ class VeneerIronPython(object):
         else:
             obj = '.'.join(theThing.split('.')[0:-1])
             prop = theThing.split('.')[-1]
-            script += "result = H.FindDataSourcer(%s,%s)\n" % (obj, prop)
+            script += "result = H.FindDataSource(%s,%s)\n" % (obj, prop)
 #       return script
 
         resp = self.run_script(script)
