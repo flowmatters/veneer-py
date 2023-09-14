@@ -21,6 +21,53 @@ NODE_TYPES = {
     'environmental_demand': 'RiverSystem.Nodes.EnvironmentalDemand.EnvironmentalDemandNodeModel'
 }
 
+ADDITIONAL_INPUTS={
+    'RiverSystem.Flow.StorageRouting':[
+        'link.RainFall',
+        'link.Evaporation'
+    ]
+}
+
+ADDITIONAL_PARAMETERS={
+    'RiverSystem.Flow.StorageRouting':[
+        'link.Elevation',
+        'link.Length',
+        'InitStorage',
+        'InitFlow',
+        'IsInitFlow',
+        'AverageRegFlow',
+        'Divisions',
+        'TriangularWeir'
+    ],
+    'RiverSystem.Nodes.StorageNodeModel':[
+        'GaugedLevelSpecification',
+        'RequiredStorageLevel',
+        'PassOrdersThru',
+        'StorageDetailsSpecification',
+
+        'UseMinMaxLevels',
+        'OperatingConstraintsSpecification',
+        'MinimumOperatingTargetVolume',
+        'MinimumOperatingTargetLevel',
+        'MaximumOperatingTargetLevelWeir',
+        'MaximumOperatingTargetVolumeWeir',
+
+        'OperatingTargetsSpecification',
+        'MaximumOperatingTargetLevel',
+        'MaximumOperatingTargetVolume',
+        'MaximumUnregulatedOperatingTargetLevel',
+        'MaximumUnregulatedOperatingTargetVolume'
+    ],
+    'RiverSystem.Nodes.Loss.LossNodeModel':[
+        'LossVolume',
+        'LossChoiceEnum'
+    ],
+    'RiverSystem.Nodes.Splitter.RegulatedEffluentPartitioner':[
+        'EffluentLink.Name',
+        'RegulatorOpening',
+        'TreatAsRegulatedSupplyNode'
+    ]
+}
 
 def _transform_node_type_name(n):
     n = n[0].upper() + n[1:]
@@ -258,11 +305,14 @@ class VeneerIronPython(object):
         return [v['Value'] for v in res['Response']['Value']]
 
     def _find_members_with_attribute_for_types(self, model_types,
-                                               attribute=None):
+                                               attribute=None,
+                                               additional={}):
         model_types = list(set(_stringToList(model_types)))
         result = {}
         for t in model_types:
             result[t] = self._find_members_with_attribute_in_type(t, attribute)
+            if t in additional:
+                result[t] = list(set(result[t]).union(additional[t]))
         if len(model_types) == 1:
             return result[model_types[0]]
         return result
@@ -284,7 +334,7 @@ class VeneerIronPython(object):
         res = self._safe_run(script)
         return dict([v['Value'].split(' ') for v in res['Response']['Value']])
 
-    def find_properties(self, model_types):
+    def find_properties(self, model_types,additional={}):
         """
         Find all fields and properties for a given model type or list of
         model types
@@ -298,6 +348,8 @@ class VeneerIronPython(object):
         result = {}
         for t in model_types:
             result[t] = self._find_fields_and_properties_for_type(t)
+            if t in additional:
+                result[t] = result[t].union(additional[t])
         if len(model_types) == 1:
             return result[model_types[0]]
         return result
@@ -312,8 +364,9 @@ class VeneerIronPython(object):
            (if more than model type)
         """
         return self._find_members_with_attribute_for_types(model_types,
-                                                           'ParameterAttribute')
-
+                                                           'ParameterAttribute',
+                                                           ADDITIONAL_PARAMETERS)
+    
     def find_inputs(self, model_types):
         """
         Find the input names for a given model type or list of model types
@@ -324,7 +377,8 @@ class VeneerIronPython(object):
            (if more than model type)
         """
         return self._find_members_with_attribute_for_types(model_types,
-                                                           'InputAttribute')
+                                                            'InputAttribute',
+                                                            ADDITIONAL_INPUTS)
 
     def find_states(self, model_types):
         """
