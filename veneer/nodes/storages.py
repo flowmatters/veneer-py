@@ -51,7 +51,7 @@ for row in geo:
 GET_RELEASE_TABLE_SCRIPTLET='''
 ignoreExceptions=False
 prc = target.ProductReleaseContainer
-existing_release = prc.Releases.FirstOrDefault(lambda r:r.ReleaseItemName=='%s')
+existing_release = prc.Releases%s.FirstOrDefault(lambda r:r.ReleaseItemName=='%s')
 mins = existing_release.MinimumRelease.ToArray()
 maxs = existing_release.MaximumRelease.ToArray()
 for minimum,maximum in zip(mins,maxs):
@@ -69,6 +69,14 @@ op = OutletPath()
 op.Link = scenario.Network.Links.First(lambda l:l.Name=="%s")
 target.AddOutletPath(op)
 '''
+
+def _release_path_criteria(path=None):
+    if path is None:
+        return ''
+    elif isinstance(path,int):
+        return '.Where(lambda rel:rel.OutletPath==i_0.NodeModel.OutletPaths[%d])'%path
+    else:
+        return '.Where(lambda rel:rel.OutletPath.Link.Name=="%s")'%path
 
 def path_query(path):
     if path is None:
@@ -154,30 +162,24 @@ class VeneerStorageActions(VeneerNetworkElementActions):
         
         return pd.DataFrame(vals,columns=['level','volume','area'])
 
-    def releases(self,nodes=None,path=None):
-        if path is None:
-            release_criteria = ''
-        elif isinstance(path,int):
-            release_criteria = '.Where(lambda rel:rel.OutletPath==i_0.NodeModel.OutletPaths[%d])'%path
-        else:
-            release_criteria = '.Where(lambda rel:rel.OutletPath.Link.Name=="%s")'%path
+    def _release_properties(self,prop,nodes=None,path=None):
+        release_criteria = _release_path_criteria(path)
+        return self.get_param_values('ProductReleaseContainer.Releases%s.*%s'%(release_criteria,prop),nodes=nodes)
 
-        return self.get_param_values('ProductReleaseContainer.Releases%s.*ReleaseItemName'%(release_criteria),nodes=nodes)
+    def releases(self,nodes=None,path=None):
+        return self._release_properties('ReleaseItemName',nodes=nodes,path=path)
 
     def release_types(self,nodes=None,path=None):
+        classes = self._release_properties('GetType().Name',nodes=nodes,path=path)
         inv_dict = {v:k for k,v in RELEASE_CLASSES.items()}
-        if path is None:
-            release_criteria = ''
-        elif isinstance(path,int):
-            release_criteria = '.Where(lambda rel:rel.OutletPath==i_0.NodeModel.OutletPaths[%d])'%path
-        else:
-            release_criteria = '.Where(lambda rel:rel.OutletPath.Link.Name=="%s")'%path
-
-        classes = self.get_param_values('ProductReleaseContainer.Releases%s.*GetType().Name'%(release_criteria),nodes=nodes)
         return [inv_dict[c] for c in classes]
 
-    def release_table(self,node,release):
-        code = GET_RELEASE_TABLE_SCRIPTLET%release
+    def release_outlets(self,nodes=None,path=None):
+        return self._release_properties('OutletPath.Link.Name',nodes=nodes,path=path)
+
+    def release_table(self,node,release,path=None):
+        release_criteria = _release_path_criteria(path)
+        code = GET_RELEASE_TABLE_SCRIPTLET%(release_criteria,release)
         res = self.apply(code,init='[]',nodes=[node])
 
         df = pd.DataFrame(res,columns=['level','minimum','level_from_max','maximum'])
