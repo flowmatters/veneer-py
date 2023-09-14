@@ -248,3 +248,13 @@ pw_table.Clear()
 %s
 result += 1
 '''
+
+LOAD_RATING_TABLE_SCRIPTLET='''
+from RiverSystem.GWSWLink import LinkRatingCurve, LinkRatingCurvePoint
+ignoreExceptions=False
+curve = LinkRatingCurve()
+%s
+curve.StartDate = System.DateTime(%s,%s,%s)
+target.link.RatingCurveLibrary.Curves.Add(curve)
+result += 1
+'''

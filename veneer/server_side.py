@@ -1520,6 +1520,23 @@ class VeneerLinkRoutingActions(VeneerNetworkElementActions):
         code = LOAD_PIECEWISE_ROUTING_TABLE_SCRIPTLET%piecewise_txt
         return self.apply(code,init='0',links=links)
 
+    def rating_table_meta(self,link):
+        return self.tabulate_list_values('link.RatingCurveLibrary.Curves',
+                                        ['Name','StartDate'],
+                                        links=link)
+
+    def rating_tables(self,link,idx=0):
+        return self.tabulate_list_values(f'link.RatingCurveLibrary.Curves[{idx}].Points',
+                                        ['Level','Discharge','Width','DeadStorage'],
+                                        links=link)
+
+    def load_rating_table(self,table,start,links):
+        rating_txt = '\n'.join(['curve.Points.Add(LinkRatingCurvePoint(Level=%f,Discharge=%f,Width=%f,DeadStorage=%s))'% \
+                                (r['Level'],r['Discharge'],r['Width'],r['DeadStorage']) for _,r  in table.iterrows()])
+        code = LOAD_RATING_TABLE_SCRIPTLET%(rating_txt,start.year,start.month,start.day)
+        return self.apply(code,init='0',links=links)
+        
+
 class VeneerNodeActions(VeneerNetworkElementActions):
     '''
     Queries and actions relating to nodes (incuding node models).
