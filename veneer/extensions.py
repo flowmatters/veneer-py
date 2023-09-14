@@ -258,7 +258,9 @@ def network_partition(self,
                       key_features,
                       new_prop,
                       reverse_water_users=False,
-                      reverse_regulated_partitioners=False):
+                      reverse_regulated_partitioners=False,
+                      reverse_secondary_storage_outlets=False,
+                      default_tag=None):
     '''
     Partition the network by a list of feature names (key_features).
 
@@ -266,10 +268,12 @@ def network_partition(self,
 
     Features in key_features are assigned to their own group.
 
-    Features with no downstream key_feature (eg close to outlets) are attributed with their outlet node
+    Features with no downstream key_feature (eg close to outlets) are attributed with with the value of
+    `default_tag`, if specified, or the name of their outlet node otherwise.
 
-    By default, water users are treated as being downstream of the relevation extraction point.
-    Set reverse_water_users=True to reverse this behaviour.
+    By default, water users are treated as being downstream of connected extraction points.
+    Set reverse_water_users=True to reverse this behaviour, essentially attributing the water user 
+    with the same value as one of its extraction points.
     '''
     features = self['features']
     links_to_redo = []
@@ -293,11 +297,16 @@ def network_partition(self,
             downstream_links = self.downstream_links(feature)
             if len(downstream_links)==0:
                 # Outlet and we didn't find one of the key features...
-                feature['properties'][new_prop] = force_key or feature['properties']['name']
+                default_value = force_key or default_tag
+                if default_value is None:
+                    default_value = feature['properties']['name']
+                feature['properties'][new_prop] = default_value
                 return feature['properties'][new_prop]
             elif len(downstream_links)>1:
-                is_extraction_point = feature['properties']['icon']==_EP_ICON
-                is_regulated_partitioner = feature['properties']['icon']==_RP_ICON
+                icon = feature['properties']['icon']
+                is_extraction_point = icon==_EP_ICON
+                is_regulated_partitioner = icon==_RP_ICON
+                is_storage = icon=='/resources/StorageNodeModel'
                 found_key = None
                 links_without_key = []
                 for l in downstream_links:
@@ -308,6 +317,8 @@ def network_partition(self,
                     elif is_extraction_point and reverse_water_users:
                         links_without_key.append(l)
                     elif is_regulated_partitioner and reverse_regulated_partitioners:
+                        links_without_key.append(l)
+                    elif is_storage and reverse_secondary_storage_outlets:
                         links_without_key.append(l)
 
                 if found_key is None:
