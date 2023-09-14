@@ -786,7 +786,7 @@ class VeneerNetworkElementActions(object):
 
     def _instantiation_namespace(self, types, enum=False):
         if enum:
-            types = ['.'.join(t.split('.')[:-1]) for t in types]
+            types = [t.split('+')[0] if '+' in t else '.'.join(t.split('.')[:-1]) for t in types]
         ns = ','.join(set(types))
         if not self._ns is None:
             ns += ',' + (','.join(_stringToList(self._ns)))
@@ -850,6 +850,7 @@ class VeneerNetworkElementActions(object):
             values = _stringToList(values)
             ns = self._instantiation_namespace(values, enum)
             fromList = True
+            values = [v.replace('+','.') for v in values]
         return self._ironpy.set(accessor, values, ns, literal=literal, fromList=fromList, instantiate=instantiate)
 
     def add_to_list(self, parameter, value, instantiate=False, n=1, **kwargs):
@@ -1088,7 +1089,8 @@ class VeneerNetworkElementActions(object):
             values = value_getter(p, **kwargs)
 
             for m in all_models:
-                if not p in _all_properties[m]:
+                p_to_check = p.split('.')[0]
+                if not p_to_check in _all_properties[m]:
                     continue
 
                 if m == model_type:
