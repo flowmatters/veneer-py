@@ -66,6 +66,9 @@ ADDITIONAL_PARAMETERS={
         'EffluentLink.Name',
         'RegulatorOpening',
         'TreatAsRegulatedSupplyNode'
+    ],
+    'RiverSystem.Nodes.Gauge.GaugeNodeModel':[
+        'UnaccountedDifferenceMode'
     ]
 }
 
