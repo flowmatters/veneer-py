@@ -28,6 +28,18 @@ ADDITIONAL_INPUTS={
     ]
 }
 
+COMMON_STORAGE_PARAMETERS=[
+        'RequiredStorageLevel',
+        'PassOrdersThru',
+        'MinimumOperatingTargetVolume',
+        'MinimumOperatingTargetLevel',
+        'MaximumOperatingTargetLevelWeir',
+        'MaximumOperatingTargetVolumeWeir',
+        'MaximumOperatingTargetLevel',
+        'MaximumOperatingTargetVolume',
+        'MaximumUnregulatedOperatingTargetLevel',
+        'MaximumUnregulatedOperatingTargetVolume'
+]
 ADDITIONAL_PARAMETERS={
     'RiverSystem.Flow.StorageRouting':[
         'link.Elevation',
@@ -41,23 +53,11 @@ ADDITIONAL_PARAMETERS={
     ],
     'RiverSystem.Nodes.StorageNodeModel':[
         'GaugedLevelSpecification',
-        'RequiredStorageLevel',
-        'PassOrdersThru',
         'StorageDetailsSpecification',
-
         'UseMinMaxLevels',
         'OperatingConstraintsSpecification',
-        'MinimumOperatingTargetVolume',
-        'MinimumOperatingTargetLevel',
-        'MaximumOperatingTargetLevelWeir',
-        'MaximumOperatingTargetVolumeWeir',
-
         'OperatingTargetsSpecification',
-        'MaximumOperatingTargetLevel',
-        'MaximumOperatingTargetVolume',
-        'MaximumUnregulatedOperatingTargetLevel',
-        'MaximumUnregulatedOperatingTargetVolume'
-    ],
+    ]+COMMON_STORAGE_PARAMETERS,
     'RiverSystem.Nodes.Loss.LossNodeModel':[
         'LossVolume',
         'LossChoiceEnum'
@@ -69,7 +69,8 @@ ADDITIONAL_PARAMETERS={
     ],
     'RiverSystem.Nodes.Gauge.GaugeNodeModel':[
         'UnaccountedDifferenceMode'
-    ]
+    ],
+    'RiverSystem.Nodes.WeirNodeModel':COMMON_STORAGE_PARAMETERS[:]
 }
 
 def _transform_node_type_name(n):

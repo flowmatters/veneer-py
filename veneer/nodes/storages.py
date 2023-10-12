@@ -102,7 +102,7 @@ class VeneerStorageActions(VeneerNetworkElementActions):
             setattr(self,'add_%s'%release,MethodType(method(release), self))
 
     def _build_accessor(self, parameter=None, nodes=None):
-        return self.node_actions._build_accessor(parameter,nodes=nodes,node_types='StorageNodeModel')
+        return self.node_actions._build_accessor(parameter,nodes=nodes,node_types=['StorageNodeModel','WeirNodeModel'])
 
     def load_lva(self,lva_table,nodes=None):
         '''
