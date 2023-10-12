@@ -1088,7 +1088,7 @@ class VeneerNetworkElementActions(object):
         for i, col_name in enumerate(self.name_columns):
             table[col_name] = [name_row[i] for j, name_row in enumerate(_names) if all_models[j] == model_type]
 
-        for p in _property_lookup[model_type]:
+        for p in _property_lookup.get(model_type,[]):
             table[p] = []
             values = value_getter(p, **kwargs)
 
@@ -1102,7 +1102,7 @@ class VeneerNetworkElementActions(object):
 
                 values = values[1:]
 
-        return pd.DataFrame(table, columns=self.name_columns + _property_lookup[model_type])
+        return pd.DataFrame(table, columns=self.name_columns + _property_lookup.get(model_type,[]))
 
     def tabulate_list_values(self,property_name,columns,properties=None,**kwargs):
         if properties is None:
