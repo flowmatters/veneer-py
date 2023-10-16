@@ -114,7 +114,7 @@ def network_add_link(self,n1,n2):
     }
     self.add_feature(new_link)
 
-def network_insert_node_between(self,n1,n2,node_name,node_icon):
+def network_insert_node_between(self,n1,n2,**kwargs):
     coordinates = [(c1+c2)/2.0 for c1,c2 in zip(n1['geometry']['coordinates'],n2['geometry']['coordinates'])]
     new_node = {
         'type':'Feature',
@@ -125,8 +125,7 @@ def network_insert_node_between(self,n1,n2,node_name,node_icon):
         'id':'new_node',
         'properties':{
             'feature_type':'node',
-            'name':node_name,
-            'icon':node_icon
+            **kwargs
         }
     }
     self.add_feature(new_node)
