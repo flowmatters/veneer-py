@@ -29,16 +29,24 @@ ADDITIONAL_INPUTS={
 }
 
 COMMON_STORAGE_PARAMETERS=[
-        'RequiredStorageLevel',
-        'PassOrdersThru',
-        'MinimumOperatingTargetVolume',
-        'MinimumOperatingTargetLevel',
-        'MaximumOperatingTargetLevelWeir',
-        'MaximumOperatingTargetVolumeWeir',
-        'MaximumOperatingTargetLevel',
-        'MaximumOperatingTargetVolume',
-        'MaximumUnregulatedOperatingTargetLevel',
-        'MaximumUnregulatedOperatingTargetVolume'
+    'RequiredStorageLevel',
+    'PassOrdersThru',
+    'MinimumOperatingTargetVolume',
+    'MinimumOperatingTargetLevel',
+    'MaximumOperatingTargetLevelWeir',
+    'MaximumOperatingTargetVolumeWeir',
+    'MaximumOperatingTargetLevel',
+    'MaximumOperatingTargetVolume',
+    'MaximumUnregulatedOperatingTargetLevel',
+    'MaximumUnregulatedOperatingTargetVolume'
+]
+
+OTHER_STORAGE_PARAMETERS=[
+    'GaugedLevelSpecification',
+    'StorageDetailsSpecification',
+    'UseMinMaxLevels',
+    'OperatingConstraintsSpecification',
+    'OperatingTargetsSpecification',
 ]
 ADDITIONAL_PARAMETERS={
     'RiverSystem.Flow.StorageRouting':[
@@ -51,13 +59,7 @@ ADDITIONAL_PARAMETERS={
         'Divisions',
         'TriangularWeir'
     ],
-    'RiverSystem.Nodes.StorageNodeModel':[
-        'GaugedLevelSpecification',
-        'StorageDetailsSpecification',
-        'UseMinMaxLevels',
-        'OperatingConstraintsSpecification',
-        'OperatingTargetsSpecification',
-    ]+COMMON_STORAGE_PARAMETERS,
+    'RiverSystem.Nodes.StorageNodeModel':OTHER_STORAGE_PARAMETERS+COMMON_STORAGE_PARAMETERS,
     'RiverSystem.Nodes.Loss.LossNodeModel':[
         'LossVolume',
         'LossChoiceEnum'
@@ -70,7 +72,7 @@ ADDITIONAL_PARAMETERS={
     'RiverSystem.Nodes.Gauge.GaugeNodeModel':[
         'UnaccountedDifferenceMode'
     ],
-    'RiverSystem.Nodes.WeirNodeModel':COMMON_STORAGE_PARAMETERS[:]
+    'RiverSystem.Nodes.WeirNodeModel':COMMON_STORAGE_PARAMETERS[:]+[f'StorageInternal.{p}' for p in OTHER_STORAGE_PARAMETERS]
 }
 
 def _transform_node_type_name(n):
