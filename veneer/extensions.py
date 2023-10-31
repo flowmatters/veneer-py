@@ -93,7 +93,12 @@ def network_add_feature(self,f):
     f['id'] = new_id
     self['features']._list.append(f)
 
+def network_max_id(self,feature_type):
+    existing_ids = [int(f['id'].split('/')[-1]) for f in self['features'].find_by_feature_type(feature_type)]
+    return max(existing_ids)
+
 def network_add_link(self,n1,n2):
+    new_id = f'/links/{self.max_id("link")+1}'
     new_link = {
         'type':'Feature',
         'geometry':{
@@ -103,10 +108,10 @@ def network_add_link(self,n1,n2):
                 n2['geometry']['coordinates']
             ]
         },
-        'id':'new_link',
+        'id':new_id,
         'properties':{
             'feature_type':'link',
-            'name':f'link from {n1["properties"]["name"]}',
+            'name':f'link from {n1["properties"]["name"]} to {n2["properties"]["name"]}',
             'from_node':n1['id'],
             'to_node':n2['id'],
             'model':'RiverSystem.Flow.StraightThroughRouting'
@@ -116,13 +121,14 @@ def network_add_link(self,n1,n2):
 
 def network_insert_node_between(self,n1,n2,**kwargs):
     coordinates = [(c1+c2)/2.0 for c1,c2 in zip(n1['geometry']['coordinates'],n2['geometry']['coordinates'])]
+    new_id = f'/nodes/{self.max_id("node")+1}'
     new_node = {
         'type':'Feature',
         'geometry':{
             'type':'Point',
             'coordinates':coordinates
         },
-        'id':'new_node',
+        'id':new_id,
         'properties':{
             'feature_type':'node',
             **kwargs
