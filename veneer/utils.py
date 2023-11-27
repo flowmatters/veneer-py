@@ -22,6 +22,8 @@ try:
 except ImportError:
     from UserDict import UserDict
 
+def nop(*args,**kwargs):
+    pass
 
 def deprecate_async(cls):
     """Decorator to warn of deprecated `async` argument.

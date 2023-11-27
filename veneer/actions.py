@@ -1,7 +1,8 @@
 '''
 High level actions
 '''
-from .utils import _safe_filename
+from .utils import _safe_filename,nop
+
 
 def switch_data_source(v,from_set,to_set,remove_original=True):
 	switch_input_sets_script="""
@@ -67,11 +68,12 @@ def get_big_data_source(v,ds_name,data_sources=None,progress=print):
     progress('Got all time series from %s'%ds_name)
     return result
 
-def load_network(v,network,schematic_coords=False):
+def load_network(v,network,schematic_coords=False,log=nop):
     nodes = network['features'].find_by_feature_type('node')
     links = network['features'].find_by_feature_type('link')
 
     for n in nodes:
+        log('Creating node: %s',n['properties']['name'])
         if 'model' not in n['properties']:
             print('Incomplete node',n)
             raise Exception('Incomplete node')
@@ -92,6 +94,7 @@ def load_network(v,network,schematic_coords=False):
             raise
 
     for l in links:
+        log('Creating link: %s',l['properties']['name'])
         if 'model' not in l['properties']:
             print('Incomplete link',l)
             raise Exception('Incomplete link')
