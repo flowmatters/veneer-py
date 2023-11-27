@@ -209,7 +209,7 @@ def find_network_model(self, model_name):
     '''
     return self['features'].find_by_icon('/resources/'+model_name)
 
-def network_outlet_nodes(self):
+def network_outlet_nodes(self,include_water_users=False,treat_supply_points_as_outlets=True):
     '''
     Find all the nodes in the network that are outlets - ie have no downstream nodes.
 
@@ -220,18 +220,22 @@ def network_outlet_nodes(self):
     features = self['features']
     nodes = features.find_by_feature_type('node')
 
-    no_downstream = _feature_list([n for n in nodes if len(self.downstream_links(n))==0])
-    no_downstream_excluding_water_user = no_downstream.find_by_icon(_WU_ICON,op='!=')
+    outlets = _feature_list([n for n in nodes if len(self.downstream_links(n))==0])
+    if not include_water_users:
+        outlets = outlets.find_by_icon(_WU_ICON,op='!=')
+
+    if not treat_supply_points_as_outlets:
+        return outlets
 
     water_users = nodes.find_by_icon(_WU_ICON)
     water_user_links = _feature_list([upstream_link for wu in water_users \
-                                                    for upstream_link in self.upstream_links(wu)])
+                                                for upstream_link in self.upstream_links(wu)])
 
     nodes_to_water_users = [nodes.find_by_id(link['properties']['from_node'])[0] for link in water_user_links]
 
     nodes_with_only_water_users = [n for n in nodes_to_water_users if len(self.downstream_links(n))==1]
 
-    return _feature_list(no_downstream_excluding_water_user._list+nodes_with_only_water_users)
+    return _feature_list(outlets._list+nodes_with_only_water_users)
 
 def network_use_schematic_coordinates(self):
     for f in self['features']:
