@@ -485,7 +485,7 @@ class Veneer(object):
         url = '/variables/%s/TimeSeries' % name
         result = self.retrieve_json(url)
         df = pd.DataFrame(self.convert_dates(result['Events'])).set_index(
-            'Date').rename({'Value': result['Name']})
+            'Date').rename(columns={'Value': result['Name']})
         extensions._apply_time_series_helpers(df)
         return df
 

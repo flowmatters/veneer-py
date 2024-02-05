@@ -1447,8 +1447,9 @@ class VeneerLinkActions(object):
 
     def create(self, from_node, to_node, name=None, routing=None,allow_duplicates=False):
         script = self._ironpy._init_script()
-        if routing is not None:
-          script += f'import {routing}\n'
+        if routing is None:
+          routing = 'RiverSystem.Flow.StraightThroughRouting'
+        script += f'import {routing}\n'
         script += self._ironpy._generator.find_feature_by_name()
         script += 'n1 = find_feature_by_name("%s",exact=True)\n' % from_node
         script += 'n2 = find_feature_by_name("%s",exact=True)\n' % to_node
