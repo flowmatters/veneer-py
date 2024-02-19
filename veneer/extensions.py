@@ -281,7 +281,7 @@ def network_partition(self,
     `default_tag`, if specified, or the name of their outlet node otherwise.
 
     By default, water users are treated as being downstream of connected extraction points.
-    Set reverse_water_users=True to reverse this behaviour, essentially attributing the water user 
+    Set reverse_water_users=True to reverse this behaviour, essentially attributing the water user
     with the same value as one of its extraction points.
     '''
     features = self['features']
@@ -416,6 +416,12 @@ def network_by_name(self,name):
 
 def network_by_id(self,f_id):
     return self['features'].find_one_by_id(f_id)
+
+def network_match_name(self,regexp):
+    import re
+    regexp = re.compile(regexp)
+
+    return [f for f in self['features'] if regexp.match(f['properties']['name'])]
 
 def network_downstream_nodes(self,feature):
     feature_type = feature['properties']['feature_type']
