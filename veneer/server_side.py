@@ -533,7 +533,7 @@ class VeneerIronPython(object):
     def _assignment(self, theThing, theValue, namespace=None, literal=False,
                     fromList=False, instantiate=False,
                     assignment="", post_assignment="",
-                    print_script=False):
+                    print_script=False, dry_run=False):
         val_transform = '()' if instantiate else ''
         if literal and isinstance(theValue, str):
             theValue = "'" + theValue + "'"
@@ -566,6 +566,9 @@ class VeneerIronPython(object):
         script += 'result = have_succeeded\n'
 #       return script
 #        return None
+        if dry_run:
+            return script
+
         result = self.run_script(script)
         if result is None:
             return
@@ -573,8 +576,10 @@ class VeneerIronPython(object):
             raise Exception(result['Exception'])
         return result['Response']['Value']
 
-    def set(self, theThing, theValue, namespace=None, literal=False, fromList=False, instantiate=False):
-        return self._assignment(theThing, theValue, namespace, literal, fromList, instantiate, "%s%s = newVal", "")
+    def set(self, theThing, theValue, namespace=None, literal=False,
+            fromList=False, instantiate=False,dry_run=False):
+        return self._assignment(theThing, theValue, namespace, literal, fromList, instantiate, "%s%s = newVal", "",
+                                dry_run=dry_run)
 
     def add_to_list(self, theThing, theValue, namespace=None, literal=False,
                     fromList=False, instantiate=False, allow_duplicates=False, n=1):
@@ -845,7 +850,9 @@ class VeneerNetworkElementActions(object):
         '''
         return self.set_param_values(None, models, fromList=fromList, instantiate=True, **kwargs)
 
-    def set_param_values(self, parameter, values, literal=False, fromList=False, instantiate=False, enum=False, **kwargs):
+    def set_param_values(self, parameter, values,
+                         literal=False, fromList=False, instantiate=False,
+                         enum=False, dry_run=False,**kwargs):
         '''
         Set the values of a particular parameter used in a particular context
         '''
@@ -857,7 +864,8 @@ class VeneerNetworkElementActions(object):
             ns = self._instantiation_namespace(values, enum)
             fromList = True
             values = [v.replace('+','.') for v in values]
-        return self._ironpy.set(accessor, values, ns, literal=literal, fromList=fromList, instantiate=instantiate)
+        return self._ironpy.set(accessor, values, ns, literal=literal, fromList=fromList,
+                                instantiate=instantiate,dry_run=dry_run)
 
     def add_to_list(self, parameter, value, instantiate=False, n=1, **kwargs):
         parameter = self._translate_property(parameter)
