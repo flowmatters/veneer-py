@@ -27,7 +27,7 @@ ADDITIONAL_INPUTS={
         'link.Evaporation'
     ],
     'RiverSystem.Nodes.StorageNodeModel':[
-        'StorageInternal.EvaporationInMetresPerTimestep',
+        'StorageInternal.EvaporationInMetresPerSecond',
         'StorageInternal.RainfallInMetresPerSecond'
     ]
 }
