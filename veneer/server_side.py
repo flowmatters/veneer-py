@@ -25,6 +25,10 @@ ADDITIONAL_INPUTS={
     'RiverSystem.Flow.StorageRouting':[
         'link.RainFall',
         'link.Evaporation'
+    ],
+    'RiverSystem.Nodes.StorageNodeModel':[
+        'StorageInternal.EvaporationInMetresPerTimestep',
+        'StorageInternal.RainfallInMetresPerSecond'
     ]
 }
 
