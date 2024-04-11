@@ -484,21 +484,26 @@ class VeneerIronPython(object):
             return [self.simplify_response(d) for d in data]
         return data
 
-    def get_data_sources(self, theThing, namespace=None):
+    def get_data_sources(self, theThing, namespace=None,input_set=None):
         '''
         Get references (Veneer URLs) to the
         '''
         script = self._init_script(namespace)
         script += ''
         listQuery = theThing.find(".*") != -1
+        if input_set is None:
+            input_set = 'None'
+        else:
+            input_set = "'%s'" % input_set
+
         if listQuery:
             script += 'result = []\n'
-            innerLoop = 'result.append(H.FindDataSource(scenario,%s__init__.__self__,"%s"))'
+            innerLoop = f'result.append(H.FindDataSource(scenario,%s__init__.__self__,"%s",{input_set}))'
             script += self._generateLoop(theThing, innerLoop)
         else:
             obj = '.'.join(theThing.split('.')[0:-1])
             prop = theThing.split('.')[-1]
-            script += "result = H.FindDataSource(%s,%s)\n" % (obj, prop)
+            script += "result = H.FindDataSource(%s,%s,%s)\n" % (obj, prop,input_set)
 #       return script
 
         resp = self.run_script(script)
@@ -877,14 +882,14 @@ class VeneerNetworkElementActions(object):
         ns = value if instantiate else None
         return self._ironpy.add_to_list(accessor, value, namespace=ns, n=n, instantiate=True, allow_duplicates=True)
 
-    def get_data_sources(self, parameter, by_name=False, **kwargs):
+    def get_data_sources(self, parameter, by_name=False, input_set=None, **kwargs):
         '''
         Return pointers (veneer URLs) to the data sources used as input to a particular parameter
         '''
         parameter = self._translate_property(parameter)
         accessor = self._build_accessor(parameter, **kwargs)
         resp = self._ironpy.get_data_sources(
-            accessor, kwargs.get('namespace', self._ns))
+            accessor, kwargs.get('namespace', self._ns),input_set)
         if by_name:
             return dict(zip(self.names(**kwargs), resp))
         return resp
@@ -1065,12 +1070,12 @@ class VeneerNetworkElementActions(object):
 
         return self._tabulate_properties(properties, values, model_type, **kwargs)
 
-    def tabulate_inputs(self, model_type=None, **kwargs):
+    def tabulate_inputs(self, model_type=None, input_set=None,**kwargs):
         def properties(m):
             return self._ironpy.find_inputs(m)
 
         def values(p, **kwargs):
-            return self.get_data_sources(p, **kwargs)
+            return self.get_data_sources(p, input_set=input_set, **kwargs)
 
         return self._tabulate_properties(properties, values, model_type, **kwargs)
 
