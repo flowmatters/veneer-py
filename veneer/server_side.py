@@ -1,6 +1,6 @@
 
 from .utils import (_stringToList, _variable_safe_name,
-                    _safe_filename, deprecate_async)
+                    _safe_filename, deprecate_async, simplify_response)
 from .templates import *
 from .component import VeneerComponentModelActions
 
@@ -435,22 +435,7 @@ class VeneerIronPython(object):
         return self.simplify_response(self._safe_run(script)['Response'])
 
     def simplify_response(self, response):
-        if response is None:
-            return response
-
-        if response['__type'].startswith('DictResponse'):
-            return self.process_response_dict(response)
-
-        response = response['Value']
-        if hasattr(response, '__len__'):
-            if isinstance(response, str):
-                return response
-            return [self.simplify_response(r) for r in response]
-
-        return response
-
-    def process_response_dict(self, resp):
-        return {self.simplify_response(e['Key']): self.simplify_response(e['Value']) for e in resp['Entries']}
+        return simplify_response(response)
 
     def get(self, theThing, namespace=None, names=None, alt_expression=None,skip_nulls=True):
         """

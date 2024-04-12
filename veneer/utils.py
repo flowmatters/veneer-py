@@ -391,4 +391,20 @@ def _quote_string(s):
         return '"%s"'%s
     return s
 
+def simplify_response(response):
+    if response is None:
+        return response
 
+    if response['__type'].startswith('DictResponse'):
+        return process_response_dict(response)
+
+    response = response['Value']
+    if hasattr(response, '__len__'):
+        if isinstance(response, str):
+            return response
+        return [simplify_response(r) for r in response]
+
+    return response
+
+def process_response_dict(self, resp):
+    return {simplify_response(e['Key']): simplify_response(e['Value']) for e in resp['Entries']}

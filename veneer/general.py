@@ -9,7 +9,7 @@ import json
 import re
 from datetime import datetime, timedelta
 from .server_side import VeneerIronPython
-from .utils import SearchableList, _stringToList, read_veneer_csv, objdict#, deprecate_async
+from .utils import SearchableList, _stringToList, read_veneer_csv, objdict #, deprecate_async
 import pandas as pd
 import numpy as np
 # Source
@@ -468,7 +468,12 @@ class Veneer(object):
         '''
         Return a SearchableList of the function variables in the Source model
         '''
-        return SearchableList(self.retrieve_json('/variables'))
+        result = self.retrieve_json('/variables')
+        for v in result:
+            if v.get('TimeSeriesDataSources',None) is None:
+                continue
+            v['TimeSeriesDataSources'] = {e['Key']:e['Value'] for e in v['TimeSeriesDataSources']}
+        return SearchableList(result)
 
     def variable(self, name):
         '''
