@@ -248,6 +248,7 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=True,
     - project_fn - Path to a Source project file (.rsproj)
 
     - n_instances - Number of copies of the Veneer command line to start (default: 1)
+                  - Alternatively, specify a list of models (scenarios) to use, one for each instance
 
     - ports - A single port number, indicating the port number of the first copy of the Veneer command line,
               OR a list of ports, in which case len(ports)==n_instances  (default: 9876)
@@ -269,6 +270,7 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=True,
     - return_io - Return Queues and Threads for asynchronous IO - for reading output of servers (boolean, default: False)
 
     - model - Specify the model (scenario) to use. Default None (use first scenario). Can specify by scenario name or 1-based index.
+            - If a list of models is provided, the length of the list will be used as n_instances
 
     - additional_plugins - List of plugin files (DLLs) to load
 
@@ -277,9 +279,6 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=True,
        ports - the port numbers used for each copy of the server
        ((stdout_queues,stdout_threads),(stderr_queues,stderr_threads)) if return_io
     """
-    if not hasattr(ports,'__len__'):
-        ports = list(range(ports,ports+n_instances))
-
     if not veneer_exe:
         veneer_exe = find_veneer_cmd_line_exe(project_fn)
 
@@ -295,19 +294,32 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=True,
         if isinstance(model,int) and model <= 0:
             raise Exception('Model index must be 1-based')
 
-        model = str(model)
-        if ' ' in model:
-            model = '"%s"'%model
+        if isinstance(model,list):
+            n_instances = len(model)
+        else:
+            model = [model] * n_instances
 
-        extras += '-m %s '%model
+        model_args = []
+        for m in model:
+            m = str(m)
+            if ' ' in m:
+                m = '"%s"'%m
+
+            model_args.append(' -m %s '%m)
+    else:
+        model_args = [' '] * n_instances
+
+    if not hasattr(ports,'__len__'):
+        ports = list(range(ports,ports+n_instances))
 
     if len(additional_plugins):
-        extras += '-l '+ ','.join(additional_plugins)
+        extras += '-l '+ quote_if_space(','.join(additional_plugins))
 
-    cmd_line = '%s -p %%d %s '%(veneer_exe,extras)
     if project_fn:
-        cmd_line += '"%s"'%str(project_fn)
-    cmd_lines = [cmd_line%port for port in ports]
+        extras += ' "%s"'%str(project_fn)
+
+    cmd_lines = ['%s -p %d %s %s'%(veneer_exe,port,model,extras) for (port,model) in zip(ports,model_args)]
+    # cmd_lines = [cmd_line%port for port in ports]
     if debug:
         for cmd in cmd_lines:
             print('Starting %s'%cmd)
@@ -318,7 +330,7 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=True,
         else:
             cmd_line = 'start "Veneer server for %s" %s'%(os.path.basename(project_fn),cmd_line)
             kwargs['shell']=True
-    processes = [Popen(cmd_line%port,stdout=PIPE,stderr=PIPE,bufsize=1, close_fds=ON_POSIX, **kwargs) for port in ports]
+    processes = [Popen(cmd,stdout=PIPE,stderr=PIPE,bufsize=1, close_fds=ON_POSIX, **kwargs) for cmd in cmd_lines]
     std_out_queues,std_out_threads = configure_non_blocking_io(processes,'stdout')
     std_err_queues,std_err_threads = configure_non_blocking_io(processes,'stderr')
 
@@ -459,3 +471,8 @@ class BulkVeneer(object):
         return BulkVeneerApplication(self,attrname)
 
 # +++ Need something to read latest messages from processes...
+
+def quote_if_space(fn:str)->str:
+    if (' ' in fn) and (not fn.startswith('"')) and (not fn.endswith('"')):
+        return '"%s"'%fn
+    return fn
