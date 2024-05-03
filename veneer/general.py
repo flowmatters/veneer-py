@@ -111,6 +111,8 @@ class Veneer(object):
     def url(self,url):
         if self.protocol=='file':
             return self.prefix + url
+        if url.startswith('/'):
+            url = url[1:]
         return '%s://%s:%d%s/%s'%(self.protocol,self.host,self.port,self.prefix,url)
 
     def retrieve_json(self, url):
