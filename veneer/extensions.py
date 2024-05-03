@@ -448,7 +448,7 @@ def network_plot(self,
 
     icons = set(self['features'].find_by_feature_type('node')._select(['icon']))
 
-    icon_images = {i:plt.imread(v.url(i+v.img_ext)) for i in icons}
+    icon_images = {i:v.retrieve_image(i) for i in icons}
 
     if ax is None:
         ax = plt.gca()

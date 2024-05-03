@@ -175,6 +175,16 @@ class Veneer(object):
             print("")
         return result
 
+    def retrieve_image(self,resource):
+        from PIL import Image
+        url = self.url(resource+self.img_ext)
+        if url.startswith('http://') or url.startswith('https://'):
+            import urllib
+            with urllib.request.urlopen(url) as response:
+                image = Image.open(response)
+            return image
+        return Image.open(url)
+
 #    @deprecate_async
     def update_json(self, url, data, run_async=False):
         '''
