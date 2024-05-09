@@ -239,7 +239,8 @@ def overwrite_plugin_configuration(source_binaries,project_fn):
 
 def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=True,
           script=True, veneer_exe=None,overwrite_plugins=None,return_io=False,
-          model=None,start_new_session=False,additional_plugins=[]):
+          model=None,start_new_session=False,additional_plugins=[],
+          custom_endpoints=[]):
     """
     Start one or more copies of the Veneer command line progeram with a given project file
 
@@ -313,8 +314,10 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=True,
         ports = list(range(ports,ports+n_instances))
 
     if len(additional_plugins):
-        extras += '-l '+ quote_if_space(','.join(additional_plugins))
+        extras += ' -l '+ quote_if_space(','.join(additional_plugins))
 
+    if len(custom_endpoints):
+        extras += ' -c '+ quote_if_space(','.join(custom_endpoints))
     if project_fn:
         extras += ' "%s"'%str(project_fn)
 
