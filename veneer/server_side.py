@@ -1093,8 +1093,10 @@ class VeneerNetworkElementActions(object):
             table[col_name] = [name_row[i] for j, name_row in enumerate(_names) if all_models[j] == model_type]
 
         for p in _property_lookup.get(model_type,[]):
-            table[p] = []
             values = value_getter(p, **kwargs)
+            if not len(values):
+                continue
+            table[p] = []
 
             for m in all_models:
                 p_to_check = p.split('.')[0]
