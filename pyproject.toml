@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = 'veneer-py'
+description="Support for scripting eWater Source models through the Veneer (RESTful HTTP) plugin"
+keywords = ["hydrology", "ewater", "veneer", "scripting", "http", "rest"]
+license = {text = "ISC License"}
+version = "0.1"
+readme = {file = "README.md", content-type = "text/markdown"}
+dependencies = ["numpy", "pandas"]
+authors = [
+    {name = "Joel Rahman", email = "joel@flowmatters.com.au"}
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: ISC License (ISCL)",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Software Development :: Libraries :: Python Modules"
+]
+
+[project.urls]
+Homepage = "https://github.com/flowmatters/veneer-py"
+
+[project.optional-dependencies]
+test = ["nose"]
+
+[tool.setuptools.packages.find]
+
+[tools.setuptools]
+include-package-data = true
+zip-safe = true
+packages = ["veneer","veneer.nodes"]
+py_modules=['veneer']

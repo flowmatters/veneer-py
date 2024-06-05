@@ -29,27 +29,27 @@ def read(*parts):
         return f.read()
 
 setup(
-        name='veneer-py',
-        version=version,
-        description="Support for scripting eWater Source models through the Veneer (RESTful HTTP) plugin",
-        packages=["veneer","veneer.nodes"],
-        long_description=read("README.md"),
-        classifiers=filter(None, classifiers.split("\n")),
-        keywords='hydrology ewater veneer scripting http rest',
-        author='Joel Rahman',
-        author_email='joel@flowmatters.com.au',
-        url='https://github.com/flowmatters/veneer-py',
+        # name='veneer-py',
+        # version=version,
+        # description="Support for scripting eWater Source models through the Veneer (RESTful HTTP) plugin",
+        # packages=["veneer","veneer.nodes"],
+        # long_description=read("README.md"),
+        # classifiers=filter(None, classifiers.split("\n")),
+        # keywords='hydrology ewater veneer scripting http rest',
+        # author='Joel Rahman',
+        # author_email='joel@flowmatters.com.au',
+        # url='https://github.com/flowmatters/veneer-py',
         #download_url = "http://cheeseshop.python.org/packages/source/p/Puppy/Puppy-%s.tar.gz" % version,
-        license='ISC',
-        py_modules=['veneer'],
-        include_package_data=True,
-        zip_safe=True,
-        test_suite = 'nose.collector',
-        install_requires=[
-            'numpy',
-            'pandas'
-        ],
-        extras_require={
-            'test': ['nose'],
-        },
+        # license='ISC',
+        # py_modules=['veneer'],
+        # include_package_data=True,
+        # zip_safe=True,
+        # test_suite = 'nose.collector',
+        # install_requires=[
+        #     'numpy',
+        #     'pandas'
+        # ],
+        # extras_require={
+        #     'test': ['nose'],
+        # },
 )
