@@ -92,7 +92,7 @@ class SourceExtractor(object):
         constituents = self.v.model.get_constituents()
         constituent_sources = self.v.model.get_constituent_sources()
         assert len(constituent_sources)==1 # We don't use constituent source
-
+        self.v.model._safe_run('scenario.Network.ResetAssuranceManager()')
         network = self.v.network()
         network_df = network.as_dataframe()
 

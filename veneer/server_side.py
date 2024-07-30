@@ -52,17 +52,22 @@ OTHER_STORAGE_PARAMETERS=[
     'OperatingConstraintsSpecification',
     'OperatingTargetsSpecification',
 ]
+
+GENERAL_LINK_PARAMETERS=[
+    'link.Elevation',
+    'link.Length',
+    'link.ReceiveCatchmentFluxAtTop'
+]
+
 ADDITIONAL_PARAMETERS={
     'RiverSystem.Flow.StorageRouting':[
-        'link.Elevation',
-        'link.Length',
         'InitStorage',
         'InitFlow',
         'IsInitFlow',
         'AverageRegFlow',
         'Divisions',
         'TriangularWeir'
-    ],
+    ]+GENERAL_LINK_PARAMETERS,
     'RiverSystem.Nodes.StorageNodeModel':OTHER_STORAGE_PARAMETERS+COMMON_STORAGE_PARAMETERS,
     'RiverSystem.Nodes.Loss.LossNodeModel':[
         'LossVolume',
@@ -376,7 +381,7 @@ class VeneerIronPython(object):
         return self._find_members_with_attribute_for_types(model_types,
                                                            'ParameterAttribute',
                                                            ADDITIONAL_PARAMETERS)
-    
+
     def find_inputs(self, model_types):
         """
         Find the input names for a given model type or list of model types
@@ -1650,7 +1655,7 @@ class VeneerLinkRoutingActions(VeneerNetworkElementActions):
                                 (r['Level'],r['Discharge'],r['Width'],r['DeadStorage']) for _,r  in table.iterrows()])
         code = LOAD_RATING_TABLE_SCRIPTLET%(rating_txt,start.year,start.month,start.day)
         return self.apply(code,init='0',links=links)
-        
+
 
 class VeneerNodeActions(VeneerNetworkElementActions):
     '''
