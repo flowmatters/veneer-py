@@ -516,6 +516,12 @@ def _base_arg_parser(model=True):
 
     return parser
 
+def _parse_time_period_arg(txt):
+    result = txt.split('-')
+    if len(result)!=2:
+        raise argparse.ArgumentTypeError(f'{txt} is not a valid time period')
+    return result
+
 def _arg_parser():
     parser = _base_arg_parser()
     parser.add_argument('-s','--sourceversion',help='Source version number',default='4.5.0')
@@ -524,6 +530,8 @@ def _arg_parser():
     parser.add_argument('-v','--veneerpath',help='Path (directory) containing Veneer command line files. If not provided, or not existing, will attempt to create using sourceversion and build paths')
     parser.add_argument('--remote',help='Start Veneer command line with "allow remote connections"',action='store_true',default=False)
     parser.add_argument('-b','--buildpath',help='Path (directory) containing Veneer builds')
+    parser.add_argument('--timeperiod',help='Time period for converted model (format yyyy/mm/dd-yyyy/mm/dd)',type=_parse_time_period_arg,default=None)#'2000/01/01-2000/12/31')
+    parser.add_argument('--continue',help='Continue from previos terminated run',action='store_true',default=False)
     return parser
 
 def _parsed_args(parser):
@@ -622,7 +630,15 @@ def extract(converter_constructor,model,extractedfiles,**kwargs): # port,buildpa
             v.drop_all_runs()
             converter.v = v
 
-    converter.extract_source_results(batches=True,before_batch=between_batches)
+    run_args = {}
+    time_period = kwargs.get('timeperiod',None)
+    if time_period:
+        time_period = [d.split('/') for d in time_period]
+        start,end = [f'{d[2]}/{d[1]}/{d[0]}' for d in time_period]
+        run_args['start']=start
+        run_args['end']=end
+        print('Running with arguments',run_args)
+    converter.extract_source_results(batches=True,start_batch=start_stage,before_batch=between_batches,**run_args)
 
     stop_veneer()
 
