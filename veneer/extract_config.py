@@ -396,7 +396,7 @@ class SourceExtractor(object):
         self.v.configure_recording(enable=recorders)
         self.progress('Configured recorders')
 
-    def extract_source_results(self,start=None,end=None,batches=False,before_batch=_BEFORE_BATCH_NOP):
+    def extract_source_results(self,start=None,end=None,batches=False,start_batch=0,before_batch=_BEFORE_BATCH_NOP):
         self.current_dest = self.results
         self._ensure()
 
@@ -404,6 +404,9 @@ class SourceExtractor(object):
         if not batches:
             recording_batches = [[item for sublist in recording_batches for item in sublist]]
         for ix,batch in enumerate(recording_batches):
+            if ix<start_batch:
+                self.progress(f'Skipping batch {ix} for incremental run')
+                continue
             before_batch(self,ix,batch)
             self.v.drop_all_runs()
 
@@ -585,15 +588,34 @@ def extract(converter_constructor,model,extractedfiles,**kwargs): # port,buildpa
 
     scenario_info = veneer_client.scenario_info()
     print(scenario_info)
+    dest_dir = os.path.join(extractedfiles,model)
+    progress_fn = os.path.join(dest_dir,'progress.txt')
+    def write_progress(stage:int):
+        os.makedirs(dest_dir,exist_ok=True)
+        with open(progress_fn,'w') as fp:
+            fp.write(f'{stage}\n')
+
+    def get_progress()->int:
+        if not os.path.exists(progress_fn):
+            return -1
+        with open(progress_fn,'r') as fp:
+            ln = fp.readline()
+            return int(ln.strip())
 
     converter = converter_constructor(veneer_client,
-                                      os.path.join(extractedfiles,model),
-                                      progress=logging.info)
+                                    dest_dir,
+                                    progress=logging.info)
 
-    converter.extract_source_config()
+    start_stage = get_progress() if kwargs.get('continue',False) else -1
+    if start_stage < 0:
+        converter.extract_source_config()
+        write_progress(0)
+    else:
+        print('Skipping main extraction in incremental run')
 
     def between_batches(extractor,ix,batch):
         print('Running batch %d for %s'%(ix,model))
+        write_progress(ix)
         if ix > 0:
             stop_veneer()
             v = start_veneer()
