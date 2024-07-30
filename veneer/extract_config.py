@@ -23,7 +23,7 @@ STANDARD_SOURCE_ELEMENTS=[
 ]
 
 STANDARD_SOURCE_VARIABLES=[
-    'Outflow'
+    'Outflow',
     'Quick Flow',
     'Slow Flow',
     'Total Flow'
