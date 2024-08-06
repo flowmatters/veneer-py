@@ -23,7 +23,7 @@ STANDARD_SOURCE_ELEMENTS=[
 ]
 
 STANDARD_SOURCE_VARIABLES=[
-    'Outflow'
+    'Outflow',
     'Quick Flow',
     'Slow Flow',
     'Total Flow'
@@ -92,7 +92,7 @@ class SourceExtractor(object):
         constituents = self.v.model.get_constituents()
         constituent_sources = self.v.model.get_constituent_sources()
         assert len(constituent_sources)==1 # We don't use constituent source
-
+        self.v.model._safe_run('scenario.Network.ResetAssuranceManager()')
         network = self.v.network()
         network_df = network.as_dataframe()
 
@@ -396,7 +396,7 @@ class SourceExtractor(object):
         self.v.configure_recording(enable=recorders)
         self.progress('Configured recorders')
 
-    def extract_source_results(self,start=None,end=None,batches=False,before_batch=_BEFORE_BATCH_NOP):
+    def extract_source_results(self,start=None,end=None,batches=False,start_batch=0,before_batch=_BEFORE_BATCH_NOP):
         self.current_dest = self.results
         self._ensure()
 
@@ -404,6 +404,9 @@ class SourceExtractor(object):
         if not batches:
             recording_batches = [[item for sublist in recording_batches for item in sublist]]
         for ix,batch in enumerate(recording_batches):
+            if ix<start_batch:
+                self.progress(f'Skipping batch {ix} for incremental run')
+                continue
             before_batch(self,ix,batch)
             self.v.drop_all_runs()
 
@@ -513,6 +516,12 @@ def _base_arg_parser(model=True):
 
     return parser
 
+def _parse_time_period_arg(txt):
+    result = txt.split('-')
+    if len(result)!=2:
+        raise argparse.ArgumentTypeError(f'{txt} is not a valid time period')
+    return result
+
 def _arg_parser():
     parser = _base_arg_parser()
     parser.add_argument('-s','--sourceversion',help='Source version number',default='4.5.0')
@@ -521,6 +530,8 @@ def _arg_parser():
     parser.add_argument('-v','--veneerpath',help='Path (directory) containing Veneer command line files. If not provided, or not existing, will attempt to create using sourceversion and build paths')
     parser.add_argument('--remote',help='Start Veneer command line with "allow remote connections"',action='store_true',default=False)
     parser.add_argument('-b','--buildpath',help='Path (directory) containing Veneer builds')
+    parser.add_argument('--timeperiod',help='Time period for converted model (format yyyy/mm/dd-yyyy/mm/dd)',type=_parse_time_period_arg,default=None)#'2000/01/01-2000/12/31')
+    parser.add_argument('--continue',help='Continue from previos terminated run',action='store_true',default=False)
     return parser
 
 def _parsed_args(parser):
@@ -585,22 +596,49 @@ def extract(converter_constructor,model,extractedfiles,**kwargs): # port,buildpa
 
     scenario_info = veneer_client.scenario_info()
     print(scenario_info)
+    dest_dir = os.path.join(extractedfiles,model)
+    progress_fn = os.path.join(dest_dir,'progress.txt')
+    def write_progress(stage:int):
+        os.makedirs(dest_dir,exist_ok=True)
+        with open(progress_fn,'w') as fp:
+            fp.write(f'{stage}\n')
+
+    def get_progress()->int:
+        if not os.path.exists(progress_fn):
+            return -1
+        with open(progress_fn,'r') as fp:
+            ln = fp.readline()
+            return int(ln.strip())
 
     converter = converter_constructor(veneer_client,
-                                      os.path.join(extractedfiles,model),
-                                      progress=logging.info)
+                                    dest_dir,
+                                    progress=logging.info)
 
-    converter.extract_source_config()
+    start_stage = get_progress() if kwargs.get('continue',False) else -1
+    if start_stage < 0:
+        converter.extract_source_config()
+        write_progress(0)
+    else:
+        print('Skipping main extraction in incremental run')
 
     def between_batches(extractor,ix,batch):
         print('Running batch %d for %s'%(ix,model))
+        write_progress(ix)
         if ix > 0:
             stop_veneer()
             v = start_veneer()
             v.drop_all_runs()
             converter.v = v
 
-    converter.extract_source_results(batches=True,before_batch=between_batches)
+    run_args = {}
+    time_period = kwargs.get('timeperiod',None)
+    if time_period:
+        time_period = [d.split('/') for d in time_period]
+        start,end = [f'{d[2]}/{d[1]}/{d[0]}' for d in time_period]
+        run_args['start']=start
+        run_args['end']=end
+        print('Running with arguments',run_args)
+    converter.extract_source_results(batches=True,start_batch=start_stage,before_batch=between_batches,**run_args)
 
     stop_veneer()
 
