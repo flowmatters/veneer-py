@@ -9,7 +9,7 @@ keywords = ["hydrology", "ewater", "veneer", "scripting", "http", "rest"]
 license = {text = "ISC License"}
 version = "0.1"
 readme = {file = "README.md", content-type = "text/markdown"}
-dependencies = ["numpy", "pandas"]
+# dependencies = ["numpy", "pandas"]
 authors = [
     {name = "Joel Rahman", email = "joel@flowmatters.com.au"}
 ]
