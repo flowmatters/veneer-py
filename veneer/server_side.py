@@ -1754,6 +1754,7 @@ class VeneerNodeActions(VeneerNetworkElementActions):
 
         script = self._ironpy._init_script('.'.join(node_type.split('.')[:-1]))
         script += 'import RiverSystem.E2ShapeProperties as E2ShapeProperties\n'
+        script += 'clr.AddReference("System.Drawing")\n'
         script += 'import System.Drawing.PointF as PointF\n'
         script += 'import RiverSystem.Utils.RiverSystemUtils as rsutils\n'
         if is_supply_point:
