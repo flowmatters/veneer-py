@@ -402,7 +402,7 @@ class SourceExtractor(object):
         self.v.configure_recording(enable=recorders)
         self.progress('Configured recorders')
 
-    def extract_source_results(self,start=None,end=None,batches=False,start_batch=0,before_batch=_BEFORE_BATCH_NOP):
+    def extract_source_results(self,start=None,end=None,batches=False,start_batch=0,before_batch=_BEFORE_BATCH_NOP,**kwargs):
         self.current_dest = self.results
         self._ensure()
 
@@ -424,7 +424,7 @@ class SourceExtractor(object):
 
             self.v.model.simulation.configure_assurance_rule(level='Warning',category='Data Sources')
 
-            self.v.run_model(start=start,end=end)
+            self.v.run_model(start=start,end=end,**kwargs)
             self.progress('Simulation done.')
 
             run_summary = self.v.retrieve_run()
@@ -588,7 +588,7 @@ def _get_veneer(model_fn,port,veneerpath,sourceversion,buildpath,plugins,**kwarg
 
     return start,stop
 
-def extract(converter_constructor,model,extractedfiles,**kwargs): # port,buildpath,veneerpath,sourceversion,plugins
+def extract(converter_constructor,model,extractedfiles,run_args=None,**kwargs): # port,buildpath,veneerpath,sourceversion,plugins
     print(f'Extracting {model}...')
     # BUT... how to also use
     for k,v in kwargs.items():
@@ -636,14 +636,14 @@ def extract(converter_constructor,model,extractedfiles,**kwargs): # port,buildpa
             v.drop_all_runs()
             converter.v = v
 
-    run_args = {}
+    run_args = run_args or {}
     time_period = kwargs.get('timeperiod',None)
     if time_period:
         time_period = [d.split('/') for d in time_period]
         start,end = [f'{d[2]}/{d[1]}/{d[0]}' for d in time_period]
         run_args['start']=start
         run_args['end']=end
-        print('Running with arguments',run_args)
+    print('Running with arguments',run_args)
     converter.extract_source_results(batches=True,start_batch=start_stage,before_batch=between_batches,**run_args)
 
     stop_veneer()
