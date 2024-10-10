@@ -237,8 +237,14 @@ class SourceExtractor(object):
 
     def _extract_loss_configuration(self):
         loss_nodes = self.v.model.node.losses.names()
+
         if len(loss_nodes):
             self.progress('Extracting information for %d loss nodes'%len(loss_nodes))
+
+        params = self.v.model.node.losses.tabulate_parameters()
+        params = params.get('RiverSystem.Nodes.Loss.LossNodeModel',[])
+        if len(params):
+            self.write_csv('loss_params',params)
 
         for loss in loss_nodes:
             loss_table = self.v.model.node.losses.loss_table(loss)
