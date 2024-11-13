@@ -701,13 +701,17 @@ class Veneer(object):
                 return [_transform(r) for r in result]
         return _transform(result)
 
-    def result_matches_criteria(self, result, criteria):
+    def result_matches_criteria(self, result, criteria,use_regexp=True):
         import re
 #        MATCH_ALL='__all__'
         for key, pattern in criteria.items():
-            #            if pattern==MATCH_ALL: continue
-            if not re.match(pattern, result[key]):
-                return False
+            if use_regexp:
+                #            if pattern==MATCH_ALL: continue
+                if not re.match(pattern, result[key]):
+                    return False
+            else:
+                if result[key] != pattern:
+                    return False
         return True
 
     def input_sets(self):
@@ -750,7 +754,7 @@ class Veneer(object):
             return ''
         return "/aggregated/%s" % timestep
 
-    def retrieve_multiple_time_series(self, run='latest', run_data=None, criteria={}, timestep='daily', name_fn=name_element_variable):
+    def retrieve_multiple_time_series(self, run='latest', run_data=None, criteria={}, timestep='daily', name_fn=name_element_variable,use_regexp=True):
         """
         Retrieve multiple time series from a run according to some criteria.
 
@@ -805,7 +809,7 @@ class Veneer(object):
         dates = None
         for result in run_data['Results']:
             res = result.copy()
-            if not self.result_matches_criteria(result, criteria):
+            if not self.result_matches_criteria(result, criteria,use_regexp):
               continue
 
             d = self.retrieve_json(result['TimeSeriesUrl'] + suffix)
