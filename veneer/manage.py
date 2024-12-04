@@ -280,6 +280,9 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=True,
        ports - the port numbers used for each copy of the server
        ((stdout_queues,stdout_threads),(stderr_queues,stderr_threads)) if return_io
     """
+    if not hasattr(ports,'__len__'):
+        ports = list(range(ports,ports+n_instances))
+
     if not veneer_exe:
         veneer_exe = find_veneer_cmd_line_exe(project_fn)
 

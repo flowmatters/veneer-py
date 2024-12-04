@@ -1643,7 +1643,7 @@ class VeneerLinkRoutingActions(VeneerNetworkElementActions):
 
     def rating_table_meta(self,link):
         return self.tabulate_list_values('link.RatingCurveLibrary.Curves',
-                                        ['Name','StartDate'],
+                                        ['Name','StartDate','OverbankFlowlevel'],
                                         links=link)
 
     def rating_tables(self,link,idx=0):
@@ -1651,10 +1651,10 @@ class VeneerLinkRoutingActions(VeneerNetworkElementActions):
                                         ['Level','Discharge','Width','DeadStorage'],
                                         links=link)
 
-    def load_rating_table(self,table,start,links):
+    def load_rating_table(self,table,start,overbank,links):
         rating_txt = '\n'.join(['curve.Points.Add(LinkRatingCurvePoint(Level=%f,Discharge=%f,Width=%f,DeadStorage=%s))'% \
                                 (r['Level'],r['Discharge'],r['Width'],r['DeadStorage']) for _,r  in table.iterrows()])
-        code = LOAD_RATING_TABLE_SCRIPTLET%(rating_txt,start.year,start.month,start.day)
+        code = LOAD_RATING_TABLE_SCRIPTLET%(rating_txt,start.year,start.month,start.day,overbank)
         return self.apply(code,init='0',links=links)
 
 

@@ -255,6 +255,7 @@ ignoreExceptions=False
 curve = LinkRatingCurve()
 %s
 curve.StartDate = System.DateTime(%s,%s,%s)
+curve.OverbankFlowlevel=%f
 target.link.RatingCurveLibrary.Curves.Add(curve)
 result += 1
 '''
