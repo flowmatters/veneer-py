@@ -594,14 +594,15 @@ class VeneerIronPython(object):
         return self._assignment(theThing, theValue, namespace, literal, fromList, instantiate, assignment, ")")
 
     def assign_time_series(self, theThing, theValue, column=0, from_list=False, literal=True,
-                           data_group=None, namespace=None):
+                           data_group=None, namespace=None,dry_run=False):
         assignment = "H.AssignTimeSeries(scenario,%s__init__.__self__,'%s','" + \
             data_group + "',newVal"
         post_assignment = ",%d)" % column
         theValue = [_safe_filename(fn) for fn in _stringToList(theValue)]
         if len(theValue) == 1:
             theValue = theValue[0]
-        return self._assignment(theThing, theValue, namespace, literal, from_list, False, assignment, post_assignment)
+        return self._assignment(theThing, theValue, namespace, literal, from_list, 
+                                False, assignment, post_assignment,dry_run=dry_run)
 
     def clear_time_series(self,theThing,namespace=None):
         return self._assignment(theThing,None,namespace,False,False,False,CLEAR_TIMESERIES_LOOP)
