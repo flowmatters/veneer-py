@@ -705,6 +705,12 @@ class Veneer(object):
         import re
 #        MATCH_ALL='__all__'
         for key, pattern in criteria.items():
+            if not key in result:
+                return False
+            tag = result[key]
+            if pattern == tag:
+                continue
+            #            if pattern==MATCH_ALL: continue
             if use_regexp:
                 #            if pattern==MATCH_ALL: continue
                 if not re.match(pattern, result[key]):
