@@ -644,9 +644,9 @@ class Veneer(object):
 
     def delete_data_source(self, group):
         '''
-        Tell Source to drop/delete a specific set of results from memory.
+        Remove a data source from the Source model
 
-        run: Run number to delete. Default ='latest'. Valid values are 'latest' and integers from 1
+        group: Data group to delete
         '''
         assert self.live_source
         conn = hc.HTTPConnection(self.host, port=self.port)
