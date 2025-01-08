@@ -1693,6 +1693,9 @@ class VeneerNodeActions(VeneerNetworkElementActions):
         from .nodes.partitioning import VeneerFlowPartitioningActions
         self.partitioning = VeneerFlowPartitioningActions(self)
 
+        from .nodes.gauges import VeneerGaugeActions
+        self.gauges = VeneerGaugeActions(self)
+
     def _refine_accessor(self, node_access='', nodes=None, node_types=None, splitter=False):
         accessor = ""
         if not nodes is None:
