@@ -552,6 +552,16 @@ def network_connectivity_table(self):
 
     return result
 
+def network_to_json(self,fn=None):
+    import json
+    copy = dict(type=self['type'])
+    copy['features'] = self['features']._list
+    txt = json.dumps(copy,indent=2)
+    if fn is None:
+        return txt
+    with open(fn,'w') as f:
+        f.write(txt)
+
 def _extend_network(nw):
     nw = objdict(nw)
 
