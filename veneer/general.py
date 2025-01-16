@@ -935,14 +935,14 @@ class Veneer(object):
                 tag_order = list(tags.keys())
 
             tag_values = tuple([tags[k] for k in tag_order])
-            
+
             if not tag_values in summaries:
                 summaries[tag_values] = {}
             table = summaries[tag_values]
 
             data = self.retrieve_json(result['TimeSeriesUrl'] + suffix)
             assert 'Events' in data
-            
+
             units = data['Units']
             if not units in units_seen:
                 print('Units from %s = %s'%(result['TimeSeriesUrl'],units))
@@ -1064,6 +1064,21 @@ def expand_run_results_metadata(run,network):
     run = run.copy()
     run['Results'] = merged.to_dict(orient='records')
     return run
+
+def load_network(fn:str):
+    '''
+    Load a Source/Veneer network from a file
+
+    fn: str, path to network file
+
+    Example:
+
+    v = Veneer()
+    network = load_network('/path/to/network.json')
+    '''
+    with open(fn) as f:
+        network = json.load(f)
+    return _extend_network(network)
 
 if __name__ == '__main__':
     # Output
