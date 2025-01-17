@@ -282,7 +282,7 @@ def network_partition(self,
 
     By default, water users are treated as being downstream of connected extraction points.
     Set reverse_water_users=True to reverse this behaviour, essentially attributing the water user 
-    with the same value as one of its extraction points.
+    with the same value as one of its extraction points. Note water users WITH return flow are not affected.
     '''
     features = self['features']
     links_to_redo = []
@@ -324,7 +324,11 @@ def network_partition(self,
                         found_key = found_key or key
                         feature['properties'][new_prop] = found_key
                     elif is_extraction_point and reverse_water_users:
-                        links_without_key.append(l)
+                        ds_node = self.downstream_nodes(l)[0]
+                        is_water_user = ds_node['properties']['icon']==_WU_ICON
+                        wu_with_return_flow = is_water_user and len(self.downstream_links(ds_node))>0
+                        if not wu_with_return_flow:
+                            links_without_key.append(l)
                     elif is_regulated_partitioner and reverse_regulated_partitioners:
                         links_without_key.append(l)
                     elif is_storage and reverse_secondary_storage_outlets:
@@ -486,11 +490,15 @@ def network_plot(self,
     y = [p.y for p in points]
     x, y = np.atleast_1d(x, y)
     nodes = []
+    if hasattr(label_nodes,'__len__'):
+        nodes_to_label = label_nodes
+
     for x0, y0,icon,name in zip(x, y,df_nodes.icon,df_nodes.name):
         im = OffsetImage(icon_images[icon], zoom=zoom)
         ab = AnnotationBbox(im, (x0, y0), xycoords='data', frameon=False)
         nodes.append(ax.add_artist(ab))
-        if label_nodes:
+        label_this_node = (label_nodes==True) or (name in nodes_to_label)
+        if label_this_node:
             ax.annotate(name,xy=(x0,y0),xycoords='data',xytext=(x0+0.0001,y0+0.0001),textcoords='data',fontsize=8)
 
     ax.update_datalim(np.column_stack([x, y]))
