@@ -136,7 +136,7 @@ def network_insert_node_between(self,n1,n2,**kwargs):
     }
     self.add_feature(new_node)
 
-    link_to_adjust = self['features'].find_one_by_to_node(n2['id'])
+    link_to_adjust = self['features'].where(lambda f: (f['properties'].get('to_node')==n2['id']) and (f['properties'].get('from_node')==n1['id']))[0]
     link_to_adjust['properties']['to_node']=new_node['id']
     link_to_adjust['geometry']['coordinates'][1] = coordinates
 
