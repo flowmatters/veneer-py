@@ -573,8 +573,9 @@ def network_to_json(self,fn=None):
 def _extend_network(nw):
     nw = objdict(nw)
 
-    nw['features'] = SearchableList(
-        nw['features'], ['geometry', 'properties'])
+    if not isinstance(nw['features'],SearchableList):
+        nw['features'] = SearchableList(
+            nw['features'], ['geometry', 'properties'])
     add_network_methods(nw)
     return nw
 
