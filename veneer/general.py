@@ -476,6 +476,15 @@ class Veneer(object):
         }
         return self.update_json(url, payload)
 
+    def function(self,name):
+        '''
+        Return expression of a particular function
+        '''
+        if not name.startswith('$'):
+            name = '$' + name
+        all_functions = self.functions()
+        return all_functions.find_one_by_Name(name)['Expression']
+
     def variables(self):
         '''
         Return a SearchableList of the function variables in the Source model
