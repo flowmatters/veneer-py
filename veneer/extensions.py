@@ -281,7 +281,7 @@ def network_partition(self,
     `default_tag`, if specified, or the name of their outlet node otherwise.
 
     By default, water users are treated as being downstream of connected extraction points.
-    Set reverse_water_users=True to reverse this behaviour, essentially attributing the water user 
+    Set reverse_water_users=True to reverse this behaviour, essentially attributing the water user
     with the same value as one of its extraction points. Note water users WITH return flow are not affected.
     '''
     features = self['features']
@@ -377,9 +377,10 @@ def network_subset_upstream_of(self,node):
     features._list.append(node)
     result = {
         'type':'FeatureCollection',
-        '_v':self['_v'],
         'features':features
     }
+    if '_v' in self:
+        result['_v'] = self['_v']
     result = _extend_network(result)
     return result
 
@@ -387,9 +388,10 @@ def network_subset(self,filter):
     features = self['features'].where(filter)
     result = {
         'type':'FeatureCollection',
-        '_v':self['_v'],
         'features':features
     }
+    if '_v' in self:
+        result['_v'] = self['_v']
     result = _extend_network(result)
     return result
 
@@ -448,11 +450,14 @@ def network_plot(self,
     import matplotlib.pyplot as plt
     from matplotlib.offsetbox import OffsetImage, AnnotationBbox
     import numpy as np
-    v = self['_v']
+    v = self.get('_v',None)
 
     icons = set(self['features'].find_by_feature_type('node')._select(['icon']))
 
-    icon_images = {i:v.retrieve_image(i) for i in icons}
+    if v is None:
+        icon_images = {}
+    else:
+        icon_images = {i:v.retrieve_image(i) for i in icons}
 
     if ax is None:
         ax = plt.gca()
@@ -494,7 +499,10 @@ def network_plot(self,
         nodes_to_label = label_nodes
 
     for x0, y0,icon,name in zip(x, y,df_nodes.icon,df_nodes.name):
-        im = OffsetImage(icon_images[icon], zoom=zoom)
+        img = icon_images.get(icon,None)
+        if img is None:
+            continue
+        im = OffsetImage(img, zoom=zoom)
         ab = AnnotationBbox(im, (x0, y0), xycoords='data', frameon=False)
         nodes.append(ax.add_artist(ab))
         label_this_node = (label_nodes==True) or (name in nodes_to_label)
