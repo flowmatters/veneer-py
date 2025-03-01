@@ -34,9 +34,11 @@ def network_downstream_links(self,node_or_link):
     * node_or_link  - the node to search on. Expects the node feature object
     '''
     features = self['features']
-    source = features.find_by_id(_node_id(node_or_link))[0]
+    source = self.by_id(_node_id(node_or_link))
     if source['properties']['feature_type']=='node':
         node = _node_id(source)
+        if 'downstream_links' in source:
+          return [self.by_id(link_id) for link_id in source['downstream_links']]
     else:
         node = source['properties']['to_node']
 
@@ -52,9 +54,11 @@ def network_upstream_links(self,node_or_link):
     * node_or_link  - the node or link to search on. Expects the node feature object
     '''
     features = self['features']
-    source = features.find_by_id(_node_id(node_or_link))[0]
+    source = self.by_id(_node_id(node_or_link))
     if source['properties']['feature_type']=='node':
         node = _feature_id(source)
+        if 'upstream_links' in source:
+          return [self.by_id(link_id) for link_id in source['upstream_links']]
     else:
         node = source['properties']['from_node']
 
@@ -250,6 +254,7 @@ def network_use_schematic_coordinates(self):
             ]
 
 def network_as_dataframe(self):
+    import pandas as pd
     try:
         from geopandas import GeoDataFrame
         result = GeoDataFrame.from_features(self['features'])
@@ -261,7 +266,14 @@ def network_as_dataframe(self):
         print('Could not create GeoDataFrame. Using regular DataFrame.')
         print(str(e))
 
-    return self['features'].as_dataframe()
+    def flat_feature(f):
+        result = {k:v for k,v in f.items() if k != 'properties'}
+        result.update(f['properties'])
+        return result
+
+    flat_features = [flat_feature(f) for f in self['features']]
+
+    return pd.DataFrame(flat_features)
 
 def network_partition(self,
                       key_features,
@@ -421,6 +433,8 @@ def network_by_name(self,name):
     return f
 
 def network_by_id(self,f_id):
+    if 'by_id' in self:
+        return self['by_id'][f_id]
     return self['features'].find_one_by_id(f_id)
 
 def network_match_name(self,regexp):
@@ -569,6 +583,7 @@ def network_connectivity_table(self):
     return result
 
 def network_to_json(self,fn=None):
+    self.drop_lookups()
     import json
     copy = dict(type=self['type'])
     copy['features'] = self['features']._list
@@ -577,6 +592,43 @@ def network_to_json(self,fn=None):
         return txt
     with open(fn,'w') as f:
         f.write(txt)
+
+def network_build_lookups(self):
+    '''
+    Build lookup tables for features in the network.
+    nw['by_id'] = {feature_id: feature}
+    node['upstream_links']
+    '''
+    self['by_id'] = {_feature_id(f):f for f in self['features']}
+    for f in self['features']:
+        if f['properties']['feature_type']=='node':
+            f['upstream_links'] = []
+            f['downstream_links'] = []
+
+    for f in self['features']:
+      if f['properties']['feature_type']=='link':
+        feature_id = _feature_id(f)
+        from_id = f['properties']['from_node']
+        to_id = f['properties']['to_node']
+
+        from_node = self['by_id'][from_id]
+        to_node = self['by_id'][to_id]
+
+        to_node['upstream_links'].append(feature_id)
+        from_node['downstream_links'].append(feature_id)
+
+def network_drop_lookups(self):
+    '''
+    Drop lookup tables for features in the network.
+    '''
+    if 'by_id' in self:
+      del self['by_id']
+    for f in self['features']:
+        if f['properties']['feature_type']=='node':
+            if 'upstream_links' in f:
+              del f['upstream_links']
+            if 'downstream_links' in f:
+              del f['downstream_links']
 
 def _extend_network(nw):
     nw = objdict(nw)
