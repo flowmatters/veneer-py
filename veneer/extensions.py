@@ -412,11 +412,15 @@ def network_is_downstream_of(self,feature,possibly_upstream_feature):
     return path is not None
 
 def network_catchment_for_link(self,link):
-    link = _feature_id(link)
+    link_id = _feature_id(link)
+    link = self.by_id(link_id)
+    if 'catchment' in link:
+        return self.by_id(link['catchment'])
+
     for f in self['features']:
         if f['properties']['feature_type'] != 'catchment':
             continue
-        if f['properties']['link'] == link:
+        if f['properties']['link'] == link_id:
             return f
     return None
 
@@ -617,6 +621,13 @@ def network_build_lookups(self):
         to_node['upstream_links'].append(feature_id)
         from_node['downstream_links'].append(feature_id)
 
+    for f in self['features']:
+        if f['properties']['feature_type']=='catchment':
+            catchment_id = _feature_id(f)
+            link_id = f['properties']['link']
+            link = self['by_id'][link_id]
+            link['catchment'] = catchment_id
+
 def network_drop_lookups(self):
     '''
     Drop lookup tables for features in the network.
@@ -629,6 +640,9 @@ def network_drop_lookups(self):
               del f['upstream_links']
             if 'downstream_links' in f:
               del f['downstream_links']
+        if f['properties']['feature_type']=='link':
+            if 'catchment' in f:
+              del f['catchment']
 
 def _extend_network(nw):
     nw = objdict(nw)
