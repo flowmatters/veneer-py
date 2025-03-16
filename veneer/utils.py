@@ -406,5 +406,12 @@ def simplify_response(response):
 
     return response
 
-def process_response_dict(self, resp):
-    return {simplify_response(e['Key']): simplify_response(e['Value']) for e in resp['Entries']}
+def make_hashable(val):
+    if isinstance(val, dict):
+        return tuple([(k, make_hashable(v)) for k, v in val.items()])
+    if isinstance(val, list):
+        return tuple([make_hashable(v) for v in val])
+    return val
+
+def process_response_dict(resp):
+    return {make_hashable(simplify_response(e['Key'])): simplify_response(e['Value']) for e in resp['Entries']}
