@@ -240,13 +240,13 @@ def overwrite_plugin_configuration(source_binaries,project_fn):
 def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=True,
           script=True, veneer_exe=None,overwrite_plugins=None,return_io=False,
           model=None,start_new_session=False,additional_plugins=[],
-          custom_endpoints=[]):
+          custom_endpoints=[],projects=None):
     """
     Start one or more copies of the Veneer command line progeram with a given project file
 
     Parameters:
 
-    - project_fn - Path to a Source project file (.rsproj)
+    - project_fn - Path to a Source project file (.rsproj) to be loaded into all instances
 
     - n_instances - Number of copies of the Veneer command line to start (default: 1)
                   - Alternatively, specify a list of models (scenarios) to use, one for each instance
@@ -275,6 +275,8 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=True,
 
     - additional_plugins - List of plugin files (DLLs) to load
 
+    - projects - List of project files to load. Should be the same length as n_instances
+
     returns processes, ports
        processes - list of process objects that can be used to terminate the servers
        ports - the port numbers used for each copy of the server
@@ -286,10 +288,17 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=True,
     if not veneer_exe:
         veneer_exe = find_veneer_cmd_line_exe(project_fn)
 
+    if projects and len(projects):
+        n_instances = len(projects)
+        ports = ports[:n_instances]
+        projects = [Path(p).absolute() for p in projects]
+
     if project_fn:
         project_fn = Path(project_fn).absolute()
         if overwrite_plugins:
             overwrite_plugin_configuration(veneer_exe,project_fn)
+        if not projects or not len(projects):
+            projects = [project_fn] * n_instances
 
     extras = ''
     if remote: extras += '-r '
@@ -321,10 +330,13 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=True,
 
     if len(custom_endpoints):
         extras += ' -c '+ quote_if_space(','.join(custom_endpoints))
-    if project_fn:
-        extras += ' "%s"'%str(project_fn)
 
     cmd_lines = ['%s -p %d %s %s'%(veneer_exe,port,model,extras) for (port,model) in zip(ports,model_args)]
+
+    if projects and len(projects):
+        cmd_lines = ['%s "%s"'%(cmd_line,str(project_fn)) for cmd_line,project_fn in zip(cmd_lines,projects)]
+        # extras += ' "%s"'%str(project_fn)
+
     # cmd_lines = [cmd_line%port for port in ports]
     if debug:
         for cmd in cmd_lines:
