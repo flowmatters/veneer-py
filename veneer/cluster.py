@@ -1,5 +1,7 @@
+import json
 from .manage import start, kill_all_now
 from dask.distributed import LocalCluster, Client
+from psutil import Process
 import dask
 from .general import Veneer
 import os
@@ -101,9 +103,10 @@ class ClusterVeneerClient(object):
         return self._dummy_v.__dir__()
 
 class VeneerCluster(object):
-    def __init__(self,project_file,veneer_exe,n_workers=None,debug=False,remote=False,
+    def __init__(self,project_file=None,veneer_exe=None,n_workers=None,debug=False,remote=False,
           script=True,overwrite_plugins=None,custom_endpoints=None,additional_plugins=None,
-          copy=False,tempdir_prefix='source-cluster-',copy_extras=None,existing='raise'):
+          copy=False,tempdir_prefix='source-cluster-',copy_extras=None,existing='raise',
+          existing_cluster=None):
         '''
         Create a cluster of Veneer instances, each running in a separate process
 
@@ -111,7 +114,7 @@ class VeneerCluster(object):
             The path to the source project file to be copied for each instance
         veneer_exe: str
             The path to the Veneer executable
-        n_workers: int  
+        n_workers: int
             The number of workers to create. If None, will use the number of CPUs on the machine, up to MAX_DEFAULT_CLUSTER_SIZE
         debug: bool
             Whether to log debugging information from the Veneer instances during initialisation
@@ -136,13 +139,41 @@ class VeneerCluster(object):
             - 'raise': raise an exception
             - 'remove': remove the existing directories
             - 'ignore': ignore the existing directories
+        existing_cluster: str
+            The path to an existing cluster to use. If None, a new cluster will be created
         '''
+
+        self.wrap = partial(run_on_cluster,self)
+        self.v = ClusterVeneerClient(self)
+
+        if existing_cluster is not None:
+            if os.path.exists(existing_cluster):
+                logger.info('Using existing cluster at %s',existing_cluster)
+                with open(existing_cluster,'r') as f:
+                    existing_cluster = json.load(f)
+            else:
+                logger.info('Using existing cluster with config')
+
+            temp_fn = tempfile.mkstemp()[1]
+            with open(temp_fn,'w') as tmpfile:
+                json.dump(existing_cluster['dask_scheduler'], tmpfile)
+            self.dask_client = Client(scheduler_file=temp_fn)
+            self.dask_cluster = self.dask_client.cluster
+            # os.remove(temp_fn)
+
+            self.original_project_file = existing_cluster['project_file']
+            self.name = existing_cluster['name']
+            self.n_workers = existing_cluster['n_workers']
+            self.veneer_ports = existing_cluster['veneer_ports']
+            self.veneer_processes = [Process(p) for p in existing_cluster['veneer_processes']]
+            self.temp_directories = existing_cluster['temp_directories']
+            self.worker_affinity = existing_cluster['worker_affinity']
+            self.copy_projects = existing_cluster['copy_projects']
+            return
 
         check_existing_cluster_temp_directory(tempdir_prefix,existing)
         self.original_project_file = project_file
         self.name = f'{n_workers} node cluster for {project_file}'
-        self.wrap = partial(run_on_cluster,self)
-        self.v = ClusterVeneerClient(self)
 
         if n_workers is None:
             n_workers = min(os.cpu_count(),MAX_DEFAULT_CLUSTER_SIZE)
@@ -174,7 +205,7 @@ class VeneerCluster(object):
             projects=self.project_files
         )
         self.veneer_ports = veneer_ports
-        self.veneer_proceses = veneer_processes
+        self.veneer_processes = veneer_processes
 
         logger.info('Assigning Veneer instances to DASK workers')
         self.worker_affinity = {}
@@ -182,6 +213,32 @@ class VeneerCluster(object):
         veneer_info_map = self.run_on_each(scenario_info)
 
         self.worker_affinity = {w.pid:(info['port'],os.path.dirname(info['ProjectFullFilename'])) for w,info in zip(worker_info.values(),veneer_info_map)}
+
+    def to_json(self,fn=None):
+        '''
+        Save the cluster configuration to a JSON file
+
+        fn: str
+            The path to the file to save the configuration to. If None, will return JSON string
+        '''
+        config = {
+            'project_file': self.original_project_file,
+            'n_workers': self.n_workers,
+            'name': self.name,
+            'veneer_ports': self.veneer_ports,
+            'veneer_processes': [p.pid for p in self.veneer_processes],
+            'temp_directories': self.temp_directories,
+            'worker_affinity': self.worker_affinity,
+            'dask_scheduler': self.dask_client.scheduler_info(),
+            'copy_projects': self.copy_projects,
+        }
+        txt = json.dumps(config,indent=2)
+        if fn is not None:
+            with open(fn,'w') as f:
+                f.write(txt)
+            return None
+
+        return txt
 
     def run_on_each(self,operation,arg='port'):
         '''
@@ -214,7 +271,7 @@ class VeneerCluster(object):
         '''
         Shutdown the cluster. Remove any temporary directories created for the project files
         '''
-        kill_all_now(self.veneer_processes)        
+        kill_all_now(self.veneer_processes)
 
         if len(self.temp_directories):
             removal = [remove_copy(c) for c in self.temp_directories]
