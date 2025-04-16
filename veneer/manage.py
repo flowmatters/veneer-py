@@ -242,7 +242,7 @@ def overwrite_plugin_configuration(source_binaries,project_fn):
 def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=True,
           script=True, veneer_exe=None,overwrite_plugins=None,return_io=False,
           model=None,start_new_session=False,additional_plugins=[],
-          custom_endpoints=[],projects=None):
+          custom_endpoints=[],projects=None,quiet=False):
     """
     Start one or more copies of the Veneer command line progeram with a given project file
 
@@ -279,7 +279,9 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=True,
 
     - projects - List of project files to load. Should be the same length as n_instances
 
-    returns processes, ports
+    - quiet - Suppress all output from the servers (default: False)
+
+        returns processes, ports
        processes - list of process objects that can be used to terminate the servers
        ports - the port numbers used for each copy of the server
        ((stdout_queues,stdout_threads),(stderr_queues,stderr_threads)) if return_io
@@ -395,15 +397,18 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=True,
                     if line.startswith('Server started. Ctrl-C to exit'):
                         ready[i] = True
                         end = True
-                        print('Server %d on port %d is ready'%(i,ports[i]))
+                        if not quiet:
+                            print('Server %d on port %d is ready'%(i,ports[i]))
                         sys.stdout.flush()
                     elif line.startswith('Cannot find project') or line.startswith('Unhandled exception'):
                         end = True
                         failed[i] = True
-                        print('Server %d on port %d failed to start'%(i,ports[i]))
+                        if not quiet:
+                            print('Server %d on port %d failed to start'%(i,ports[i]))
                         sys.stdout.flush()
                     if debug and not line.startswith('Unable to delete'):
-                        print("[%d] %s"%(i,line))
+                        if not quiet:
+                            print("[%d] %s"%(i,line))
                         sys.stdout.flush()
         all_ready = len([r for r in ready if not r])==0
         any_failed = len([f for f in failed if f])>0
