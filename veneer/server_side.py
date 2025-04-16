@@ -127,6 +127,9 @@ class VeneerIronPython(object):
         self.simulation = VeneerSimulationActions(self)
         self.component = VeneerComponentModelActions(self)
         self.spatial = VeneerGeographicDataActions(self)
+
+        from .operations import VeneerOperationsActions
+        self.operations = VeneerOperationsActions(self)
         self.deferred_scripts = []
         self.deferring = False
 
