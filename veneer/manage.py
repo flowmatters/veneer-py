@@ -4,10 +4,12 @@ from queue import Queue, Empty  # python 3.x
 from threading  import Thread
 import sys
 from time import sleep
+from glob import glob
 import atexit
 import os
 import tempfile
 import shutil
+import threading
 from .general import Veneer
 from pathlib import Path
 
@@ -448,6 +450,38 @@ def find_veneers(search=None):
         veneers = [v for v in veneers if search in ' '.join(v.cmdline())]
     return veneers
 
+def cleanup_project_temp_dir(dir,background=True):
+    dir = Path(dir)
+    if not dir.exists():
+        return
+    
+    holding_dir = (Path(dir)/'..'/'veneer-holding-directory-for-removal').absolute()
+    
+    project_temp_dirs = dir.glob('*')
+
+    for project_temp_dir in project_temp_dirs:
+        if not project_temp_dir.is_dir():
+            continue
+        try:
+            potential_pid = int(project_temp_dir.name)
+        except:
+            continue
+        try:
+            _process = Process(potential_pid)
+            if _process.is_running():
+                    print('Process %d is running. Ignoring'%potential_pid)
+                    continue
+        except:
+            pass
+        print('Cleaning up %s'%project_temp_dir)
+        shutil.move(str(project_temp_dir),str(holding_dir/str(potential_pid)))
+    if holding_dir.exists():
+        if background:
+            print('Cleaning up %s in background.'%holding_dir)
+            threading.Thread(target = lambda : shutil.rmtree(str(holding_dir))).start()
+        else:
+            print('Cleaning up %s.'%holding_dir)
+            shutil.rmtree(str(holding_dir))
 class BulkVeneerApplication(object):
     def __init__(self,clients,name):
         self.clients = clients
