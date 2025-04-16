@@ -151,9 +151,10 @@ class VeneerCluster(object):
                 logger.info('Using existing cluster at %s',existing_cluster)
                 with open(existing_cluster,'r') as f:
                     existing_cluster = json.load(f)
-            else:
+            elif isinstance(existing_cluster,dict):
                 logger.info('Using existing cluster with config')
-
+            else:
+                raise Exception('Invalid existing cluster: %s'%existing_cluster)
             temp_fn = tempfile.mkstemp()[1]
             with open(temp_fn,'w') as tmpfile:
                 json.dump(existing_cluster['dask_scheduler'], tmpfile)
@@ -167,7 +168,7 @@ class VeneerCluster(object):
             self.veneer_ports = existing_cluster['veneer_ports']
             self.veneer_processes = [Process(p) for p in existing_cluster['veneer_processes']]
             self.temp_directories = existing_cluster['temp_directories']
-            self.worker_affinity = existing_cluster['worker_affinity']
+            self.worker_affinity = {int(k):v for k,v in existing_cluster['worker_affinity'].items()}
             self.copy_projects = existing_cluster['copy_projects']
             return
 
