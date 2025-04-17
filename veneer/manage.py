@@ -216,17 +216,19 @@ def _find_plugins_file(project_path):
 
     return _find_plugins_file(parent)
 
-def overwrite_plugin_configuration(source_binaries,project_fn):
+def overwrite_plugin_configuration(source_binaries,project_fn=None,plugin_fn=None):
     source_binaries = Path(source_binaries)
-    project_fn = Path(project_fn)
-    plugin_fn = _find_plugins_file(project_fn)
+    if plugin_fn is None:
+        project_fn = Path(project_fn)
+        plugin_fn = _find_plugins_file(project_fn)
     if not plugin_fn:
         # logger.warn('Unable to overwrite plugins. No Plugin.xml found')
         return
     print(plugin_fn)
 
     if source_binaries.is_file():
-        source_binaries = Path(_dirname(source_binaries))/'RiverSystem.Forms.exe'
+        source_binaries = Path(_dirname(source_binaries))
+    source_binaries = source_binaries/'RiverSystem.Forms.exe'
 
     source_version = '.'.join([str(v) for v in _get_version_number(source_binaries)[00:-1]])
     print(source_version)
