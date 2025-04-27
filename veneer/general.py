@@ -288,6 +288,14 @@ class Veneer(object):
     def scenario_info(self):
         return self.retrieve_json('/')
 
+    def select_scenario(self, scenario):
+        '''
+        Select a scenario to make activate.
+
+        scenario: Name, or 0 based index, of the scenario to select. This should be one of the scenarios available in the Source model.
+        '''
+        return self.post_json(f'/scenario/{scenario}')
+
     def configure_recording(self, enable=[], disable=[],run_async=False):
         '''
         Enabled and disable time series recording in the Source model.
