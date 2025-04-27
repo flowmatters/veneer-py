@@ -81,7 +81,10 @@ ADDITIONAL_PARAMETERS={
     'RiverSystem.Nodes.Gauge.GaugeNodeModel':[
         'UnaccountedDifferenceMode'
     ],
-    'RiverSystem.Nodes.WeirNodeModel':COMMON_STORAGE_PARAMETERS[:]+[f'StorageInternal.{p}' for p in OTHER_STORAGE_PARAMETERS]+['ApplyUnaccountedDifference']
+    'RiverSystem.Nodes.WeirNodeModel':COMMON_STORAGE_PARAMETERS[:]+[f'StorageInternal.{p}' for p in OTHER_STORAGE_PARAMETERS]+['ApplyUnaccountedDifference'],
+    'RiverSystem.Nodes.SupplyPoint.ExtractionNodeModel':[
+        'IsExtractive'
+    ]
 }
 
 def _transform_node_type_name(n):
