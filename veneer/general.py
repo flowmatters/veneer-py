@@ -79,6 +79,7 @@ class Veneer(object):
         self.prefix = prefix
         self.live_source = live
         self.last_script = None
+        self._connection = None
         if protocol and protocol.startswith('file'):
           self.base_url = '%s://%s'%(protocol,prefix)
         else:
@@ -93,6 +94,22 @@ class Veneer(object):
 
         self.model = VeneerIronPython(self)
         self.double_escape_slashes = True
+
+    def connection(self):
+        '''
+        Return the connection object for the current Veneer service.
+        '''
+        if self._connection is None:
+            self._connection = hc.HTTPConnection(self.host, port=self.port)
+        return self._connection
+
+    def dispose(self):
+        '''
+        Dispose of the connection object for the current Veneer service.
+        '''
+        if self._connection is not None:
+            self._connection.close()
+            self._connection = None
 
     def shutdown(self):
         '''
@@ -127,7 +144,7 @@ class Veneer(object):
         if self.protocol == 'file':
             text = open(query_url).read()
         else:
-            conn = hc.HTTPConnection(self.host, port=self.port)
+            conn = self.connection()
             conn.request('GET', quote(query_url))
             resp = conn.getresponse()
             text = resp.read().decode('utf-8')
@@ -160,7 +177,7 @@ class Veneer(object):
             with open(query_url) as fp:
                 text = fp.read()
         else:
-            conn = hc.HTTPConnection(self.host, port=self.port)
+            conn = self.connection()
             url = url + self.data_ext
             url = quote(url)
             if len(kwargs):
@@ -215,7 +232,7 @@ class Veneer(object):
 
 #    @deprecate_async
     def send(self, url, method, payload=None, headers={}, run_async=False):
-        conn = hc.HTTPConnection(self.host, port=self.port)
+        conn = self.connection()
         conn.request(method, url, payload, headers=headers)
         if run_async:
             return conn
@@ -226,10 +243,8 @@ class Veneer(object):
         elif code == 200:
             resp_body = resp.read().decode('utf-8')
             return code, (json.loads(resp_body) if len(resp_body) else None)
-        else:
-            return code, resp.read().decode('utf-8')
 
-        return conn
+        return code, resp.read().decode('utf-8')
 
     def status(self):
         return self.retrieve_json('/')
@@ -345,7 +360,7 @@ class Veneer(object):
         In the default behaviour (run_async=False), this method will return once the Source simulation has finished, and will return
         the URL of the results set in the Veneer service
         '''
-        conn = hc.HTTPConnection(self.host, port=self.port)
+        conn = self.connection()
 
         if params is None:
             params = {}
@@ -388,7 +403,7 @@ class Veneer(object):
         run: Run number to delete. Default ='latest'. Valid values are 'latest' and integers from 1
         '''
         assert self.live_source
-        conn = hc.HTTPConnection(self.host, port=self.port)
+        conn = self.connection()
         conn.request('DELETE', '/runs/%s' % str(run))
         resp = conn.getresponse()
         code = resp.getcode()
@@ -658,7 +673,7 @@ class Veneer(object):
         group: Data group to delete
         '''
         assert self.live_source
-        conn = hc.HTTPConnection(self.host, port=self.port)
+        conn = self.connection()
         conn.request('DELETE', '/dataSources/%s' % str(quote(group)))
         resp = conn.getresponse()
         code = resp.getcode()
