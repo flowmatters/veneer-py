@@ -73,7 +73,7 @@ class Queryable(object):
 
         v = self._double_quote_(v)
             
-        if not self._v.model.set('%s.%s'%(self._path,a),v):
+        if not self._v.model.set('%s.%s'%(self._path,a),v,namespace=self._ns):
             raise Exception("Couldn't set property")
 
     def __int__(self):
