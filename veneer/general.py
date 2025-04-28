@@ -238,13 +238,14 @@ class Veneer(object):
             return conn
         resp = conn.getresponse()
         code = resp.getcode()
+        content = resp.read().decode('utf-8')
         if code == 302:
             return code, resp.getheader('Location')
         elif code == 200:
-            resp_body = resp.read().decode('utf-8')
+            resp_body = content
             return code, (json.loads(resp_body) if len(resp_body) else None)
 
-        return code, resp.read().decode('utf-8')
+        return code, content
 
     def status(self):
         return self.retrieve_json('/')
@@ -394,15 +395,16 @@ class Veneer(object):
     def _wait_for_run(self,conn):
         resp = conn.getresponse()
         code = resp.getcode()
+        content = resp.read().decode('utf-8')
         if code == 302:
             return code, resp.getheader('Location')
         elif code == 200:
             return code, None
         elif code == 500:
-            error = json.loads(resp.read().decode('utf-8'))
+            error = json.loads(content)
             raise Exception('\n'.join([error['Message'], error['StackTrace']]))
         else:
-            return code, resp.read().decode('utf-8')
+            return code, content
 
     def drop_run(self, run='latest'):
         '''
@@ -415,6 +417,7 @@ class Veneer(object):
         conn.request('DELETE', '/runs/%s' % str(run))
         resp = conn.getresponse()
         code = resp.getcode()
+        content = resp.read().decode('utf-8')
         return code
 
     def drop_all_runs(self):
@@ -685,6 +688,7 @@ class Veneer(object):
         conn.request('DELETE', '/dataSources/%s' % str(quote(group)))
         resp = conn.getresponse()
         code = resp.getcode()
+        content = resp.read().decode('utf-8')
         return code
 
     def data_source_item(self, source, name=None, input_set='__all__'):
