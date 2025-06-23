@@ -794,7 +794,7 @@ class VeneerNetworkElementActions(object):
     def __init__(self, ironpython):
         self._ironpy = ironpython
         self._ns = None
-        self._pvr_element_name = ''
+        self._pvr_element_name = None
         self._build_pvr_accessor = self._build_accessor
         self._pvr_attribute_prefix = ''
         self._aliases = {}
@@ -935,7 +935,7 @@ class VeneerNetworkElementActions(object):
         accessor = self._build_accessor(parameter, **kwargs)
         return self._ironpy.clear_time_series(accessor,namespace=self._ns)
 
-    def create_modelled_variable(self, parameter, element_name=None, **kwargs):
+    def create_modelled_variable(self, parameter, element_name=None, variable_name='', **kwargs):
         '''
         Create a modelled variable for accessing a model's properties from a function.
 
@@ -954,6 +954,8 @@ class VeneerNetworkElementActions(object):
         init += VALID_IDENTIFIER_FN
         init += 'orig_names=%s\n' % names
         init += 'names=orig_names[::-1]\n'
+        if len(variable_name) and not variable_name.startswith('$'):
+            variable_name = '$'+variable_name
         accessor = self._build_pvr_accessor('__init__.__self__', **kwargs)
         if not element_name:
             element_name = self._pvr_element_name
@@ -962,7 +964,7 @@ class VeneerNetworkElementActions(object):
             element_name = parameter
 
         code = CREATED_MODELLED_VARIABLE % (
-            element_name, self._pvr_attribute_prefix + parameter)
+            element_name, self._pvr_attribute_prefix + parameter, variable_name)
         return self._ironpy.apply(accessor, code, 'target', init, ns)
         # create accessor
         # loop through, generate name, create model variable

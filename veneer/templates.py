@@ -89,9 +89,11 @@ if not len(names): names = orig_names[::-1]
 pvrs = pvt_lookup.get(target.__init__.__self__,[])
 element_name = '%s'
 attribute_name = '%s'
+variable_name = '%s'
 pvrs = [pvr for pvr in pvrs if System.String.IsNullOrEmpty(attribute_name) or pvr.ElementName.StartsWith(element_name)]
 match=None
 var_name = names.pop()
+name_to_use = variable_name if len(variable_name) else var_name
 
 if len(pvrs)==1:
     # Nested
@@ -101,7 +103,8 @@ elif len(pvrs)>1:
     matches = [pvr for pvr in pvrs if pvr.ElementName==element_name]
     if len(matches): match=matches[0]
 name_exists = scenario.Network.FunctionManager.Variables.Any(lambda v: v.Name==var_name)
-if match and valid_identifier(var_name) and not name_exists:
+name_valid = valid_identifier(name_to_use)
+if match and name_valid and not name_exists:
     mv = ModelledVariable()
     try:
       mv.AttributeRecordingStateName = attribute_name
@@ -117,16 +120,18 @@ if match and valid_identifier(var_name) and not name_exists:
         mv.AssignedRecordableItemKey = matching_item.Key
     assert match.ElementRecorder
     mv.ProjectViewRow = match
-    mv.Name = var_name
+    mv.Name = name_to_use
     mv.DateRange = scenario.Network.FunctionManager.DateRanges[0]
     try:
-      mv.Reset()
+      mv.Reset(scenario.Network.FunctionManager)
       scenario.Network.FunctionManager.Variables.Add(mv)
       result['created'].append(mv.Name)
+      if len(variable_name):
+        break
     except Exception as e:
-      result['failed'].append(var_name + ' ' + e.message + ' on ' + str(match))
+      result['failed'].append(name_to_use + ' ' + e.message + ' on ' + str(match))
 else:
-    result['failed'].append(var_name)
+    result['failed'].append(name_to_use + ' match:' + str(match) + ', valid: ' +str(name_valid) + ', exists: '+ str(name_exists))
 '''
 
 CREATE_TS_VARIABLE_SCRIPT='''
