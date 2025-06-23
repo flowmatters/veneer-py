@@ -1926,6 +1926,21 @@ class VeneerFunctionActions():
             raise Exception(result['Exception'])
         return self._ironpy.simplify_response(result['Response'])
 
+    def create_piecewise_variable(self,variable_name,table=None):
+        x_name = 'Lookup'
+        y_name = 'Result'
+        if not variable_name.startswith('$'):
+            variable_name = '$' + variable_name
+        if table is not None:
+            x_name = table.columns[0]
+            y_name = table.columns[1]
+        script=self._ironpy._init_script() + CREATE_PIECEWISE_VARIABLE_SCRIPT%(variable_name,x_name,y_name)
+        result = self._ironpy.run_script(script)
+        if not result['Exception'] is None:
+            raise Exception(result['Exception'])
+        if table is not None:
+            self._ironpy._veneer.update_variable_piecewise(variable_name,table)
+
     def delete_variables(self, names):
         script = self._ironpy._init_script()
         script += 'names = %s\n' % names

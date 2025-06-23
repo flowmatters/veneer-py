@@ -160,6 +160,32 @@ result = {
 }
 '''
 
+CREATE_PIECEWISE_VARIABLE_SCRIPT='''
+from RiverSystem.Functions.Variables import LinearVariable, LinearFunctionVariableEntry
+
+fm = scenario.Network.FunctionManager
+variable = '%s'
+x_name = '%s'
+y_name = '%s'
+new_variable = []
+existing_variable = []
+new_var = LinearVariable()
+
+e = LinearFunctionVariableEntry()
+e.X = 0
+e.Y = 1
+new_var.Entries.Add(e)
+e = LinearFunctionVariableEntry()
+e.X = 1
+e.Y = 1
+new_var.Entries.Add(e)
+new_var.Name = variable
+new_var.XName = x_name
+new_var.YName = y_name
+fm.Variables.Add(new_var)
+result = True
+'''
+
 VALID_IDENTIFIER_FN='''
 def valid_identifier(nm):
   from System.Text import RegularExpressions
