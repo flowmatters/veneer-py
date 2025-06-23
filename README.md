@@ -68,7 +68,7 @@ v.retrieve_multiple_time_series?
 
 Reference docs are at [https://flowmatters.github.io/veneer-py](https://flowmatters.github.io/veneer-py).
 
-Training notebooks and sample data are at [doc/training](doc/training)
+Training notebooks and sample data are at [doc/training](doc/training). Various short examples are at [doc/examples](doc/examples).
 
 ## Contributions
 
