@@ -2000,6 +2000,9 @@ class VeneerFunctionActions():
         accessor = self._accessor(option, functions)
         ns = 'RiverSystem.Management.ExpressionBuilder.TimeOfEvaluation as TimeOfEvaluation'
         ns += '\nimport RiverSystem.Utils.UnitLibrary as UnitLibrary\n'
+        ns += '\nfrom TIME.Core import Unit, CommonUnits\n'
+        if option=='ResultUnit':
+            values = [f'Unit.PredefinedUnit(CommonUnits.{u})' for u in values]
         return self._ironpy.set(accessor, values, ns, literal=literal, fromList=fromList)
 
     def set_time_of_evaluation(self, toe, fromList=False, functions=None):
