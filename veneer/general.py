@@ -101,7 +101,26 @@ class Veneer(object):
         '''
         if self._connection is None:
             self._connection = hc.HTTPConnection(self.host, port=self.port)
+        else:
+            try:
+                _ = self._connection.getresponse()
+            except:
+                pass
+
         return self._connection
+
+    def reset_connection(self):
+        '''
+        Reset the connection object for the current Veneer service.
+        '''
+        conn = self._connection
+        if conn is None:
+            return
+
+        try:
+            conn.getresponse()
+        except:
+            pass
 
     def dispose(self):
         '''
