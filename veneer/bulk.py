@@ -1,8 +1,9 @@
 
 try:
-    from urllib2 import urlopen, quote
+    from urllib import quote
 except:
-    from urllib.request import urlopen, quote, Request
+    from urllib.parse import quote
+import requests
 import json
 import shutil
 import os
@@ -74,9 +75,11 @@ class VeneerRetriever(object):
             print("*** %s ***" % (url))
     
         try:
-            text = urlopen(self.base_url + quote(url)).read().decode('utf-8')
-        except:
-            self.log("Couldn't retrieve %s"%url)
+            response = requests.get(self.base_url + quote(url))
+            response.raise_for_status()
+            text = response.text
+        except Exception as e:
+            self.log("Couldn't retrieve %s: %s"%(url, str(e)))
             return None
 
         self.save_data(url[1:],bytes(text,'utf-8'),"json")
@@ -94,7 +97,9 @@ class VeneerRetriever(object):
         if self.print_urls:
             print("*** %s ***" % (url))
     
-        self.save_data(url[1:],urlopen(self.base_url+quote(url)).read(),ext,mode="b")
+        response = requests.get(self.base_url+quote(url))
+        response.raise_for_status()
+        self.save_data(url[1:],response.content,ext,mode="b")
 
     # Process Run list and results
     def retrieve_runs(self):

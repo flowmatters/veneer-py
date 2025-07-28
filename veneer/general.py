@@ -1,9 +1,9 @@
 try:
-    from urllib2 import quote
-    import httplib as hc
+    from urllib import quote
 except:
-    from urllib.request import quote
-    import http.client as hc
+    from urllib.parse import quote
+
+import requests
 
 import json
 import re
@@ -79,7 +79,6 @@ class Veneer(object):
         self.prefix = prefix
         self.live_source = live
         self.last_script = None
-        self._connection = None
         if protocol and protocol.startswith('file'):
           self.base_url = '%s://%s'%(protocol,prefix)
         else:
@@ -95,40 +94,18 @@ class Veneer(object):
         self.model = VeneerIronPython(self)
         self.double_escape_slashes = True
 
-    def connection(self):
+    def make_connection(self):
         '''
-        Return the connection object for the current Veneer service.
+        Create a new HTTP connection to the Veneer service.
         '''
-        if self._connection is None:
-            self._connection = hc.HTTPConnection(self.host, port=self.port)
-        else:
-            try:
-                _ = self._connection.getresponse()
-            except:
-                pass
-
-        return self._connection
-
-    def reset_connection(self):
-        '''
-        Reset the connection object for the current Veneer service.
-        '''
-        conn = self._connection
-        if conn is None:
-            return
-
-        try:
-            conn.getresponse()
-        except:
-            pass
+        import http.client as hc
+        return hc.HTTPConnection(self.host, port=self.port)
 
     def dispose(self):
         '''
         Dispose of the connection object for the current Veneer service.
         '''
-        if self._connection is not None:
-            self._connection.close()
-            self._connection = None
+        pass
 
     def shutdown(self):
         '''
@@ -163,10 +140,9 @@ class Veneer(object):
         if self.protocol == 'file':
             text = open(query_url).read()
         else:
-            conn = self.connection()
-            conn.request('GET', quote(query_url))
-            resp = conn.getresponse()
-            text = resp.read().decode('utf-8')
+            resp = requests.get(self.url(query_url))
+            resp.raise_for_status()
+            text = resp.text
 
         text = self._replace_inf(text)
         if PRINT_ALL:
@@ -196,16 +172,14 @@ class Veneer(object):
             with open(query_url) as fp:
                 text = fp.read()
         else:
-            conn = self.connection()
             url = url + self.data_ext
             url = quote(url)
             if len(kwargs):
                 url += '?' + '&'.join([f'{key}={val}' for key,val in kwargs.items()])
 
-            conn.request('GET', url,
-                        headers={"Accept": "text/csv"})
-            resp = conn.getresponse()
-            text = resp.read().decode('utf-8')
+            resp = requests.get(self.url(url),headers={"Accept": "text/csv"})
+            resp.raise_for_status()
+            text = resp.text
 
         result = read_veneer_csv(text)
         if PRINT_ALL:
@@ -215,11 +189,12 @@ class Veneer(object):
 
     def retrieve_image(self,resource):
         from PIL import Image
+        import io
         url = self.url(resource+self.img_ext)
         if url.startswith('http://') or url.startswith('https://'):
-            import urllib
-            with urllib.request.urlopen(url) as response:
-                image = Image.open(response)
+            response = requests.get(self.url(url))
+            response.raise_for_status()
+            image = Image.open(io.BytesIO(response.content))
             return image
         return Image.open(url)
 
@@ -251,15 +226,17 @@ class Veneer(object):
 
 #    @deprecate_async
     def send(self, url, method, payload=None, headers={}, run_async=False):
-        conn = self.connection()
-        conn.request(method, url, payload, headers=headers)
         if run_async:
+            conn = self.make_connection()
+            conn.request(method, url, payload, headers=headers)
             return conn
-        resp = conn.getresponse()
-        code = resp.getcode()
-        content = resp.read().decode('utf-8')
+
+        resp = requests.request(method, self.url(url), data=payload, headers=headers)
+        resp.raise_for_status()
+        code = resp.status_code
+        content = resp.text
         if code == 302:
-            return code, resp.getheader('Location')
+            return code, resp.headers.get('Location')
         elif code == 200:
             resp_body = content
             return code, (json.loads(resp_body) if len(resp_body) else None)
@@ -388,7 +365,6 @@ class Veneer(object):
         In the default behaviour (run_async=False), this method will return once the Source simulation has finished, and will return
         the URL of the results set in the Veneer service
         '''
-        conn = self.connection()
 
         if params is None:
             params = {}
@@ -404,19 +380,32 @@ class Veneer(object):
             params['_RunName'] = name
 
     #   conn.request('POST','/runs',json.dumps({'parameters':params}),headers={'Content-type':'application/json','Accept':'application/json'})
-        conn.request('POST', '/runs', json.dumps(params),
-                     headers={'Content-type': 'application/json', 'Accept': 'application/json'})
         if run_async:
+            conn = self.make_connection()
+            conn.request('POST', '/runs', json.dumps(params),
+                        headers={'Content-type': 'application/json', 'Accept': 'application/json'})
             return conn
 
-        return self._wait_for_run(conn)
+        resp = requests.post(
+            self.url('/runs'),
+            json=params,
+            headers={'Content-type': 'application/json', 'Accept': 'application/json'},
+            allow_redirects=False)
+        resp.raise_for_status()
+        code = resp.status_code
+        content = resp.text
+
+        return self.process_run_response(code, content,resp.headers)
 
     def _wait_for_run(self,conn):
         resp = conn.getresponse()
         code = resp.getcode()
         content = resp.read().decode('utf-8')
+        return self.process_run_response(code, content)
+
+    def process_run_response(self,code, content,headers):
         if code == 302:
-            return code, resp.getheader('Location')
+            return code, headers.get('Location')
         elif code == 200:
             return code, None
         elif code == 500:
@@ -432,11 +421,10 @@ class Veneer(object):
         run: Run number to delete. Default ='latest'. Valid values are 'latest' and integers from 1
         '''
         assert self.live_source
-        conn = self.connection()
-        conn.request('DELETE', '/runs/%s' % str(run))
-        resp = conn.getresponse()
-        code = resp.getcode()
-        content = resp.read().decode('utf-8')
+        resp = requests.delete(self.url('/runs/%s' % str(run)))
+        reps.raise_for_status()
+        code = resp.status_code
+        content = resp.text
         return code
 
     def drop_all_runs(self):
@@ -703,11 +691,10 @@ class Veneer(object):
         group: Data group to delete
         '''
         assert self.live_source
-        conn = self.connection()
-        conn.request('DELETE', '/dataSources/%s' % str(quote(group)))
-        resp = conn.getresponse()
-        code = resp.getcode()
-        content = resp.read().decode('utf-8')
+        resp = requests.delete(self.url('/dataSources/%s' % str(quote(group))))
+        resp.raise_for_status()
+        code = resp.status_code
+        content = resp.text
         return code
 
     def data_source_item(self, source, name=None, input_set='__all__'):
