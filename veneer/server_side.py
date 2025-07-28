@@ -24,7 +24,8 @@ NODE_TYPES = {
 ADDITIONAL_INPUTS={
     'RiverSystem.Flow.StorageRouting':[
         'link.RainFall',
-        'link.Evaporation'
+        'link.Evaporation',
+        'link.TimeSeriesFlux'
     ],
     'RiverSystem.Nodes.StorageNodeModel':[
         'StorageInternal.EvaporationInMetresPerSecond',
