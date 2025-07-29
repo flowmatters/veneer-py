@@ -1885,7 +1885,7 @@ class VeneerFunctionActions():
             if name_params:
                 names = ['$' + _variable_safe_name(names[0] % name_param_set)
                          for name_param_set in name_params]
-            else:
+            elif len(params)>1:
                 names = ['%s_%d' % (names[0], d) for d in range(len(params))]
 
         if use_format:
