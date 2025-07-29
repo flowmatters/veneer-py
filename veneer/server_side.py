@@ -2042,6 +2042,11 @@ class VeneerFunctionActions():
         script = template%(tp,variables)
         self._ironpy._safe_run(script)
 
+    def set_modelled_variable_units(self,units,variables):
+        template = self._ironpy._init_script() + SET_MODEL_VARIABLE_UNITS
+        script = template%(variables,units)
+        self._ironpy._safe_run(script)
+
 class VeneerSimulationActions():
     def __init__(self, ironpython):
         self._ironpy = ironpython

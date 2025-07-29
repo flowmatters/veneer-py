@@ -234,6 +234,24 @@ for variable in fm.Variables:
     variable.DateRange = date_range
 '''
 
+SET_MODEL_VARIABLE_UNITS='''
+import RiverSystem.Management.ExpressionBuilder.TimeOfEvaluation as TimeOfEvaluation
+import RiverSystem.Utils.UnitLibrary as UnitLibrary
+from TIME.Core import Unit, CommonUnits
+targets = %s
+
+new_units=Unit.PredefinedUnit(CommonUnits.%s)
+
+fm = scenario.Network.FunctionManager
+result = []
+for variable in fm.Variables:
+    if (targets is not None) and variable.Name not in targets:
+        result.append('%%s not in targets'%%variable.Name)
+        continue
+    result.append('Updating %%s to ResultUnit=%%s'%%(variable.Name,new_units))
+    variable.ResultUnit = new_units
+'''
+
 CREATE_FUNCTIONAL_UNIT='''
 import RiverSystem.Catchments.FunctionalUnitDefinition as FunctionalUnitDefinition
 import  RiverSystem.Catchments.StandardFunctionalUnit as StandardFunctionalUnit
