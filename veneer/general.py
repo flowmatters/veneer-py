@@ -192,7 +192,7 @@ class Veneer(object):
         import io
         url = self.url(resource+self.img_ext)
         if url.startswith('http://') or url.startswith('https://'):
-            response = requests.get(self.url(url))
+            response = requests.get(url)
             response.raise_for_status()
             image = Image.open(io.BytesIO(response.content))
             return image
