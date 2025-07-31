@@ -608,7 +608,7 @@ class VeneerIronPython(object):
         theValue = [_safe_filename(fn) for fn in _stringToList(theValue)]
         if len(theValue) == 1:
             theValue = theValue[0]
-        return self._assignment(theThing, theValue, namespace, literal, from_list, 
+        return self._assignment(theThing, theValue, namespace, literal, from_list,
                                 False, assignment, post_assignment,dry_run=dry_run)
 
     def clear_time_series(self,theThing,namespace=None):
