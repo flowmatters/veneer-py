@@ -121,7 +121,8 @@ if match and name_valid and not name_exists:
     assert match.ElementRecorder
     mv.ProjectViewRow = match
     mv.Name = name_to_use
-    mv.DateRange = scenario.Network.FunctionManager.DateRanges[0]
+    current_time_step = scenario.Network.FunctionManager.DateRanges.First(lambda dr: dr.Name=='Current Time Step')
+    mv.DateRange = current_time_step
     try:
       mv.Reset(scenario.Network.FunctionManager)
       scenario.Network.FunctionManager.Variables.Add(mv)
