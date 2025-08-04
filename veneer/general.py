@@ -422,7 +422,7 @@ class Veneer(object):
         '''
         assert self.live_source
         resp = requests.delete(self.url('/runs/%s' % str(run)))
-        reps.raise_for_status()
+        resp.raise_for_status()
         code = resp.status_code
         content = resp.text
         return code
