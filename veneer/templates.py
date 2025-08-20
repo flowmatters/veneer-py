@@ -309,3 +309,8 @@ curve.OverbankFlowlevel=%f
 target.link.RatingCurveLibrary.Curves.Add(curve)
 result += 1
 '''
+
+SET_INPUT_SET_SCRIPT='''
+input_set = scenario.Network.InputSets.First(lambda i: i.Name=="%s")
+scenario.CurrentConfiguration.SelectedInputSet = input_set
+'''

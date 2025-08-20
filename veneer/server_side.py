@@ -714,6 +714,28 @@ class VeneerIronPython(object):
             script = script % (collection, new_value)
         return self._safe_run(script)
 
+    def select_input_set(self,name):
+        '''
+        Set the current input set (for current scenario and configuration) to the one with the given name.
+
+        name - name of the input set to select. If it does not exist, an exception will be raised.
+
+        New input sets can be created using v.create_input_set(name, configuration)
+        '''
+        script = self._init_script()+SET_INPUT_SET_SCRIPT%name
+        return self._safe_run(script)
+
+    def current_input_set(self):
+        '''
+        Get the name of the currently selected input set for the current scenario and configuration.
+
+        Returns:
+            * The name of the currently selected input set, or None if no input set is selected.
+
+        Details of the input set can be retrieved using v.input_sets()
+        '''
+        return self.get('scenario.CurrentConfiguration.SelectedInputSet.Name')
+
     def save(self, fn=None):
         '''
         Save the current *project* to disk.
