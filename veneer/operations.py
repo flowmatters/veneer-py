@@ -77,7 +77,7 @@ class VeneerOperationsActions(object):
 
         secondary_location_query = ''
         if secondary:
-            secondary_location_query = 'items = items.Where(lambda i: i.RefItem.PermanentTarget in %s)\n'%str(secondary)
+            secondary_location_query = 'items = items.Where(lambda i: secondary_override_name(i) in %s)\n'%str(secondary)
 
         ts = self._ironpy._safe_run(self._ironpy._init_script()+
                             SERIALISE_TS+
