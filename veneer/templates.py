@@ -234,7 +234,7 @@ if full_function_path is not None:
       function_path = folder
     else:
       function_path += '.' + folder
-    existing = mgr.Folders.FirstOrDefault(lambda f: f.FullName==function_path)
+    existing = mgr.Folders.FirstOrDefault(lambda f: f.FullName=="$"+function_path)
     if existing is None:
       new_folder = FolderItem()
       new_folder.Name = folder
