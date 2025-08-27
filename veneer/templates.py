@@ -201,6 +201,62 @@ def valid_identifier(nm):
   return RegularExpressions.Regex("[_A-Za-z][_a-zA-Z0-9]*$").IsMatch(nm[1:])
 '''
 
+CREATE_FUNCTIONS='''
+import RiverSystem.Functions.Function as Function
+import RiverSystem.DataManagement.DataManager.FolderItem as FolderItem
+import RiverSystem.Utils.UnitLibrary as UnitLibrary
+
+full_function_path = %s
+
+mgr = scenario.Network.FunctionManager
+
+def full_identifier(nm):
+  if full_function_path is None:
+    return nm
+  if nm.startswith('$'):
+    nm = nm[1:]
+  return full_function_path + '.' + nm
+
+'''+VALID_IDENTIFIER_FN+'''
+
+functions = %s
+
+parent = None
+if full_function_path is not None:
+  function_path=None
+  for folder in full_function_path.split('.'):
+    if function_path is None:
+      function_path = folder
+    else:
+      function_path += '.' + folder
+    existing = mgr.Folders.FirstOrDefault(lambda f: f.FullName==function_path)
+    if existing is None:
+      new_folder = FolderItem()
+      new_folder.Name = folder
+      new_folder.Parent = parent
+      mgr.Folders.Add(new_folder)
+      parent = new_folder
+    else:
+      parent = existing
+
+result={"created":[],"failed":[]}
+for (fn,expr) in functions:
+  if not fn.startswith("$"): fn = "$"+fn
+  if not valid_identifier(fn):
+    result["failed"].append(fn)
+    continue
+  full_name = full_identifier(fn)
+  if mgr.Functions.Any(lambda f: f.FullName==full_name):
+    result["failed"].append(fn)
+    continue
+  rsFn = Function()
+  rsFn.Name=fn
+  rsFn.Expression=expr
+  rsFn.Parent = parent
+  scenario.Network.FunctionManager.Functions.Add(rsFn)
+  result["created"].append(fn)
+'''
+
 FIND_MODELLED_VARIABLE_TARGETS='''
 ignoreExceptions=False
 pvrs = pvt_lookup.get(target.__init__.__self__,[])

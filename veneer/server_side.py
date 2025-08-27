@@ -1865,7 +1865,7 @@ class VeneerFunctionActions():
 
         return accessor
 
-    def create_functions(self, names, general_equation, params=[[]], name_params=None, use_format=False):
+    def create_functions(self, names, general_equation, params=[[]], name_params=None, use_format=False,function_path=None):
         '''
         Create one function, or multiple functions based on a pattern
 
@@ -1877,6 +1877,12 @@ class VeneerFunctionActions():
                 These can be anything, but will often be the names of modelled variables, and/or scalars
 
         name_params: A list of tuples, containing the name parameters to substitute into the names (if a template name is provided)
+
+        use_format: If True, use str.format() to substitute parameters into the general_equation and names.
+                    If False, use the old-style % operator.
+
+        function_path: If provided, the path within the function library to store the function(s) in.
+                          If the path does not exist, it will be created.
 
         Returns a dictionary with keys created and failed, each a list of function names
         '''
@@ -1895,25 +1901,13 @@ class VeneerFunctionActions():
             functions = list(
                 zip(names, [general_equation % param_set for param_set in params]))
 
-        script = self._ironpy._init_script()
-        script += 'import RiverSystem.Functions.Function as Function\n'
-        script += 'import RiverSystem.Utils.UnitLibrary as UnitLibrary\n'
-        script += VALID_IDENTIFIER_FN
-        script += 'functions=%s\n\n' % functions
-        script += 'result={"created":[],"failed":[]}\n'
-        script += 'for (fn,expr) in functions:\n'
-        script += '  if not fn.startswith("$"): fn = "$"+fn\n'
-        script += '  if not valid_identifier(fn):\n'
-        script += '    result["failed"].append(fn)\n'
-        script += '    continue\n'
-        script += '  if scenario.Network.FunctionManager.Functions.Any(lambda f: f.Name==fn):\n'
-        script += '    result["failed"].append(fn)\n'
-        script += '    continue\n'
-        script += '  rsFn = Function()\n'
-        script += '  rsFn.Name=fn\n'
-        script += '  rsFn.Expression=expr\n'
-        script += '  scenario.Network.FunctionManager.Functions.Add(rsFn)\n'
-        script += '  result["created"].append(fn)'
+        if function_path is not None:
+            if function_path.endswith('.'):
+                function_path = function_path[:-1]
+            if function_path.startswith('$'):
+                function_path = function_path[1:]
+            function_path = f"'{function_path}'"
+        script = self._ironpy._init_script() + CREATE_FUNCTIONS%(function_path,functions)
         result = self._ironpy.run_script(script)
         if not result['Exception'] is None:
             raise Exception(result['Exception'])
