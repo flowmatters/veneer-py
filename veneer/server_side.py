@@ -1992,12 +1992,27 @@ class VeneerFunctionActions():
         return resp
 
     def set_options(self, option, values, fromList=False, functions=None, literal=False):
+        '''
+        Set an option on one or more functions.
+
+        option - can be any of the known option types (see get_options) OR 'SIUnit'.
+
+        When option=='SIUnit', the values are parsed using the standard SI unit parsing within Source.
+        '''
+        if option=='ResultUnit':
+            values = _stringToList(values)
+            fromList=True
+            values = [f'Unit.PredefinedUnit(CommonUnits.{u})' for u in values]
+        if option=='SIUnit':
+            values = _stringToList(values)
+            fromList=True
+            option = 'ResultUnit'
+            values = [f'Unit.parse("{u}")' for u in values]
+
         accessor = self._accessor(option, functions)
         ns = 'RiverSystem.Management.ExpressionBuilder.TimeOfEvaluation as TimeOfEvaluation'
         ns += '\nimport RiverSystem.Utils.UnitLibrary as UnitLibrary\n'
         ns += '\nfrom TIME.Core import Unit, CommonUnits\n'
-        if option=='ResultUnit':
-            values = [f'Unit.PredefinedUnit(CommonUnits.{u})' for u in values]
         return self._ironpy.set(accessor, values, ns, literal=literal, fromList=fromList)
 
     def set_time_of_evaluation(self, toe, fromList=False, functions=None):
