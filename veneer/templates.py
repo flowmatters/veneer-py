@@ -4,7 +4,12 @@ import RiverSystem.Functions.FunctionUsage as FunctionUsage
 import TIME.Tools.Reflection.ReflectedItem as ReflectedItem
 
 orig_fn_names = %s
-orig_fns = [scenario.Network.FunctionManager.Functions.Where(lambda f: f.Name==ofn).FirstOrDefault() for ofn in orig_fn_names]
+def search_by_name(nm):
+  if '.' in nm:
+    return lambda f: f.FullName==nm
+  return lambda f: f.Name==nm
+
+orig_fns = [scenario.Network.FunctionManager.Functions.Where(search_by_name(ofn)).FirstOrDefault() for ofn in orig_fn_names]
 for i,fn in enumerate(orig_fns):
   if fn is None:
     raise Exception('Unknown function: '+orig_fn_names[i])
