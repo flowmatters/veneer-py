@@ -1,6 +1,9 @@
 import sys
 import inspect
-
+import logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.NOTSET)
+logger.propagate = True
 from types import MethodType
 from .utils import SearchableList, objdict
 
@@ -263,8 +266,8 @@ def network_as_dataframe(self):
         result['id'] = [_feature_id(f) for f in self['features']]
         return result
     except Exception as e:
-        print('Could not create GeoDataFrame. Using regular DataFrame.')
-        print(str(e))
+        logger.error('Could not create GeoDataFrame. Using regular DataFrame.')
+        logger.error(e)
 
     def flat_feature(f):
         result = {k:v for k,v in f.items() if k != 'properties'}

@@ -2,6 +2,10 @@ import pandas as pd
 import re
 import inspect
 import warnings
+import logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.NOTSET)
+logger.propagate = True
 
 CANARY_METHODS = [
     '_ipython_canary_method_should_not_exist_',
@@ -246,7 +250,7 @@ class SearchableList(object):
                 return result
             except Exception as e:
                 # print("Thought we'd create a geodataframe, but it didn't work")
-                # print(e)
+                logger.error(e)
                 pass
         return pd.DataFrame(self._list)
 
