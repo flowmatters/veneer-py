@@ -4,8 +4,26 @@ import numpy as np
 SERIALISE_TS='''
 def serialise_ts(ts):
     dates = [ts.timeForItem(i) for i in range(ts.Count)]
-    values = ts.toArray()
+    values = ts.ToArray()
     return list(zip(dates,values))
+'''
+
+SECONDARY_NAME='''
+def secondary_override_name(item):
+    primary_name = item.NetworkElement.Name
+    secondary = item.RefItem.PermanentTarget
+    secondary_name = '-'
+    if hasattr(secondary,'Name'):
+        secondary_name = secondary.Name
+    elif hasattr(secondary,'name'):
+        secondary_name = secondary.name
+    elif hasattr(secondary,'Link'):
+        secondary_name = secondary.Link.Name
+    # else:
+    #     secondary_name = secondary.GetType().Name + ':' + str(secondary)
+    if secondary_name == primary_name:
+        return '-'
+    return secondary_name
 '''
 
 GET_OVERRIDES_TEMPLATE='''
@@ -13,22 +31,28 @@ items = scenario.OperationsMaster.NetworkElementOperationsDataItems
 %s
 
 %s
-result = {(item.NetworkElement.Name,item.RefItem.itemName,item.Units):serialise_ts(item.%sMapping.OverrideTimeSeries) for item in items}
+
+%s
+result = {(item.NetworkElement.Name,item.RefItem.itemName,secondary_override_name(item),item.Units):serialise_ts(item.%sMapping.OverrideTimeSeries) for item in items}
 '''
 
 FIND_OVERRIDE_TEMPLATE='''
-def get_override_time_series(location,variable):
-    item = scenario.OperationsMaster.NetworkElementOperationsDataItems.First(lambda i: i.NetworkElement.Name==location and i.RefItem.itemName==variable)
+def get_override_time_series(location,variable,secondary):
+    if secondary is None:
+        search = lambda i: i.NetworkElement.Name==location and i.RefItem.itemName==variable
+    else:
+        search = lambda i: i.NetworkElement.Name==location and i.RefItem.itemName==variable and secondary_override_name(i)==secondary
+    item = scenario.OperationsMaster.NetworkElementOperationsDataItems.First(search)
     return item.%sMapping.OverrideTimeSeries
-
 '''
+
 
 
 class VeneerOperationsActions(object):
     def __init__(self,ironpython):
         self._ironpy = ironpython
-    
-    def get_overrides(self,time_period,keep_nulls=False,locations=None,variables=None):
+
+    def get_overrides(self,time_period,keep_nulls=False,locations=None,variables=None,secondary=None):
         '''
         Retrieve a dataframe of operator overrides from the current scenario:
 
@@ -38,9 +62,11 @@ class VeneerOperationsActions(object):
         keep_nulls: if True, keep columns where there are no overrides
         locations: a list of locations to retrieve overrides for, or None to retrieve all locations
         variables: a list of variables to retrieve overrides for, or None to retrieve all variables
+        secondary: a list of secondary locations to filter by, or None to retrieve all.
+                   Typically used to filter by particular release paths
 
         Returns:
-        A pandas DataFrame with the overrides, indexed by date, and with a MultiIndex of location, variable and units
+        A pandas DataFrame with the overrides, indexed by date, and with a MultiIndex of location, variable, secondary location and units
         '''
         loc_query = ''
         if locations:
@@ -49,7 +75,14 @@ class VeneerOperationsActions(object):
         if variables:
             var_query = 'items = items.Where(lambda i: i.RefItem.itemName in %s)\n'%str(variables)
 
-        ts = self._ironpy._safe_run(self._ironpy._init_script()+SERIALISE_TS+GET_OVERRIDES_TEMPLATE%(loc_query,var_query,time_period))
+        secondary_location_query = ''
+        if secondary:
+            secondary_location_query = 'items = items.Where(lambda i: secondary_override_name(i) in %s)\n'%str(secondary)
+
+        ts = self._ironpy._safe_run(self._ironpy._init_script()+
+                            SERIALISE_TS+
+                            SECONDARY_NAME+
+                            GET_OVERRIDES_TEMPLATE%(loc_query,var_query,secondary_location_query,time_period))
         parsed = self._ironpy.simplify_response(ts['Response'])
         series = {k:pd.Series([v[1] for v in ts],index=[v[0] for v in ts]) for k,ts in parsed.items()}
         series = {k:v.replace(-9999,np.nan) for k,v in series.items()}
@@ -76,21 +109,25 @@ class VeneerOperationsActions(object):
         Returns:
         The result of the server-side script execution
         '''
-        getter_script = FIND_OVERRIDE_TEMPLATE%time_period
+        getter_script = SECONDARY_NAME+FIND_OVERRIDE_TEMPLATE%time_period
         script = self._ironpy._init_script()
         script += getter_script
         for col in overrides.columns:
             location = col[0]
             variable = col[1]
+            secondary = col[2]
+            if secondary=='-':
+                secondary = None
+            else:
+                secondary = f"'{secondary}'"
             # ignore units, assume matching
-            script += f"ts = get_override_time_series('{location}','{variable}')\n"
+            script += f"ts = get_override_time_series('{location}','{variable}',{secondary})\n"
             series = overrides[col].dropna()
             for ix, val in series.items():
                 script += f"dt = System.DateTime({ix.year},{ix.month},{ix.day})\n"
                 script += f"ts[dt] = {val}\n"
-            
+
         return self._ironpy._veneer.run_server_side_script(script)
-    
-    
+
 
 

@@ -4,7 +4,12 @@ import RiverSystem.Functions.FunctionUsage as FunctionUsage
 import TIME.Tools.Reflection.ReflectedItem as ReflectedItem
 
 orig_fn_names = %s
-orig_fns = [scenario.Network.FunctionManager.Functions.Where(lambda f: f.Name==ofn).FirstOrDefault() for ofn in orig_fn_names]
+def search_by_name(nm):
+  if '.' in nm:
+    return lambda f: f.FullName==nm
+  return lambda f: f.Name==nm
+
+orig_fns = [scenario.Network.FunctionManager.Functions.Where(search_by_name(ofn)).FirstOrDefault() for ofn in orig_fn_names]
 for i,fn in enumerate(orig_fns):
   if fn is None:
     raise Exception('Unknown function: '+orig_fn_names[i])
@@ -89,9 +94,11 @@ if not len(names): names = orig_names[::-1]
 pvrs = pvt_lookup.get(target.__init__.__self__,[])
 element_name = '%s'
 attribute_name = '%s'
+variable_name = '%s'
 pvrs = [pvr for pvr in pvrs if System.String.IsNullOrEmpty(attribute_name) or pvr.ElementName.StartsWith(element_name)]
 match=None
 var_name = names.pop()
+name_to_use = variable_name if len(variable_name) else var_name
 
 if len(pvrs)==1:
     # Nested
@@ -101,7 +108,8 @@ elif len(pvrs)>1:
     matches = [pvr for pvr in pvrs if pvr.ElementName==element_name]
     if len(matches): match=matches[0]
 name_exists = scenario.Network.FunctionManager.Variables.Any(lambda v: v.Name==var_name)
-if match and valid_identifier(var_name) and not name_exists:
+name_valid = valid_identifier(name_to_use)
+if match and name_valid and not name_exists:
     mv = ModelledVariable()
     try:
       mv.AttributeRecordingStateName = attribute_name
@@ -117,16 +125,19 @@ if match and valid_identifier(var_name) and not name_exists:
         mv.AssignedRecordableItemKey = matching_item.Key
     assert match.ElementRecorder
     mv.ProjectViewRow = match
-    mv.Name = var_name
-    mv.DateRange = scenario.Network.FunctionManager.DateRanges[0]
+    mv.Name = name_to_use
+    current_time_step = scenario.Network.FunctionManager.DateRanges.First(lambda dr: dr.Name=='Current Time Step')
+    mv.DateRange = current_time_step
     try:
-      mv.Reset()
+      mv.Reset(scenario.Network.FunctionManager)
       scenario.Network.FunctionManager.Variables.Add(mv)
       result['created'].append(mv.Name)
+      if len(variable_name):
+        break
     except Exception as e:
-      result['failed'].append(var_name + ' ' + e.message + ' on ' + str(match))
+      result['failed'].append(name_to_use + ' ' + e.message + ' on ' + str(match))
 else:
-    result['failed'].append(var_name)
+    result['failed'].append(name_to_use + ' match:' + str(match) + ', valid: ' +str(name_valid) + ', exists: '+ str(name_exists))
 '''
 
 CREATE_TS_VARIABLE_SCRIPT='''
@@ -155,6 +166,32 @@ result = {
 }
 '''
 
+CREATE_PIECEWISE_VARIABLE_SCRIPT='''
+from RiverSystem.Functions.Variables import LinearVariable, LinearFunctionVariableEntry
+
+fm = scenario.Network.FunctionManager
+variable = '%s'
+x_name = '%s'
+y_name = '%s'
+new_variable = []
+existing_variable = []
+new_var = LinearVariable()
+
+e = LinearFunctionVariableEntry()
+e.X = 0
+e.Y = 1
+new_var.Entries.Add(e)
+e = LinearFunctionVariableEntry()
+e.X = 1
+e.Y = 1
+new_var.Entries.Add(e)
+new_var.Name = variable
+new_var.XName = x_name
+new_var.YName = y_name
+fm.Variables.Add(new_var)
+result = True
+'''
+
 VALID_IDENTIFIER_FN='''
 def valid_identifier(nm):
   from System.Text import RegularExpressions
@@ -167,6 +204,62 @@ def valid_identifier(nm):
     return False
 
   return RegularExpressions.Regex("[_A-Za-z][_a-zA-Z0-9]*$").IsMatch(nm[1:])
+'''
+
+CREATE_FUNCTIONS='''
+import RiverSystem.Functions.Function as Function
+import RiverSystem.DataManagement.DataManager.FolderItem as FolderItem
+import RiverSystem.Utils.UnitLibrary as UnitLibrary
+
+full_function_path = %s
+
+mgr = scenario.Network.FunctionManager
+
+def full_identifier(nm):
+  if full_function_path is None:
+    return nm
+  if nm.startswith('$'):
+    nm = nm[1:]
+  return full_function_path + '.' + nm
+
+'''+VALID_IDENTIFIER_FN+'''
+
+functions = %s
+
+parent = None
+if full_function_path is not None:
+  function_path=None
+  for folder in full_function_path.split('.'):
+    if function_path is None:
+      function_path = folder
+    else:
+      function_path += '.' + folder
+    existing = mgr.Folders.FirstOrDefault(lambda f: f.FullName=="$"+function_path)
+    if existing is None:
+      new_folder = FolderItem()
+      new_folder.Name = folder
+      new_folder.Parent = parent
+      mgr.Folders.Add(new_folder)
+      parent = new_folder
+    else:
+      parent = existing
+
+result={"created":[],"failed":[]}
+for (fn,expr) in functions:
+  if not fn.startswith("$"): fn = "$"+fn
+  if not valid_identifier(fn):
+    result["failed"].append(fn)
+    continue
+  full_name = full_identifier(fn)
+  if mgr.Functions.Any(lambda f: f.FullName==full_name):
+    result["failed"].append(fn)
+    continue
+  rsFn = Function()
+  rsFn.Name=fn
+  rsFn.Expression=expr
+  rsFn.Parent = parent
+  scenario.Network.FunctionManager.Functions.Add(rsFn)
+  result["created"].append(fn)
 '''
 
 FIND_MODELLED_VARIABLE_TARGETS='''
@@ -201,6 +294,24 @@ for variable in fm.Variables:
         continue
     result.append('Updating %%s to DateRange=%%s'%%(variable.Name,date_range.Name))
     variable.DateRange = date_range
+'''
+
+SET_MODEL_VARIABLE_UNITS='''
+import RiverSystem.Management.ExpressionBuilder.TimeOfEvaluation as TimeOfEvaluation
+import RiverSystem.Utils.UnitLibrary as UnitLibrary
+from TIME.Core import Unit, CommonUnits
+targets = %s
+
+new_units=Unit.PredefinedUnit(CommonUnits.%s)
+
+fm = scenario.Network.FunctionManager
+result = []
+for variable in fm.Variables:
+    if (targets is not None) and variable.Name not in targets:
+        result.append('%%s not in targets'%%variable.Name)
+        continue
+    result.append('Updating %%s to ResultUnit=%%s'%%(variable.Name,new_units))
+    variable.ResultUnit = new_units
 '''
 
 CREATE_FUNCTIONAL_UNIT='''
@@ -258,4 +369,9 @@ curve.StartDate = System.DateTime(%s,%s,%s)
 curve.OverbankFlowlevel=%f
 target.link.RatingCurveLibrary.Curves.Add(curve)
 result += 1
+'''
+
+SET_INPUT_SET_SCRIPT='''
+input_set = scenario.Network.InputSets.First(lambda i: i.Name=="%s")
+scenario.CurrentConfiguration.SelectedInputSet = input_set
 '''

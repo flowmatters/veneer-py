@@ -24,7 +24,8 @@ NODE_TYPES = {
 ADDITIONAL_INPUTS={
     'RiverSystem.Flow.StorageRouting':[
         'link.RainFall',
-        'link.Evaporation'
+        'link.Evaporation',
+        'link.TimeSeriesFlux'
     ],
     'RiverSystem.Nodes.StorageNodeModel':[
         'StorageInternal.EvaporationInMetresPerSecond',
@@ -607,7 +608,7 @@ class VeneerIronPython(object):
         theValue = [_safe_filename(fn) for fn in _stringToList(theValue)]
         if len(theValue) == 1:
             theValue = theValue[0]
-        return self._assignment(theThing, theValue, namespace, literal, from_list, 
+        return self._assignment(theThing, theValue, namespace, literal, from_list,
                                 False, assignment, post_assignment,dry_run=dry_run)
 
     def clear_time_series(self,theThing,namespace=None):
@@ -794,7 +795,7 @@ class VeneerNetworkElementActions(object):
     def __init__(self, ironpython):
         self._ironpy = ironpython
         self._ns = None
-        self._pvr_element_name = ''
+        self._pvr_element_name = None
         self._build_pvr_accessor = self._build_accessor
         self._pvr_attribute_prefix = ''
         self._aliases = {}
@@ -935,7 +936,7 @@ class VeneerNetworkElementActions(object):
         accessor = self._build_accessor(parameter, **kwargs)
         return self._ironpy.clear_time_series(accessor,namespace=self._ns)
 
-    def create_modelled_variable(self, parameter, element_name=None, **kwargs):
+    def create_modelled_variable(self, parameter, element_name=None, variable_name='', **kwargs):
         '''
         Create a modelled variable for accessing a model's properties from a function.
 
@@ -954,6 +955,8 @@ class VeneerNetworkElementActions(object):
         init += VALID_IDENTIFIER_FN
         init += 'orig_names=%s\n' % names
         init += 'names=orig_names[::-1]\n'
+        if len(variable_name) and not variable_name.startswith('$'):
+            variable_name = '$'+variable_name
         accessor = self._build_pvr_accessor('__init__.__self__', **kwargs)
         if not element_name:
             element_name = self._pvr_element_name
@@ -962,7 +965,7 @@ class VeneerNetworkElementActions(object):
             element_name = parameter
 
         code = CREATED_MODELLED_VARIABLE % (
-            element_name, self._pvr_attribute_prefix + parameter)
+            element_name, self._pvr_attribute_prefix + parameter, variable_name)
         return self._ironpy.apply(accessor, code, 'target', init, ns)
         # create accessor
         # loop through, generate name, create model variable
@@ -1862,7 +1865,7 @@ class VeneerFunctionActions():
 
         return accessor
 
-    def create_functions(self, names, general_equation, params=[[]], name_params=None, use_format=False):
+    def create_functions(self, names, general_equation, params=[[]], name_params=None, use_format=False,function_path=None):
         '''
         Create one function, or multiple functions based on a pattern
 
@@ -1875,6 +1878,12 @@ class VeneerFunctionActions():
 
         name_params: A list of tuples, containing the name parameters to substitute into the names (if a template name is provided)
 
+        use_format: If True, use str.format() to substitute parameters into the general_equation and names.
+                    If False, use the old-style % operator.
+
+        function_path: If provided, the path within the function library to store the function(s) in.
+                          If the path does not exist, it will be created.
+
         Returns a dictionary with keys created and failed, each a list of function names
         '''
         names = _stringToList(names)
@@ -1882,7 +1891,7 @@ class VeneerFunctionActions():
             if name_params:
                 names = ['$' + _variable_safe_name(names[0] % name_param_set)
                          for name_param_set in name_params]
-            else:
+            elif len(params)>1:
                 names = ['%s_%d' % (names[0], d) for d in range(len(params))]
 
         if use_format:
@@ -1892,25 +1901,13 @@ class VeneerFunctionActions():
             functions = list(
                 zip(names, [general_equation % param_set for param_set in params]))
 
-        script = self._ironpy._init_script()
-        script += 'import RiverSystem.Functions.Function as Function\n'
-        script += 'import RiverSystem.Utils.UnitLibrary as UnitLibrary\n'
-        script += VALID_IDENTIFIER_FN
-        script += 'functions=%s\n\n' % functions
-        script += 'result={"created":[],"failed":[]}\n'
-        script += 'for (fn,expr) in functions:\n'
-        script += '  if not fn.startswith("$"): fn = "$"+fn\n'
-        script += '  if not valid_identifier(fn):\n'
-        script += '    result["failed"].append(fn)\n'
-        script += '    continue\n'
-        script += '  if scenario.Network.FunctionManager.Functions.Any(lambda f: f.Name==fn):\n'
-        script += '    result["failed"].append(fn)\n'
-        script += '    continue\n'
-        script += '  rsFn = Function()\n'
-        script += '  rsFn.Name=fn\n'
-        script += '  rsFn.Expression=expr\n'
-        script += '  scenario.Network.FunctionManager.Functions.Add(rsFn)\n'
-        script += '  result["created"].append(fn)'
+        if function_path is not None:
+            if function_path.endswith('.'):
+                function_path = function_path[:-1]
+            if function_path.startswith('$'):
+                function_path = function_path[1:]
+            function_path = f"'{function_path}'"
+        script = self._ironpy._init_script() + CREATE_FUNCTIONS%(function_path,functions)
         result = self._ironpy.run_script(script)
         if not result['Exception'] is None:
             raise Exception(result['Exception'])
@@ -1923,6 +1920,21 @@ class VeneerFunctionActions():
         if not result['Exception'] is None:
             raise Exception(result['Exception'])
         return self._ironpy.simplify_response(result['Response'])
+
+    def create_piecewise_variable(self,variable_name,table=None):
+        x_name = 'Lookup'
+        y_name = 'Result'
+        if not variable_name.startswith('$'):
+            variable_name = '$' + variable_name
+        if table is not None:
+            x_name = table.columns[0]
+            y_name = table.columns[1]
+        script=self._ironpy._init_script() + CREATE_PIECEWISE_VARIABLE_SCRIPT%(variable_name,x_name,y_name)
+        result = self._ironpy.run_script(script)
+        if not result['Exception'] is None:
+            raise Exception(result['Exception'])
+        if table is not None:
+            self._ironpy._veneer.update_variable_piecewise(variable_name,table)
 
     def delete_variables(self, names):
         script = self._ironpy._init_script()
@@ -1980,9 +1992,27 @@ class VeneerFunctionActions():
         return resp
 
     def set_options(self, option, values, fromList=False, functions=None, literal=False):
+        '''
+        Set an option on one or more functions.
+
+        option - can be any of the known option types (see get_options) OR 'SIUnit'.
+
+        When option=='SIUnit', the values are parsed using the standard SI unit parsing within Source.
+        '''
+        if option=='ResultUnit':
+            values = _stringToList(values)
+            fromList=True
+            values = [f'Unit.PredefinedUnit(CommonUnits.{u})' for u in values]
+        if option=='SIUnit':
+            values = _stringToList(values)
+            fromList=True
+            option = 'ResultUnit'
+            values = [f'Unit.parse("{u}")' for u in values]
+
         accessor = self._accessor(option, functions)
         ns = 'RiverSystem.Management.ExpressionBuilder.TimeOfEvaluation as TimeOfEvaluation'
         ns += '\nimport RiverSystem.Utils.UnitLibrary as UnitLibrary\n'
+        ns += '\nfrom TIME.Core import Unit, CommonUnits\n'
         return self._ironpy.set(accessor, values, ns, literal=literal, fromList=fromList)
 
     def set_time_of_evaluation(self, toe, fromList=False, functions=None):
@@ -2021,6 +2051,11 @@ class VeneerFunctionActions():
         script = template%(tp,variables)
         self._ironpy._safe_run(script)
 
+    def set_modelled_variable_units(self,units,variables):
+        template = self._ironpy._init_script() + SET_MODEL_VARIABLE_UNITS
+        script = template%(variables,units)
+        self._ironpy._safe_run(script)
+
 class VeneerSimulationActions():
     def __init__(self, ironpython):
         self._ironpy = ironpython
@@ -2034,6 +2069,28 @@ class VeneerSimulationActions():
             raise Exception(result['Exception'])
 #        data = result['Response']['Value'] if result['Response'] else result['Response']
         return self._ironpy.simplify_response(result['Response'])
+
+    def select_input_set(self,name):
+        '''
+        Set the current input set (for current scenario and configuration) to the one with the given name.
+
+        name - name of the input set to select. If it does not exist, an exception will be raised.
+
+        New input sets can be created using v.create_input_set(name, configuration)
+        '''
+        script = self._ironpy._init_script()+SET_INPUT_SET_SCRIPT%name
+        return self._ironpy._safe_run(script)
+
+    def current_input_set(self):
+        '''
+        Get the name of the currently selected input set for the current scenario and configuration.
+
+        Returns:
+            * The name of the currently selected input set, or None if no input set is selected.
+
+        Details of the input set can be retrieved using v.input_sets()
+        '''
+        return self._ironpy.get('scenario.CurrentConfiguration.SelectedInputSet.Name')
 
     def timestep_in_seconds(self):
         return self._ironpy.get('scenario.CurrentConfiguration.TimeStep.span.TotalSeconds')

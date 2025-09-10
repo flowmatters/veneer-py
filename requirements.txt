@@ -2,6 +2,7 @@ numpy
 pandas
 geopandas
 psutil
+requests
 https://github.com/flowmatters/nb-slack/archive/master.zip
 matplotlib
 pillow
