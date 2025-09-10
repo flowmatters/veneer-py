@@ -10,6 +10,8 @@ import shutil
 from functools import partial
 import logging
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.NOTSET)
+logger.propagate = True
 
 MAX_DEFAULT_CLUSTER_SIZE=64
 
