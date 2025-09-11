@@ -4,8 +4,7 @@ import inspect
 import warnings
 import logging
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.NOTSET)
-logger.propagate = True
+
 
 CANARY_METHODS = [
     '_ipython_canary_method_should_not_exist_',

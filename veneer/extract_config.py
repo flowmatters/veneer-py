@@ -13,8 +13,7 @@ import logging
 from veneer.manage import VENEER_EXE_FN, create_command_line, kill_all_now
 import veneer.manage as manage
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.NOTSET)
-logger.propagate = True
+
 
 def _BEFORE_BATCH_NOP(slf,x,y):
     pass

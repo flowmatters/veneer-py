@@ -2,8 +2,7 @@ import sys
 import inspect
 import logging
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.NOTSET)
-logger.propagate = True
+
 from types import MethodType
 from .utils import SearchableList, objdict
 
