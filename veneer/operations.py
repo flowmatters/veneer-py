@@ -90,7 +90,7 @@ class VeneerOperationsActions(object):
             is_empty = {k:not len(v.dropna()) for k,v in series.items()}
             series = {k:v for k,v in series.items() if not is_empty[k]}
         df = pd.DataFrame(series)
-        df.index = pd.to_datetime(df.index,dayfirst=True)
+        df.index = pd.to_datetime([ts.split(' ')[0] for ts in df.index],dayfirst=True)
         return df.sort_index()
 
     def apply_overrides(self,overrides,time_period):
