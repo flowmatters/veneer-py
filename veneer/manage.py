@@ -241,7 +241,7 @@ def overwrite_plugin_configuration(source_binaries,project_fn=None,plugin_fn=Non
     shutil.copyfile(str(plugin_fn),str(plugin_dest_file))
     assert plugin_dest_file.exists()
 
-def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=True,
+def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
           script=True, veneer_exe=None,overwrite_plugins=None,return_io=False,
           model=None,start_new_session=False,additional_plugins=[],
           custom_endpoints=[],projects=None,quiet=False):
