@@ -260,6 +260,7 @@ for (fn,expr) in functions:
   rsFn.Parent = parent
   scenario.Network.FunctionManager.Functions.Add(rsFn)
   result["created"].append(fn)
+scenario.Network.FunctionManager.Refresh()
 '''
 
 FIND_MODELLED_VARIABLE_TARGETS='''
