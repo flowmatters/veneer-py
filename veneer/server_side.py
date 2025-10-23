@@ -18,7 +18,8 @@ NODE_TYPES = {
     'scenario_transfer': 'RiverSystem.Nodes.ScenarioTransfer.ScenarioTransferNodeModel',
     'transfer_ownership': 'RiverSystem.Nodes.TransferOwnership.TransferOwnershipNodeModel',
     'off_allocation': 'RiverSystem.Nodes.OffAllocation.OffAllocationNodeModel',
-    'environmental_demand': 'RiverSystem.Nodes.EnvironmentalDemand.EnvironmentalDemandNodeModel'
+    'environmental_demand': 'RiverSystem.Nodes.EnvironmentalDemand.EnvironmentalDemandNodeModel',
+    'farm_dam': 'RiverSystem.Nodes.FarmDam.FarmDamNodeModel'
 }
 
 ADDITIONAL_INPUTS={
@@ -1704,6 +1705,12 @@ class VeneerNodeActions(VeneerNetworkElementActions):
 
         from .nodes.gauges import VeneerGaugeActions
         self.gauges = VeneerGaugeActions(self)
+
+        from .nodes.farm_dams import VeneerFarmDamActions
+        self.farm_dams = VeneerFarmDamActions(self)
+
+        from .nodes.inflows import VeneerInflowActions
+        self.inflows = VeneerInflowActions(self)
 
     def _refine_accessor(self, node_access='', nodes=None, node_types=None, splitter=False):
         accessor = ""
