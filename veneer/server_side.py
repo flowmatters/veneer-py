@@ -264,6 +264,10 @@ class VeneerIronPython(object):
 
         return script
 
+    def nav(self):
+        from .navigate import Queryable
+        return Queryable(self._veneer)
+
     def find_model_type(self, model_type, must_be_model=True):
         '''
         Search for model types matching a given string pattern
