@@ -7,6 +7,7 @@ from .component import VeneerComponentModelActions
 import os
 import pandas as pd
 import json
+from datetime import datetime
 
 NODE_TYPES = {
     'inflow': 'RiverSystem.Nodes.Inflow.InjectedFlow',
@@ -2131,6 +2132,14 @@ class VeneerSimulationActions():
         script = self._ironpy._init_script(
         ) + 'H.ConfigureAssuranceRule(scenario,%s,%s,%s)' % (level, rule, category)
         return self._ironpy.run_script(script)
+
+    def widest_date_range(self):
+        script = self._ironpy._init_script() + WIDEST_DATE_RANGE_SCRIPT
+        result = self._ironpy.run_script(script)
+        if not result['Exception'] is None:
+            raise Exception(result['Exception'])
+        date_strings = self._ironpy.simplify_response(result['Response'])
+        return [datetime.strptime(dt,'%d/%m/%Y %I:%M:%S %p') for dt in date_strings]
 
 class VeneerGeographicDataActions(object):
     def __init__(self,ironpython):

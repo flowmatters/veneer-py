@@ -376,3 +376,13 @@ SET_INPUT_SET_SCRIPT='''
 input_set = scenario.Network.InputSets.First(lambda i: i.Name=="%s")
 scenario.CurrentConfiguration.SelectedInputSet = input_set
 '''
+
+WIDEST_DATE_RANGE_SCRIPT='''
+from TIME.DataTypes import TimeTools, TimeSeries
+config = scenario.CurrentConfiguration
+input_set = config.SelectedInputSet
+temporalCharacteristics = TimeTools.findTemporalCharacteristics(
+    scenario.Network.DataManager.GetTimeSeriesForValidation(input_set).ToList[TimeSeries]().ToArray(),
+    config.StartDate, config.EndDate);
+result = [temporalCharacteristics.minimum,temporalCharacteristics.maximum]
+'''
