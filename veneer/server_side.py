@@ -1,13 +1,12 @@
 
 from .utils import (_stringToList, _variable_safe_name,
-                    _safe_filename, deprecate_async, simplify_response)
+                    _safe_filename, deprecate_async, simplify_response, parse_iron_python_date)
 from .templates import *
 from .component import VeneerComponentModelActions
 
 import os
 import pandas as pd
 import json
-from datetime import datetime
 
 NODE_TYPES = {
     'inflow': 'RiverSystem.Nodes.Inflow.InjectedFlow',
@@ -546,6 +545,10 @@ class VeneerIronPython(object):
                     fromList=False, instantiate=False,
                     assignment="", post_assignment="",
                     print_script=False, dry_run=False):
+        def convert_value(val):
+            if hasattr(val,'year') and hasattr(val,'month') and hasattr(val,'day'):
+                return "System.DateTime(%d,%d,%d)" % (val.year,val.month,val.day)
+            return val
         val_transform = '()' if instantiate else ''
         if literal and isinstance(theValue, str):
             theValue = "'" + theValue + "'"
@@ -553,9 +556,11 @@ class VeneerIronPython(object):
             if literal:
                 theValue = [("'" + v + "'") if isinstance(v, str)
                             else v for v in theValue]
-            theValue = '[' + (','.join([str(s) for s in theValue])) + ']'
+            theValue = '[' + (','.join([str(convert_value(s)) for s in theValue])) + ']'
         elif type(theValue) == list:
-            theValue = 'tuple(%s)' % theValue
+            theValue = 'tuple(%s)' % [convert_value(val) for val in theValue]
+        else:
+            theValue = convert_value(theValue)
 
         script = self._init_script(namespace)
         script += 'origNewVal = %s\n' % theValue
@@ -2139,7 +2144,7 @@ class VeneerSimulationActions():
         if not result['Exception'] is None:
             raise Exception(result['Exception'])
         date_strings = self._ironpy.simplify_response(result['Response'])
-        return [datetime.strptime(dt,'%d/%m/%Y %I:%M:%S %p') for dt in date_strings]
+        return [parse_iron_python_date(ds) for ds in date_strings]
 
 class VeneerGeographicDataActions(object):
     def __init__(self,ironpython):

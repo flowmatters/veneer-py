@@ -2,6 +2,7 @@ import pandas as pd
 import re
 import inspect
 import warnings
+from datetime import datetime
 import logging
 logger = logging.getLogger(__name__)
 
@@ -418,3 +419,6 @@ def make_hashable(val):
 
 def process_response_dict(resp):
     return {make_hashable(simplify_response(e['Key'])): simplify_response(e['Value']) for e in resp['Entries']}
+
+def parse_iron_python_date(date_string):
+    return datetime.strptime(date_string,'%d/%m/%Y %I:%M:%S %p')
