@@ -275,7 +275,7 @@ class VeneerCluster(object):
 
         if len(self.temp_directories):
             removal = [remove_copy(c) for c in self.temp_directories]
-            _ = dask.compute(*removal,scheduler=self.dask_client.scheduler)
+            _ = dask.compute(*removal,sync=True)
 
         self.dask_cluster.close()
 
