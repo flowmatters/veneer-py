@@ -637,8 +637,8 @@ class Veneer(object):
             # Slim Time Series...
             ts = details[0]['TimeSeries']
 
-            start_t = self.parse_veneer_date(ts['StartDate'])
-            end_t = self.parse_veneer_date(ts['EndDate'])
+            start_t = parse_veneer_date(ts['StartDate'])
+            end_t = parse_veneer_date(ts['EndDate'])
             freq = ts['TimeStep'][0]
             index = pd.date_range(start_t, end_t, freq=freq)
             data_dict = {d['Name']: d['TimeSeries']['Values'] for d in details}
@@ -802,6 +802,15 @@ class Veneer(object):
             return ''
         return "/aggregated/%s" % timestep
 
+    def retrieve_time_series_url(self,url,name_fn=name_element_variable):
+        """
+        Retrieve one or more time series from a given URL.
+        Return the time series in a Pandas DataFrame with date time index.
+        """
+        data = self.retrieve_json(url)
+        series, units, dates = _normalise_time_series_response(data,name_fn,None)
+        return self._create_timeseries_dataframe(series, dates)
+
     def retrieve_multiple_time_series(self, run='latest', run_data=None, criteria={}, timestep='daily', name_fn=name_element_variable,use_regexp=True):
         """
         Retrieve multiple time series from a run according to some criteria.
@@ -862,32 +871,9 @@ class Veneer(object):
 
             d = self.retrieve_json(result['TimeSeriesUrl'] + suffix)
             res.update(d)
-            col_name = name_column(res)
-  #                    raise Exception("Duplicate column name: %s"%col_name)
-            if 'Events' in d:
-                if dates is None:
-                    dates = [ev['Date'] for ev in d['Events']]
-                retrieved[col_name] = [ev['Value'] for ev in d['Events']]
-                units_store[col_name] = res['Units']
-            else:
-                all_ts = d['TimeSeries']
-                for ts in all_ts:
-                    col_name = name_column(ts)
-                    units_store[col_name] = ts['Units']
-
-                    vals = ts['Values']
-                    s = self.parse_veneer_date(ts['StartDate'])
-                    e = self.parse_veneer_date(ts['EndDate'])
-                    if ts['TimeStep'] == 'Daily':
-                        f = 'D'
-                    elif ts['TimeStep'] == 'Monthly':
-                        f = 'M'
-                    elif ts['TimeStep'] == 'Annual':
-                        f = 'A'
-                    dates = pd.date_range(s, e, freq=f)
-                    retrieved[col_name] = [
-                        {'Date': d, 'Value': v} for d, v in zip(dates, vals)]
-                # Multi Time Series!
+            data, units, dates = _normalise_time_series_response(res, name_column, dates)
+            retrieved.update(data)
+            units_store.update(units)
 
         result = self._create_timeseries_dataframe(retrieved,dates)
         for k, u in units_store.items():
@@ -1009,20 +995,15 @@ class Veneer(object):
             return [(key_tuple,timestep(df)) for (key_tuple,df) in result]
         return result
 
-    def parse_veneer_date(self, txt):
-        if hasattr(txt, 'strftime'):
-            return txt
-        return datetime.strptime(txt, '%m/%d/%Y %H:%M:%S')
-
     def convert_dates(self, events):
-        return [{'Date': self.parse_veneer_date(e['Date']), 'Value':e['Value']} for e in events]
+        return [{'Date': parse_veneer_date(e['Date']), 'Value':e['Value']} for e in events]
 
     def _create_timeseries_dataframe(self, data_dict, common_index=True,time_shift_hours=0):
         common_index_simple = common_index if (np.shape(common_index)==tuple()) else None
         if len(data_dict) == 0:
             df = pd.DataFrame()
         elif common_index_simple == True:
-            index = [self.parse_veneer_date(event['Date'])
+            index = [parse_veneer_date(event['Date'])
                      for event in list(data_dict.values())[0]]
             data = {k: [event['Value'] for event in result]
                     for k, result in data_dict.items()}
@@ -1033,7 +1014,7 @@ class Veneer(object):
                 'Date').rename(columns={'Value': k}) for k, ts in data_dict.items()]
             df = reduce(lambda l, r: l.join(r, how='outer'), dataFrames)
         else:
-          index = [self.parse_veneer_date(d) for d in common_index]
+          index = [parse_veneer_date(d) for d in common_index]
           df = pd.DataFrame(data=data_dict,index=index)
 
         extensions._apply_time_series_helpers(df)
@@ -1122,6 +1103,48 @@ def load_network(fn:str):
         network = json.load(f)
     return _extend_network(network)
 
+def parse_veneer_date(txt):
+    if hasattr(txt, 'strftime'):
+        return txt
+    return datetime.strptime(txt, '%m/%d/%Y %H:%M:%S')
+
+def _normalise_time_series_response(res, name_fn,dates):
+    if 'Events' in res:
+        col_name = name_fn(res)
+        if dates is None:
+            dates = [parse_veneer_date(ev['Date']) for ev in res['Events']]
+        return {col_name: [ev['Value'] for ev in res['Events']]}, \
+               {col_name: res['Units']}, \
+               dates
+
+    all_ts = res['TimeSeries']
+    start_date = end_date = timestep = None
+    units_store = {}
+    retrieved = {}
+    for ts in all_ts:
+        col_name = name_fn(ts)
+        units_store[col_name] = ts['Units']
+
+        vals = ts['Values']
+        if ts['StartDate'] != start_date or ts['EndDate'] != end_date or ts['TimeStep'] != timestep:
+            start_date = ts['StartDate']
+            end_date = ts['EndDate']
+            timestep = ts['TimeStep']
+            s = parse_veneer_date(start_date)
+            e = parse_veneer_date(end_date)
+            if timestep == 'Daily':
+                f = 'D'
+            elif timestep == 'Monthly':
+                f = 'M'
+            elif timestep == 'Annual':
+                f = 'A'
+            dates = pd.date_range(s, e, freq=f)
+        # retrieved[col_name] = [
+        #     {'Date': d, 'Value': v} for d, v in zip(dates, vals)]
+        retrieved[col_name] = vals
+        # Multi Time Series!
+    return retrieved, units_store, dates
+
 if __name__ == '__main__':
     # Output
     from .bulk import VeneerRetriever
@@ -1130,3 +1153,4 @@ if __name__ == '__main__':
     print("Downloading all Veneer data to %s" % destination)
     retriever = VeneerRetriever(destination)
     retriever.retrieve_all(destination)
+
