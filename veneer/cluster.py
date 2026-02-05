@@ -253,19 +253,33 @@ class VeneerCluster(object):
         jobs = [operation_(p) for p in self.veneer_ports]
         return self.dask_client.compute(jobs,sync=True)
 
-    def run_jobs(self,jobs):
+    def run_jobs(self,jobs,sync=True):
         '''
         Run a set of jobs on the cluster.
 
         jobs: list
             A list of tuples, each containing a dask delayed job. Note that the job need not involve Source/Veneer,
             but if veneer is required, the original function should be wrapped with self.wrap
+        sync: bool
+            Whether to run synchronously (default True). If False, returns a Dask Future.
 
         Returns a list of tuples, each containing the worker port, the temporary directory and the result of the job
         '''
-        results = self.dask_client.compute(jobs,sync=True)
-        workers = [self.worker_affinity[pid] for pid,_ in results]
-        return list(zip(workers,[r for _,r in results]))
+
+        if sync:
+            results = self.dask_client.compute(jobs,sync=True)
+            workers = [self.worker_affinity[pid] for pid,_ in results]
+            return list(zip(workers,[r for _,r in results]))
+
+        # Return a future that will compute the same structure when resolved
+        future_results = self.dask_client.compute(jobs,sync=False)
+        worker_affinity = self.worker_affinity
+
+        def process_results(results):
+            workers = [worker_affinity[pid] for pid,_ in results]
+            return list(zip(workers,[r for _,r in results]))
+
+        return self.dask_client.submit(process_results, future_results)
 
     def shutdown(self):
         '''
