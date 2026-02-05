@@ -403,6 +403,18 @@ class Veneer(object):
         content = resp.read().decode('utf-8')
         return self.process_run_response(code, content)
 
+    def run_status(self):
+        '''
+        Return the status of the currently running run (eg a run started with run_async=True, or started from another session)
+        '''
+        return self.retrieve_json('/runs/status')
+
+    def cancel_run(self):
+        '''
+        Cancel the currently running run (eg a run started with run_async=True, or started from another session)
+        '''
+        return self.post_json('/runs/cancel')
+
     def process_run_response(self,code, content,headers):
         if code == 302:
             return code, headers.get('Location')
