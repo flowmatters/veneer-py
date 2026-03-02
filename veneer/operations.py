@@ -124,6 +124,14 @@ class VeneerOperationsActions(object):
             script += f"ts = get_override_time_series('{location}','{variable}',{secondary})\n"
             series = overrides[col].dropna()
             for ix, val in series.items():
+                # Check for NaT or similar, which can't be serialised to .NET, and raise an error if found
+                if pd.isnull(ix):
+                    raise ValueError(f"Invalid date index {ix} for override at location {location}, variable {variable}, secondary {secondary}. Please ensure all dates are valid and not null.")
+
+                # Check that the value is numeric, and raise an error if not
+                if not isinstance(val, (int, float, np.number)):
+                    raise ValueError(f"Invalid value {val} for override at location {location}, variable {variable}, secondary {secondary}, date {ix}. Please ensure all override values are numeric.")
+
                 script += f"dt = System.DateTime({ix.year},{ix.month},{ix.day})\n"
                 script += f"ts[dt] = {val}\n"
 

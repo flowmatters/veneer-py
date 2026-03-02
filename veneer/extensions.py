@@ -517,6 +517,10 @@ def network_plot(self,
     nodes = []
     if hasattr(label_nodes,'__len__'):
         nodes_to_label = label_nodes
+    elif label_nodes==True:
+        nodes_to_label = df_nodes.name.tolist()
+    else:
+        nodes_to_label = []
 
     for x0, y0,icon,name in zip(x, y,df_nodes.icon,df_nodes.name):
         img = icon_images.get(icon,None)
