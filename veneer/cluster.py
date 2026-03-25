@@ -146,6 +146,7 @@ class VeneerCluster(object):
 
         self.wrap = partial(run_on_cluster,self)
         self.v = ClusterVeneerClient(self)
+        self._workers = None
 
         if existing_cluster is not None:
             if os.path.exists(existing_cluster):
@@ -212,6 +213,17 @@ class VeneerCluster(object):
         veneer_info_map = self.run_on_each(scenario_info)
 
         self.worker_affinity = {w.pid:(info['port'],os.path.dirname(info['ProjectFullFilename'])) for w,info in zip(worker_info.values(),veneer_info_map)}
+
+    @property
+    def workers(self):
+        '''
+        Access individual Veneer clients by index.
+
+        Example: cluster.workers[0].retrieve_json('/runs')
+        '''
+        if self._workers is None or len(self._workers) != len(self.veneer_ports):
+            self._workers = [Veneer(p) for p in self.veneer_ports]
+        return self._workers
 
     def to_json(self,fn=None):
         '''
@@ -292,4 +304,74 @@ class VeneerCluster(object):
             _ = dask.compute(*removal,sync=True)
 
         self.dask_cluster.close()
+
+
+def main():
+    import argparse
+    parser = argparse.ArgumentParser(
+        description='Start a Veneer cluster for parallel Source model execution'
+    )
+    parser.add_argument('project', help='Path to the Source project file (.rsproj)')
+    parser.add_argument('-e', '--veneer-exe', required=True,
+                        help='Path to FlowMatters.Source.VeneerCmd.exe')
+    parser.add_argument('-n', '--n-workers', type=int, default=None,
+                        help='Number of worker instances (default: number of CPUs)')
+    parser.add_argument('-p', '--port', type=int, default=9876,
+                        help='Starting port number (default: 9876)')
+    parser.add_argument('--copy', action='store_true',
+                        help='Copy the project file for each instance')
+    parser.add_argument('--copy-extras', nargs='*', default=[],
+                        help='Additional files/directories to copy with the project')
+    parser.add_argument('--additional-plugins', nargs='*', default=[],
+                        help='Additional plugin DLLs to load')
+    parser.add_argument('--custom-endpoints', nargs='*', default=[],
+                        help='Custom endpoints to add')
+    parser.add_argument('--remote', action='store_true',
+                        help='Allow remote connections')
+    parser.add_argument('--no-script', action='store_true',
+                        help='Disable IronPython scripting')
+    parser.add_argument('--overwrite-plugins', action='store_true', default=None,
+                        help='Overwrite Source plugin configuration')
+    parser.add_argument('--existing', choices=['raise', 'remove', 'ignore'], default='raise',
+                        help='Behaviour when existing temp directories are found (default: raise)')
+    parser.add_argument('--save', default=None,
+                        help='Save cluster config to a JSON file for later reconnection')
+    parser.add_argument('--debug', action='store_true',
+                        help='Show debug output from Veneer instances during startup')
+
+    args = parser.parse_args()
+
+    logging.basicConfig(level=logging.INFO)
+
+    cluster = VeneerCluster(
+        project_file=args.project,
+        veneer_exe=args.veneer_exe,
+        n_workers=args.n_workers,
+        debug=args.debug,
+        remote=args.remote,
+        script=not args.no_script,
+        overwrite_plugins=args.overwrite_plugins,
+        additional_plugins=args.additional_plugins,
+        custom_endpoints=args.custom_endpoints,
+        copy=args.copy,
+        copy_extras=args.copy_extras,
+        existing=args.existing,
+    )
+
+    if args.save:
+        cluster.to_json(args.save)
+        print(f'Cluster config saved to {args.save}')
+
+    print(f'Cluster started with {cluster.n_workers} workers on ports {cluster.veneer_ports}')
+    print('Press Ctrl+C to shut down the cluster')
+    try:
+        import signal
+        signal.signal(signal.SIGINT, signal.default_int_handler)
+        while True:
+            import time
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print('\nShutting down cluster...')
+        cluster.shutdown()
+        print('Cluster shut down.')
 
