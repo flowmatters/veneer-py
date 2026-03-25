@@ -93,6 +93,7 @@ class Veneer(object):
 
         self.model = VeneerIronPython(self)
         self.double_escape_slashes = True
+        self._session = requests.Session()
 
     def make_connection(self):
         '''
@@ -105,7 +106,7 @@ class Veneer(object):
         '''
         Dispose of the connection object for the current Veneer service.
         '''
-        pass
+        self._session.close()
 
     def shutdown(self):
         '''
@@ -140,7 +141,7 @@ class Veneer(object):
         if self.protocol == 'file':
             text = open(query_url).read()
         else:
-            resp = requests.get(self.url(query_url))
+            resp = self._session.get(self.url(query_url))
             resp.raise_for_status()
             text = resp.text
 
@@ -177,7 +178,7 @@ class Veneer(object):
             if len(kwargs):
                 url += '?' + '&'.join([f'{key}={val}' for key,val in kwargs.items()])
 
-            resp = requests.get(self.url(url),headers={"Accept": "text/csv"})
+            resp = self._session.get(self.url(url),headers={"Accept": "text/csv"})
             resp.raise_for_status()
             text = resp.text
 
@@ -192,7 +193,7 @@ class Veneer(object):
         import io
         url = self.url(resource+self.img_ext)
         if url.startswith('http://') or url.startswith('https://'):
-            response = requests.get(url)
+            response = self._session.get(url)
             response.raise_for_status()
             image = Image.open(io.BytesIO(response.content))
             return image
@@ -231,7 +232,7 @@ class Veneer(object):
             conn.request(method, url, payload, headers=headers)
             return conn
 
-        resp = requests.request(method, self.url(url), data=payload, headers=headers)
+        resp = self._session.request(method, self.url(url), data=payload, headers=headers)
         resp.raise_for_status()
         code = resp.status_code
         content = resp.text
@@ -386,7 +387,7 @@ class Veneer(object):
                         headers={'Content-type': 'application/json', 'Accept': 'application/json'})
             return conn
 
-        resp = requests.post(
+        resp = self._session.post(
             self.url('/runs'),
             json=params,
             headers={'Content-type': 'application/json', 'Accept': 'application/json'},
@@ -433,7 +434,7 @@ class Veneer(object):
         run: Run number to delete. Default ='latest'. Valid values are 'latest' and integers from 1
         '''
         assert self.live_source
-        resp = requests.delete(self.url('/runs/%s' % str(run)))
+        resp = self._session.delete(self.url('/runs/%s' % str(run)))
         resp.raise_for_status()
         code = resp.status_code
         content = resp.text
@@ -703,7 +704,7 @@ class Veneer(object):
         group: Data group to delete
         '''
         assert self.live_source
-        resp = requests.delete(self.url('/dataSources/%s' % str(quote(group))))
+        resp = self._session.delete(self.url('/dataSources/%s' % str(quote(group))))
         resp.raise_for_status()
         code = resp.status_code
         content = resp.text
