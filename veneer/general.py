@@ -529,7 +529,10 @@ class Veneer(object):
         if not name.startswith('$'):
             name = '$' + name
         all_functions = self.functions()
-        return all_functions.find_one_by_Name(name)['Expression']
+        try:
+            return all_functions.find_one_by_Name(name)['Expression']
+        except IndexError:
+            return all_functions.find_one_by_FullName(name)['Expression']
 
     def variables(self):
         '''
