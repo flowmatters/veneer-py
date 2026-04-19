@@ -86,6 +86,12 @@ ADDITIONAL_PARAMETERS={
     'RiverSystem.Nodes.WeirNodeModel':COMMON_STORAGE_PARAMETERS[:]+[f'StorageInternal.{p}' for p in OTHER_STORAGE_PARAMETERS]+['ApplyUnaccountedDifference'],
     'RiverSystem.Nodes.SupplyPoint.ExtractionNodeModel':[
         'IsExtractive'
+    ],
+    'Dynamic_SedNet.Models.SedNet_Sediment_Generation':[
+        'GULLYmodel.gullyModelType'
+    ],
+    'Dynamic_SedNet.Models.SedNet_EMC_And_Gully_Model':[
+        'GULLYmodel.gullyModelType'
     ]
 }
 
