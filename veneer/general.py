@@ -129,11 +129,12 @@ class Veneer(object):
             url = url[1:]
         return '%s://%s:%d%s/%s'%(self.protocol,self.host,self.port,self.prefix,url)
 
-    def retrieve_json(self, url):
+    def retrieve_json(self, url, allow_status=None):
         '''
         Retrieve data from the Veneer service at the given url path.
 
         url: Path to required resource, relative to the root of the Veneer service.
+        allow_status: Optional list of HTTP status codes that should return None instead of raising an exception.
         '''
         query_url = self.prefix + url + self.data_ext
         if PRINT_URLS:
@@ -142,6 +143,8 @@ class Veneer(object):
             text = open(query_url).read()
         else:
             resp = self._session.get(self.url(query_url))
+            if allow_status and resp.status_code in allow_status:
+                return None
             resp.raise_for_status()
             text = resp.text
 
@@ -470,7 +473,9 @@ class Veneer(object):
             all_runs = self.retrieve_json('/runs')
             result = self.retrieve_json(all_runs[-1]['RunUrl'])
         else:
-            result = self.retrieve_json('/runs/%s' % str(run))
+            result = self.retrieve_json('/runs/%s' % str(run), allow_status=[404])
+        if result is None:
+            return None
         result['Results'] = SearchableList(result['Results'])
         return result
 
