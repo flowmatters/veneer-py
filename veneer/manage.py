@@ -3,15 +3,18 @@ from psutil import Process
 from queue import Queue, Empty  # python 3.x
 from threading  import Thread
 import sys
-from time import sleep
+from time import sleep, time as _now
 from glob import glob
 import atexit
 import os
+import re
 import tempfile
 import shutil
 import threading
 from .general import Veneer
 from pathlib import Path
+import logging
+logger = logging.getLogger(__name__)
 
 # Non blocking IO solution from http://stackoverflow.com/a/4896288
 ON_POSIX = 'posix' in sys.builtin_module_names
@@ -22,6 +25,15 @@ VENEER_EXE='D:\\src\\projects\\Veneer\\Output\\FlowMatters.Source.VeneerCmd.exe'
 IGNORE_LOGS=[
     'log4net:ERROR Failed to find configuration section'
 ]
+
+# Kestrel's authoritative "bound" message (Source 6+/.NET 8). Reflects the actual port after any
+# increment from port-in-use collisions.
+_KESTREL_BOUND_RE = re.compile(r'Now listening on:\s*http://[^:/\s]+:(\d+)')
+# Veneer's own port announcement. Legacy format used a space separator (" port N"); Source 6 uses
+# "http port:N" (colon). The latter can reflect the REQUESTED port for the first instance on a
+# taken port and is then superseded by a second emission with the actual port. Treat as a hint
+# only; the Kestrel message is authoritative when present.
+_VENEER_BOUND_RE = re.compile(r'Started Source RESTful Service on (?:http )?port[ :]\s*(\d+)')
 
 def _dirname(path):
     return os.path.dirname(str(path))
@@ -97,7 +109,7 @@ def find_veneer_cmd_line_exe(project_fn=None,source_version=None):
                     return path_in_many
     return VENEER_EXE
 
-def create_command_line(veneer_path,source_version="4.1.1",
+def create_command_line(veneer_path,source_version=None,
                         source_path='C:\\Program Files\\eWater',
                         dest=None,
                         force=True,
@@ -108,9 +120,11 @@ def create_command_line(veneer_path,source_version="4.1.1",
 
     veneer_path: Directory containing the Veneer files
 
-    source_version: Version of Source to locate and copy
+    source_version: Version of Source to locate within source_path (e.g. "4.1.1"). If None (default),
+                    source_path is treated as the Source build directory directly.
 
-    source_path: Base installation directory for eWater Source
+    source_path: Base installation directory for eWater Source, or (when source_version is None) the
+                 Source build directory itself.
 
     dest: Destination to copy Source and Veneer to. If not provided, a temporary directory will be created.
 
@@ -123,6 +137,10 @@ def create_command_line(veneer_path,source_version="4.1.1",
 
     Note: It is your responsibility to delete the copy of Source and Veneer from the destination directory
     when you are finished with it! (Even if a temporary directory is used!)
+
+    Copy order: Veneer is copied first, then Source. Where files collide (commonly Microsoft/framework
+    DLLs), Source's versions win — this is required for Source 6 / .NET 8 builds where Veneer and Source
+    each ship their own copies of overlapping dependencies and only Source's versions are compatible.
     '''
 
     if dest: dest = Path(dest)
@@ -142,41 +160,31 @@ def create_command_line(veneer_path,source_version="4.1.1",
         available = [str(p) for p in Path(source_path).glob('Source *')]
         versions = [_basename(ver).split(' ')[1] for ver in available]
         chosen_one = [ver for ver in versions if ver.startswith(source_version)][-1]
-        #print(available,versions,chosen_one)
         chosen_one_full = [product_ver for product_ver in available if chosen_one in product_ver][0]
+        source_dir = Path(source_path)/chosen_one_full
     else:
-        chosen_one_full = source_path
+        source_dir = Path(source_path)
 
-    source_dir = Path(source_path)/chosen_one_full
     source_files = list(source_dir.glob('*.*'))
     if not len(source_files):
-        raise Exception('Source files not found at %s'%source_path)
+        raise Exception('Source files not found at %s'%source_dir)
 
-    veneer_files = list(Path(veneer_path).glob('*.*'))
+    veneer_path = Path(veneer_path)
+    veneer_files = list(veneer_path.glob('*.*'))
     if not len(veneer_files):
         raise Exception('Veneer files not found at %s'%veneer_path)
 
-    for f in source_files:
-        if not f.is_file():
-            continue
-        shutil.copyfile(str(f),str(Path(dest)/_basename(f)))
+    def _copy_tree(src_root, dst_root):
+        for child in src_root.iterdir():
+            if child.is_file():
+                shutil.copyfile(str(child), str(dst_root/child.name))
+            elif child.is_dir():
+                shutil.copytree(str(child), str(dst_root/child.name), dirs_exist_ok=True)
 
-    if Path(veneer_path)!=dest:
-        for f in veneer_files:
-            if not f.is_file():
-                continue
-            shutil.copyfile(str(f),str(Path(dest)/_basename(f)))
-
-    extra_dirs = ['x86','x64']
-    for e in extra_dirs:
-        extra = source_dir / e
-        if not extra.exists():
-            continue
-        extra_dest = Path(dest) / e
-        if not extra_dest.exists():
-            extra_dest.mkdir()
-        for f in extra.glob('*.*'):
-            shutil.copy(f,extra_dest/_basename(f))
+    # Copy Veneer first, then Source — Source wins on overlapping Microsoft/framework DLLs.
+    if veneer_path != dest:
+        _copy_tree(veneer_path, dest)
+    _copy_tree(source_dir, dest)
 
     exe_path = Path(dest)/'FlowMatters.Source.VeneerCmd.exe'
     assert exe_path.exists()
@@ -288,6 +296,9 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
        ports - the port numbers used for each copy of the server
        ((stdout_queues,stdout_threads),(stderr_queues,stderr_threads)) if return_io
     """
+    if problem_launcher_warning := _detect_problematic_launcher():
+        logger.warning(problem_launcher_warning)
+
     if not hasattr(ports,'__len__'):
         ports = list(range(ports,ports+n_instances))
 
@@ -360,11 +371,19 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
 
     ready = [False for p in range(n_instances)]
     failed = [False for p in range(n_instances)]
+    # True once Kestrel has reported the actual bound port for instance i. Prefer this over any
+    # earlier hint from Veneer's own "Started Source RESTful Service" line (which can reflect the
+    # requested port before a port-in-use increment on Source 6+).
+    port_authoritative = [False for p in range(n_instances)]
+    # Timestamp of "Server started. Ctrl-C to exit" for instance i. Used to fall back to the
+    # Veneer-announced port if Kestrel's authoritative message never arrives (legacy Source).
+    server_started_at = [None for p in range(n_instances)]
+    LEGACY_GRACE_SECS = 5.0
 
     all_ready = False
     any_failed = False
     actual_ports = ports[:]
-    while not (all_ready or any_failed):       
+    while not (all_ready or any_failed):
         for i in range(n_instances):
             if not processes[i].poll() is None:
                 failed[i]=True
@@ -390,18 +409,19 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
                 except Empty:
                     end = True
                     sleep(0.05)
-    #               print('.')
-    #               sys.stdout.flush()
                 else:
-                    if 'Started Source RESTful Service on port' in line:
-                        actual_ports[i] = int(line.split(':')[-1])
+                    kestrel_match = _KESTREL_BOUND_RE.search(line)
+                    if kestrel_match:
+                        actual_ports[i] = int(kestrel_match.group(1))
+                        port_authoritative[i] = True
+                    else:
+                        veneer_match = _VENEER_BOUND_RE.search(line)
+                        if veneer_match and not port_authoritative[i]:
+                            actual_ports[i] = int(veneer_match.group(1))
 
                     if line.startswith('Server started. Ctrl-C to exit'):
-                        ready[i] = True
-                        end = True
-                        if not quiet:
-                            print('Server %d on port %d is ready'%(i,ports[i]))
-                        sys.stdout.flush()
+                        if server_started_at[i] is None:
+                            server_started_at[i] = _now()
                     elif line.startswith('Cannot find project') or line.startswith('Unhandled exception'):
                         end = True
                         failed[i] = True
@@ -412,6 +432,20 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
                         if not quiet:
                             print("[%d] %s"%(i,line))
                         sys.stdout.flush()
+
+            # Decide readiness per instance after each drain pass.
+            # - Kestrel message seen: authoritative port, ready immediately.
+            # - Legacy Source (no Kestrel output): after "Server started" plus a short grace,
+            #   accept the Veneer-announced port. Without any port signal, fall back to the
+            #   requested port — the legacy behaviour prior to this change.
+            if not ready[i] and not failed[i]:
+                legacy_timeout = (server_started_at[i] is not None
+                                  and (_now() - server_started_at[i]) >= LEGACY_GRACE_SECS)
+                if port_authoritative[i] or legacy_timeout:
+                    ready[i] = True
+                    if not quiet:
+                        print('Server %d on port %d is ready'%(i,actual_ports[i]))
+                    sys.stdout.flush()
         all_ready = len([r for r in ready if not r])==0
         any_failed = len([f for f in failed if f])>0
 
@@ -535,3 +569,22 @@ def quote_if_space(fn:str)->str:
     if (' ' in fn) and (not fn.startswith('"')) and (not fn.endswith('"')):
         return '"%s"'%fn
     return fn
+
+def _detect_problematic_launcher():
+    """Return a warning string if the current process chain looks like it may
+    spawn child processes without proper interactive window station
+    attachment, otherwise None."""
+    try:
+        import psutil, sys
+        if not sys.platform.startswith('win'):
+            return None
+        names = {p.name().lower() for p in psutil.Process().parents()}
+        if 'code.exe' in names:
+            return ('Detected VS Code in parent process chain. Launching Veneer '
+                    'instances from a VS Code Jupyter notebook is known to cause '
+                    'intermittent startup hangs. If you see Veneer instances '
+                    'unable to respond to requests, run the same code from Jupyter Lab '
+                    'or a plain python file. See veneer-py docs.')
+    except Exception:
+        pass
+    return None
