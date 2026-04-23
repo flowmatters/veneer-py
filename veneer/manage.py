@@ -252,7 +252,8 @@ def overwrite_plugin_configuration(source_binaries,project_fn=None,plugin_fn=Non
 def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
           script=True, veneer_exe=None,overwrite_plugins=None,return_io=False,
           model=None,start_new_session=False,additional_plugins=[],
-          custom_endpoints=[],projects=None,quiet=False):
+          custom_endpoints=[],projects=None,quiet=False,
+          detached=False,detached_timeout=120.0,leave_open=False):
     """
     Start one or more copies of the Veneer command line progeram with a given project file
 
@@ -291,11 +292,47 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
 
     - quiet - Suppress all output from the servers (default: False)
 
+    - detached - If True, spawn a sibling Python process in a new terminal window to host the Veneer
+                 instances, rather than creating them as children of the current process. Useful when
+                 the current interpreter is hosted by something that interferes with child-process IO
+                 (e.g. the VS Code Jupyter extension). Windows only; raises NotImplementedError
+                 elsewhere. Note: when detached=True, return_io is ignored.
+
+    - detached_timeout - Maximum seconds to wait for the detached launcher to become ready
+                         (default: 120.0). Only used when detached=True.
+
+    - leave_open - If True (and detached=True), the spawned terminal window is left open when Veneer
+                   children are killed, so the user can read final log output. Default False, which
+                   lets the terminal close once its children die.
+
         returns processes, ports
        processes - list of process objects that can be used to terminate the servers
        ports - the port numbers used for each copy of the server
        ((stdout_queues,stdout_threads),(stderr_queues,stderr_threads)) if return_io
     """
+    if detached:
+        return _start_detached(
+            start_kwargs=dict(
+                project_fn=str(project_fn) if project_fn else None,
+                n_instances=n_instances,
+                ports=ports if isinstance(ports, int) else list(ports),
+                debug=debug,
+                remote=remote,
+                script=script,
+                veneer_exe=str(veneer_exe) if veneer_exe else None,
+                overwrite_plugins=overwrite_plugins,
+                return_io=False,
+                model=model,
+                start_new_session=False,
+                additional_plugins=list(additional_plugins) if additional_plugins else [],
+                custom_endpoints=list(custom_endpoints) if custom_endpoints else [],
+                projects=[str(p) for p in projects] if projects else None,
+                quiet=quiet,
+            ),
+            detached_timeout=detached_timeout,
+            leave_open=leave_open,
+        )
+
     if problem_launcher_warning := _detect_problematic_launcher():
         logger.warning(problem_launcher_warning)
 
@@ -459,6 +496,93 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
     if return_io:
         return processes,actual_ports,((std_out_queues,std_out_threads),(std_err_queues,std_err_threads))
     return processes,actual_ports
+
+def _start_detached(start_kwargs, detached_timeout, leave_open):
+    """Spawn ``veneer.detached_start`` in a new terminal window, wait for it
+    to publish actual ports, and return ``(processes, actual_ports)`` in the
+    same shape as the in-process ``start()`` path.
+
+    Windows-only for now. On POSIX, raises NotImplementedError.
+    """
+    import json
+    import subprocess
+    from psutil import Process as _PsProcess
+
+    from .detached_handshake import (
+        HandshakeStatus,
+        wait_for_status,
+        write_handshake,
+    )
+
+    if not sys.platform.startswith("win"):
+        raise NotImplementedError(
+            "detached=True is currently Windows-only. Open an issue with your "
+            "preferred terminal emulator if you need POSIX support."
+        )
+
+    work_dir = Path(tempfile.mkdtemp(prefix="veneer_detached_"))
+    config_path = work_dir / "config.json"
+    handshake_path = work_dir / "handshake.json"
+
+    config_path.write_text(json.dumps({
+        "handshake_path": str(handshake_path),
+        "start_kwargs": start_kwargs,
+    }))
+
+    write_handshake(handshake_path, {
+        "status": HandshakeStatus.STARTING,
+        "launcher_pid": None,
+        "veneer_pids": [],
+        "actual_ports": [],
+        "error": None,
+    })
+
+    # Fix 1: Register work_dir cleanup before the wait so KeyboardInterrupt also triggers it.
+    def _cleanup_work_dir():
+        shutil.rmtree(work_dir, ignore_errors=True)
+    atexit.register(_cleanup_work_dir)
+
+    # Fix 4: Use list2cmdline so paths with spaces are quoted correctly on Windows.
+    title = f"Veneer launcher ({start_kwargs.get('n_instances') or 1})"
+    inner = subprocess.list2cmdline(
+        [sys.executable, "-m", "veneer.detached_start", str(config_path)]
+    )
+    cmd = f'start "{title}" cmd /k {inner}'
+    subprocess.Popen(cmd, shell=True)
+
+    try:
+        payload = wait_for_status(
+            handshake_path,
+            {HandshakeStatus.READY, HandshakeStatus.FAILED},
+            timeout=detached_timeout,
+        )
+    except TimeoutError:
+        raise TimeoutError(
+            f"Detached Veneer launcher did not become ready within "
+            f"{detached_timeout}s. Config at {config_path}, handshake at "
+            f"{handshake_path}."
+        )
+
+    if payload["status"] == HandshakeStatus.FAILED:
+        raise RuntimeError(
+            f"Detached Veneer launcher failed: {payload.get('error')}"
+        )
+
+    processes = [_PsProcess(pid) for pid in payload["veneer_pids"]]
+    actual_ports = payload["actual_ports"]
+
+    # Fix 3: Reconstruct a Process for the launcher PID so we can kill it when leave_open=False.
+    launcher_proc = _PsProcess(payload["launcher_pid"]) if payload.get("launcher_pid") else None
+
+    # Fix 2: Always register Veneer children for atexit teardown regardless of leave_open.
+    kill_all_on_exit(processes)
+
+    # Fix 3: Kill the launcher terminal only when leave_open=False (registered separately so
+    # callers that call kill_all_now(processes) directly don't accidentally hit the launcher).
+    if not leave_open and launcher_proc is not None:
+        kill_all_on_exit([launcher_proc])
+
+    return processes, actual_ports
 
 def print_from_all(queues,prefix=''):
     for i in range(len(queues)):
