@@ -107,7 +107,7 @@ class VeneerCluster(object):
     def __init__(self,project_file=None,veneer_exe=None,n_workers=None,debug=False,remote=False,
           script=True,overwrite_plugins=None,custom_endpoints=None,additional_plugins=None,
           copy=False,tempdir_prefix='source-cluster-',copy_extras=None,existing='raise',
-          existing_cluster=None):
+          existing_cluster=None,cleanup_on_failure=True):
         '''
         Create a cluster of Veneer instances, each running in a separate process
 
@@ -142,11 +142,19 @@ class VeneerCluster(object):
             - 'ignore': ignore the existing directories
         existing_cluster: str
             The path to an existing cluster to use. If None, a new cluster will be created
+        cleanup_on_failure: bool
+            If True (default), tear down any partially-started resources (Veneer
+            instances, temp directories, dask cluster) when startup fails. Set to
+            False to leave them running for investigation.
         '''
 
         self.wrap = partial(run_on_cluster,self)
         self.v = ClusterVeneerClient(self)
         self._workers = None
+        self.veneer_processes = []
+        self.temp_directories = []
+        self.dask_cluster = None
+        self.dask_client = None
 
         if existing_cluster is not None:
             if os.path.exists(existing_cluster):
@@ -179,40 +187,81 @@ class VeneerCluster(object):
             n_workers = min(os.cpu_count(),MAX_DEFAULT_CLUSTER_SIZE)
         self.n_workers = n_workers or os.cpu_count()
 
-        logger.info('Initialising DASK cluster with %d workers',self.n_workers)
-        self.dask_cluster = LocalCluster(threads_per_worker=1,n_workers=self.n_workers)
-        self.dask_client = Client(self.dask_cluster)
+        try:
+            logger.info('Initialising DASK cluster with %d workers',self.n_workers)
+            self.dask_cluster = LocalCluster(threads_per_worker=1,n_workers=self.n_workers)
+            self.dask_client = Client(self.dask_cluster)
 
-        if not copy and (copy_extras is not None) and len(copy_extras):
-            logger.info('Copying project file for each instance to copy extras')
-            copy = True
-        self.copy_projects = copy
+            if not copy and (copy_extras is not None) and len(copy_extras):
+                logger.info('Copying project file for each instance to copy extras')
+                copy = True
+            self.copy_projects = copy
 
-        if copy:
-            logger.info('Creating %d copies of project file %s',n_workers,project_file)
-            creation = [copy_project(tempdir_prefix,project_file,copy_extras or []) for _ in range(n_workers)]
-            self.temp_directories = dask.compute(*creation)
-            self.project_files = [os.path.join(t,os.path.basename(self.original_project_file)) for t in self.temp_directories]
-        else:
+            if copy:
+                logger.info('Creating %d copies of project file %s',n_workers,project_file)
+                creation = [copy_project(tempdir_prefix,project_file,copy_extras or []) for _ in range(n_workers)]
+                self.temp_directories = list(dask.compute(*creation))
+                self.project_files = [os.path.join(t,os.path.basename(self.original_project_file)) for t in self.temp_directories]
+            else:
+                self.project_files = [self.original_project_file] * self.n_workers
+
+            logger.info('Starting %d Veneer instances',self.n_workers)
+            veneer_processes, veneer_ports = start(
+                n_instances=self.n_workers,debug=debug,remote=remote,
+                script=script, veneer_exe=veneer_exe,overwrite_plugins=overwrite_plugins,
+                additional_plugins=additional_plugins or [],custom_endpoints=custom_endpoints or [],
+                projects=self.project_files
+            )
+            self.veneer_ports = veneer_ports
+            self.veneer_processes = veneer_processes
+
+            logger.info('Assigning Veneer instances to DASK workers')
+            self.worker_affinity = {}
+            worker_info = self.dask_cluster.workers
+            veneer_info_map = self.run_on_each(scenario_info)
+
+            self.worker_affinity = {w.pid:(info['port'],os.path.dirname(info['ProjectFullFilename'])) for w,info in zip(worker_info.values(),veneer_info_map)}
+        except BaseException:
+            if cleanup_on_failure:
+                logger.exception('Cluster startup failed; cleaning up partial resources')
+                self._cleanup_partial()
+            else:
+                logger.exception('Cluster startup failed; leaving partial resources in place for investigation')
+            raise
+
+    def _cleanup_partial(self):
+        '''
+        Tear down any resources that may have been acquired during a failed startup.
+        Tolerant of partial state — each step is guarded independently.
+        '''
+        if self.veneer_processes:
+            try:
+                kill_all_now(self.veneer_processes)
+            except Exception:
+                logger.exception('Error killing Veneer processes during cleanup')
+            self.veneer_processes = []
+
+        if self.temp_directories:
+            for d in self.temp_directories:
+                try:
+                    shutil.rmtree(d)
+                except Exception:
+                    logger.exception('Error removing temp directory %s during cleanup',d)
             self.temp_directories = []
-            self.project_files = [self.original_project_file] * self.n_workers
 
-        logger.info('Starting %d Veneer instances',self.n_workers)
-        veneer_processes, veneer_ports = start(
-            n_instances=self.n_workers,debug=debug,remote=remote,
-            script=script, veneer_exe=veneer_exe,overwrite_plugins=overwrite_plugins,
-            additional_plugins=additional_plugins or [],custom_endpoints=custom_endpoints or [],
-            projects=self.project_files
-        )
-        self.veneer_ports = veneer_ports
-        self.veneer_processes = veneer_processes
+        if self.dask_client is not None:
+            try:
+                self.dask_client.close()
+            except Exception:
+                logger.exception('Error closing dask client during cleanup')
+            self.dask_client = None
 
-        logger.info('Assigning Veneer instances to DASK workers')
-        self.worker_affinity = {}
-        worker_info = self.dask_cluster.workers
-        veneer_info_map = self.run_on_each(scenario_info)
-
-        self.worker_affinity = {w.pid:(info['port'],os.path.dirname(info['ProjectFullFilename'])) for w,info in zip(worker_info.values(),veneer_info_map)}
+        if self.dask_cluster is not None:
+            try:
+                self.dask_cluster.close()
+            except Exception:
+                logger.exception('Error closing dask cluster during cleanup')
+            self.dask_cluster = None
 
     @property
     def workers(self):
@@ -338,6 +387,9 @@ def main():
                         help='Save cluster config to a JSON file for later reconnection')
     parser.add_argument('--debug', action='store_true',
                         help='Show debug output from Veneer instances during startup')
+    parser.add_argument('--no-cleanup-on-failure', dest='cleanup_on_failure',
+                        action='store_false', default=True,
+                        help='Leave partially-started resources running if startup fails (for investigation)')
 
     args = parser.parse_args()
 
@@ -356,6 +408,7 @@ def main():
         copy=args.copy,
         copy_extras=args.copy_extras,
         existing=args.existing,
+        cleanup_on_failure=args.cleanup_on_failure,
     )
 
     if args.save:
