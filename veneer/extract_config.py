@@ -578,6 +578,15 @@ def _get_veneer(model_fn,port,veneerpath,sourceversion,buildpath,plugins,**kwarg
     
     process_details = {}
     def start():
+        # Validate the project file up-front. Otherwise Veneer would start, fail to load the
+        # project, and the manage.start() failure message — though now more detailed — would
+        # be a less direct way to surface what is really a simple "file not found" condition.
+        if model_fn and not os.path.exists(model_fn):
+            raise FileNotFoundError(
+                'Source project file not found: %r. '
+                'Pass the full path to an existing .rsproj as the first positional argument.'
+                % model_fn
+            )
         proc,port = manage.start(model_fn,1,debug=True,remote=kwargs.get('remote',True),veneer_exe=exe_path,additional_plugins=plugins)
         process_details['pid'] = proc[0]
         client = veneer.Veneer(port[0])
