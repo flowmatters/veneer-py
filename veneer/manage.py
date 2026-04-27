@@ -249,6 +249,38 @@ def overwrite_plugin_configuration(source_binaries,project_fn=None,plugin_fn=Non
     shutil.copyfile(str(plugin_fn),str(plugin_dest_file))
     assert plugin_dest_file.exists()
 
+def _format_startup_failure(n_instances, failed, ports, cmd_lines, processes,
+                            captured_stdout, captured_stderr, tail_lines=40):
+    """Build a descriptive exception message for one or more failed Veneer
+    instances, including the captured stdout/stderr tail so that callers see
+    the actual underlying error (e.g. missing rsproj, port already in use,
+    missing plugin) rather than a generic 'failed to start'."""
+    msg_lines = ['One or more instances of Veneer failed to start.']
+    for i in range(n_instances):
+        if not failed[i]:
+            continue
+        msg_lines.append('')
+        msg_lines.append('  Instance %d (requested port %d):' % (i, ports[i]))
+        msg_lines.append('    command: %s' % cmd_lines[i])
+        exit_code = processes[i].poll()
+        if exit_code is not None:
+            msg_lines.append('    exit code: %s' % exit_code)
+        else:
+            msg_lines.append('    exit code: (still running when failure detected)')
+
+        stderr_tail = [ln.rstrip('\r\n') for ln in captured_stderr[i][-tail_lines:]]
+        stdout_tail = [ln.rstrip('\r\n') for ln in captured_stdout[i][-tail_lines:]]
+        if stderr_tail:
+            msg_lines.append('    stderr (last %d lines):' % len(stderr_tail))
+            msg_lines.extend('      ' + ln for ln in stderr_tail)
+        if stdout_tail:
+            msg_lines.append('    stdout (last %d lines):' % len(stdout_tail))
+            msg_lines.extend('      ' + ln for ln in stdout_tail)
+        if not stderr_tail and not stdout_tail:
+            msg_lines.append('    (no output captured before exit)')
+    return '\n'.join(msg_lines)
+
+
 def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
           script=True, veneer_exe=None,overwrite_plugins=None,return_io=False,
           model=None,start_new_session=False,additional_plugins=[],
@@ -408,6 +440,13 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
 
     ready = [False for p in range(n_instances)]
     failed = [False for p in range(n_instances)]
+    # Buffer all stdout/stderr per instance during startup so that, if any instance fails, we
+    # can include the actual error output in the exception we raise. Without this, callers
+    # (including non-interactive ones whose stdout is captured/redirected) only see the
+    # generic "failed to start" message and lose the specific reason — e.g. that the rsproj
+    # file does not exist.
+    captured_stdout = [[] for _ in range(n_instances)]
+    captured_stderr = [[] for _ in range(n_instances)]
     # True once Kestrel has reported the actual bound port for instance i. Prefer this over any
     # earlier hint from Veneer's own "Started Source RESTful Service" line (which can reflect the
     # requested port before a port-in-use increment on Source 6+).
@@ -422,7 +461,8 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
     actual_ports = ports[:]
     while not (all_ready or any_failed):
         for i in range(n_instances):
-            if not processes[i].poll() is None:
+            process_exited = processes[i].poll() is not None
+            if process_exited:
                 failed[i]=True
 
             end=False
@@ -434,7 +474,9 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
                     pass
                 else:
                     if not ignore_log(line):
-                        print('ERROR[%d] %s'%(i,line))
+                        captured_stderr[i].append(line)
+                        if not quiet:
+                            print('ERROR[%d] %s'%(i,line))
 
             if ready[i]:
                 continue
@@ -447,6 +489,7 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
                     end = True
                     sleep(0.05)
                 else:
+                    captured_stdout[i].append(line)
                     kestrel_match = _KESTREL_BOUND_RE.search(line)
                     if kestrel_match:
                         actual_ports[i] = int(kestrel_match.group(1))
@@ -463,7 +506,7 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
                         end = True
                         failed[i] = True
                         if not quiet:
-                            print('Server %d on port %d failed to start'%(i,ports[i]))
+                            print('Server %d on port %d failed to start: %s'%(i,ports[i],line.rstrip('\r\n')))
                         sys.stdout.flush()
                     if debug and not line.startswith('Unable to delete'):
                         if not quiet:
@@ -487,9 +530,35 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
         any_failed = len([f for f in failed if f])>0
 
     if any_failed:
+        # Give the reader threads a moment to drain any remaining buffered output from
+        # processes that have just exited, then pull whatever is left in the queues. This
+        # ensures the actual error message (e.g. the line naming the missing rsproj) makes
+        # it into the exception even if it arrived after we first noticed the process had
+        # exited.
+        sleep(0.5)
+        for i in range(n_instances):
+            while True:
+                try:
+                    line = std_err_queues[i].get_nowait().decode('utf-8')
+                except Empty:
+                    break
+                if not ignore_log(line):
+                    captured_stderr[i].append(line)
+            while True:
+                try:
+                    line = std_out_queues[i].get_nowait().decode('utf-8')
+                except Empty:
+                    break
+                captured_stdout[i].append(line)
+
         for p in processes:
-            p.kill()
-        raise Exception('One or more instances of Veneer failed to start. Try again with debug=True to see output')
+            if p.poll() is None:
+                p.kill()
+
+        raise Exception(_format_startup_failure(
+            n_instances, failed, ports, cmd_lines, processes,
+            captured_stdout, captured_stderr,
+        ))
 
     kill_all_on_exit(processes)
 
