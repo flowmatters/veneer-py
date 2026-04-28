@@ -832,7 +832,7 @@ class Veneer(object):
         series, units, dates = _normalise_time_series_response(data,name_fn,None)
         return self._create_timeseries_dataframe(series, dates)
 
-    def retrieve_multiple_time_series(self, run='latest', run_data=None, criteria={}, timestep='daily', name_fn=name_element_variable,use_regexp=True):
+    def retrieve_multiple_time_series(self, run='latest', run_data=None, criteria={}, timestep='daily', name_fn=name_element_variable,use_regexp=True, precision=None, **query_options):
         """
         Retrieve multiple time series from a run according to some criteria.
 
@@ -864,8 +864,18 @@ class Veneer(object):
           * veneer.name_element_variable (DEFAULT: users the name of the network element and the name of the variable)
           * veneer.name_for_location (just use the name of the network element)
           * veneer.name_for_variable (just use the name of the variable)
+
+        precision: Optional integer specifying the number of decimal places returned by the server.
+
+        Additional keyword arguments are appended to the time series URL as query string parameters,
+        allowing forward-compatibility with new server-side options. Values of None are skipped.
         """
         suffix = self.timeseries_suffix(timestep)
+        if precision is not None:
+            query_options['precision'] = precision
+        query_string = '&'.join('%s=%s' % (k, quote(str(v))) for k, v in query_options.items() if v is not None)
+        if query_string:
+            suffix = suffix + '?' + query_string
 
         if run_data is None:
             run_data = self.retrieve_run(run)
