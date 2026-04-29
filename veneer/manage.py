@@ -64,7 +64,9 @@ def kill_all_on_exit(processes):
     atexit.register(end_processes)
 
 def kill_all_now(processes):
-    processes = [p if isinstance(p,Popen) else Process(p) for p in processes]
+    if isinstance(processes, (int, Popen, Process)):
+        processes = [processes]
+    processes = [p if isinstance(p, (Popen, Process)) else Process(p) for p in processes]
     for p in processes:
         p.kill()
     for p in processes:
