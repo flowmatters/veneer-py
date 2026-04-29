@@ -344,6 +344,13 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
        ports - the port numbers used for each copy of the server
        ((stdout_queues,stdout_threads),(stderr_queues,stderr_threads)) if return_io
     """
+    if additional_plugins:
+        missing = [p for p in additional_plugins if not os.path.exists(p)]
+        if missing:
+            raise FileNotFoundError(
+                'additional_plugins not found: %s' % ', '.join(repr(p) for p in missing)
+            )
+
     if detached:
         return _start_detached(
             start_kwargs=dict(
