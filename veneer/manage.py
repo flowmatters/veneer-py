@@ -287,6 +287,7 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
           script=True, veneer_exe=None,overwrite_plugins=None,return_io=False,
           model=None,start_new_session=False,additional_plugins=[],
           custom_endpoints=[],projects=None,quiet=False,
+          progress_callback=None,
           detached=False,detached_timeout=120.0,leave_open=False):
     """
     Start one or more copies of the Veneer command line progeram with a given project file
@@ -325,6 +326,12 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
     - projects - List of project files to load. Should be the same length as n_instances
 
     - quiet - Suppress all output from the servers (default: False)
+
+    - progress_callback - Optional callable invoked at startup milestones with
+                     (stage: str, current: int, total: int, message: str).
+                     Stages: 'veneer-start'. The callback runs on the calling
+                     thread; exceptions raised by the callback are caught and
+                     logged but do not interrupt startup.
 
     - detached - If True, spawn a sibling Python process in a new terminal window to host the Veneer
                  instances, rather than creating them as children of the current process. Useful when
@@ -379,6 +386,14 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
 
     if not hasattr(ports,'__len__'):
         ports = list(range(ports,ports+n_instances))
+
+    def _emit_progress(stage, current, total, message):
+        if progress_callback is None:
+            return
+        try:
+            progress_callback(stage, current, total, message)
+        except Exception:
+            logger.warning('progress_callback raised', exc_info=True)
 
     if not veneer_exe:
         veneer_exe = find_veneer_cmd_line_exe(project_fn)
@@ -444,6 +459,7 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
             cmd_line = 'start "Veneer server for %s" %s'%(os.path.basename(project_fn),cmd_line)
             kwargs['shell']=True
     processes = [Popen(cmd,stdout=PIPE,stderr=PIPE,bufsize=1, close_fds=ON_POSIX, **kwargs) for cmd in cmd_lines]
+    _emit_progress('veneer-start', 0, n_instances, f'Starting {n_instances} Veneer instances')
     std_out_queues,std_out_threads = configure_non_blocking_io(processes,'stdout')
     std_err_queues,std_err_threads = configure_non_blocking_io(processes,'stderr')
 
@@ -532,6 +548,9 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
                                   and (_now() - server_started_at[i]) >= LEGACY_GRACE_SECS)
                 if port_authoritative[i] or legacy_timeout:
                     ready[i] = True
+                    ready_count = sum(ready)
+                    _emit_progress('veneer-start', ready_count, n_instances,
+                                   f'Starting Veneer instances ({ready_count}/{n_instances} ready)')
                     if not quiet:
                         print('Server %d on port %d is ready'%(i,actual_ports[i]))
                     sys.stdout.flush()
