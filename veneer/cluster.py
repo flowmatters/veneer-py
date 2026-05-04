@@ -14,6 +14,17 @@ logger = logging.getLogger(__name__)
 
 MAX_DEFAULT_CLUSTER_SIZE=64
 
+def _make_emitter(callback):
+    """Return a (stage, current, total, message) emitter that swallows callback exceptions."""
+    def _emit(stage, current, total, message):
+        if callback is None:
+            return
+        try:
+            callback(stage, current, total, message)
+        except Exception:
+            logger.warning('progress_callback raised', exc_info=True)
+    return _emit
+
 @dask.delayed
 def copy_project(prefix,project_file,extras):
     assert os.path.exists(project_file)
@@ -107,7 +118,7 @@ class VeneerCluster(object):
     def __init__(self,project_file=None,veneer_exe=None,n_workers=None,debug=False,remote=False,
           script=True,overwrite_plugins=None,custom_endpoints=None,additional_plugins=None,
           copy=False,tempdir_prefix='source-cluster-',copy_extras=None,existing='raise',
-          existing_cluster=None,cleanup_on_failure=True):
+          existing_cluster=None,cleanup_on_failure=True,progress_callback=None):
         '''
         Create a cluster of Veneer instances, each running in a separate process
 
@@ -146,7 +157,16 @@ class VeneerCluster(object):
             If True (default), tear down any partially-started resources (Veneer
             instances, temp directories, dask cluster) when startup fails. Set to
             False to leave them running for investigation.
+        progress_callback: Optional callable invoked at startup/shutdown milestones with
+            (stage: str, current: int, total: int, message: str).
+            Stages: 'dask-init', 'project-copy', 'veneer-start' (forwarded from
+            manage.start), 'affinity-mapping', 'ready', 'connect-existing',
+            'shutdown-veneer', 'shutdown-temp', 'shutdown-dask'. The callback runs
+            on the calling thread; exceptions are caught and logged.
         '''
+
+        self._progress_callback = progress_callback
+        emit = _make_emitter(progress_callback)
 
         self.wrap = partial(run_on_cluster,self)
         self.v = ClusterVeneerClient(self)
@@ -166,6 +186,7 @@ class VeneerCluster(object):
             else:
                 raise Exception('Invalid existing cluster: %s'%existing_cluster)
 
+            emit('connect-existing', 0, 1, f"Connecting to existing cluster at {existing_cluster.get('dask_scheduler', '')}")
             self.dask_client = Client(existing_cluster['dask_scheduler'])
             self.dask_cluster = self.dask_client.cluster
 
@@ -177,6 +198,7 @@ class VeneerCluster(object):
             self.temp_directories = existing_cluster['temp_directories']
             self.worker_affinity = {int(k):v for k,v in existing_cluster['worker_affinity'].items()}
             self.copy_projects = existing_cluster['copy_projects']
+            emit('connect-existing', 1, 1, f'Connected to existing cluster ({self.n_workers} workers)')
             return
 
         check_existing_cluster_temp_directory(tempdir_prefix,existing)
@@ -189,8 +211,10 @@ class VeneerCluster(object):
 
         try:
             logger.info('Initialising DASK cluster with %d workers',self.n_workers)
+            emit('dask-init', 0, 1, 'Initialising Dask cluster')
             self.dask_cluster = LocalCluster(threads_per_worker=1,n_workers=self.n_workers)
             self.dask_client = Client(self.dask_cluster)
+            emit('dask-init', 1, 1, 'Dask cluster ready')
 
             if not copy and (copy_extras is not None) and len(copy_extras):
                 logger.info('Copying project file for each instance to copy extras')
@@ -198,10 +222,21 @@ class VeneerCluster(object):
             self.copy_projects = copy
 
             if copy:
-                logger.info('Creating %d copies of project file %s',n_workers,project_file)
-                creation = [copy_project(tempdir_prefix,project_file,copy_extras or []) for _ in range(n_workers)]
-                self.temp_directories = list(dask.compute(*creation))
-                self.project_files = [os.path.join(t,os.path.basename(self.original_project_file)) for t in self.temp_directories]
+                logger.info('Creating %d copies of project file %s', n_workers, project_file)
+                emit('project-copy', 0, n_workers, f'Copying project files (0/{n_workers} complete)')
+                from dask.distributed import as_completed
+                creation = [copy_project(tempdir_prefix, project_file, copy_extras or []) for _ in range(n_workers)]
+                futures = self.dask_client.compute(creation, sync=False)
+                # Track original index alongside each future so the result list is reassembled in order.
+                fut_to_idx = {f: i for i, f in enumerate(futures)}
+                results = [None] * n_workers
+                completed = 0
+                for fut in as_completed(futures):
+                    results[fut_to_idx[fut]] = fut.result()
+                    completed += 1
+                    emit('project-copy', completed, n_workers, f'Copying project files ({completed}/{n_workers} complete)')
+                self.temp_directories = results
+                self.project_files = [os.path.join(t, os.path.basename(self.original_project_file)) for t in self.temp_directories]
             else:
                 self.project_files = [self.original_project_file] * self.n_workers
 
@@ -210,17 +245,21 @@ class VeneerCluster(object):
                 n_instances=self.n_workers,debug=debug,remote=remote,
                 script=script, veneer_exe=veneer_exe,overwrite_plugins=overwrite_plugins,
                 additional_plugins=additional_plugins or [],custom_endpoints=custom_endpoints or [],
-                projects=self.project_files
+                projects=self.project_files,
+                progress_callback=progress_callback,
             )
             self.veneer_ports = veneer_ports
             self.veneer_processes = veneer_processes
 
             logger.info('Assigning Veneer instances to DASK workers')
+            emit('affinity-mapping', 0, 1, 'Mapping Veneer ports to Dask workers')
             self.worker_affinity = {}
             worker_info = self.dask_cluster.workers
             veneer_info_map = self.run_on_each(scenario_info)
 
             self.worker_affinity = {w.pid:(info['port'],os.path.dirname(info['ProjectFullFilename'])) for w,info in zip(worker_info.values(),veneer_info_map)}
+            emit('affinity-mapping', 1, 1, 'Mapping complete')
+            emit('ready', 1, 1, f'Cluster ready ({self.n_workers} workers)')
         except BaseException:
             if cleanup_on_failure:
                 logger.exception('Cluster startup failed; cleaning up partial resources')
