@@ -381,17 +381,42 @@ class VeneerCluster(object):
 
         return self.dask_client.submit(process_results, future_results)
 
-    def shutdown(self):
+    def shutdown(self, progress_callback=None):
         '''
-        Shutdown the cluster. Remove any temporary directories created for the project files
+        Shutdown the cluster. Remove any temporary directories created for the project files.
+
+        progress_callback: optional override for this call only. If None, falls back to the
+                           callback that was passed to the constructor (if any).
         '''
-        kill_all_now(self.veneer_processes)
+        callback = progress_callback if progress_callback is not None else self._progress_callback
+        emit = _make_emitter(callback)
 
-        if len(self.temp_directories):
-            removal = [remove_copy(c) for c in self.temp_directories]
-            _ = dask.compute(*removal,sync=True)
+        n_proc = len(self.veneer_processes)
+        emit('shutdown-veneer', 0, n_proc, f'Stopping Veneer instances (0/{n_proc} stopped)')
+        for k, p in enumerate(self.veneer_processes, start=1):
+            try:
+                p.kill()
+                p.wait()
+            except Exception:
+                logger.exception('Error killing Veneer process %s during shutdown', p)
+            emit('shutdown-veneer', k, n_proc, f'Stopping Veneer instances ({k}/{n_proc} stopped)')
 
-        self.dask_cluster.close()
+        n_temp = len(self.temp_directories)
+        if n_temp:
+            emit('shutdown-temp', 0, n_temp, f'Removing temporary project files (0/{n_temp})')
+            for k, d in enumerate(self.temp_directories, start=1):
+                try:
+                    shutil.rmtree(d)
+                except Exception:
+                    logger.exception('Error removing temp directory %s during shutdown', d)
+                emit('shutdown-temp', k, n_temp, f'Removing temporary project files ({k}/{n_temp})')
+
+        emit('shutdown-dask', 0, 1, 'Closing Dask cluster')
+        try:
+            self.dask_cluster.close()
+        except Exception:
+            logger.exception('Error closing Dask cluster during shutdown')
+        emit('shutdown-dask', 1, 1, 'Cluster shut down')
 
 
 def main():
