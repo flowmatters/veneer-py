@@ -652,7 +652,7 @@ class Veneer(object):
                              for d in details}
                 df = self._create_timeseries_dataframe(data_dict, common_index=False)
                 for d in details:
-                    df[d['Name']].units = d['TimeSeries']['Units']
+                    df[d['Name']].attrs['units'] = d['TimeSeries']['Units']
                 return df
 
             # Slim Time Series...
@@ -665,7 +665,7 @@ class Veneer(object):
             data_dict = {d['Name']: d['TimeSeries']['Values'] for d in details}
             df = pd.DataFrame(data_dict, index=index)
             for d in details:
-                df[d['Name']].units = d['TimeSeries']['Units']
+                df[d['Name']].attrs['units'] = d['TimeSeries']['Units']
 
             extensions._apply_time_series_helpers(df)
             return df
@@ -733,7 +733,7 @@ class Veneer(object):
         def _transform(res):
             if 'TimeSeries' in res:
                 df = self._create_timeseries_dataframe({name: res['TimeSeries']['Events']}, common_index=False)
-                df[df.columns[0]].units = res['TimeSeries']['Units']
+                df[df.columns[0]].attrs['units'] = res['TimeSeries']['Units']
                 return df
             elif 'Items' in res:
                 data_dict = {}
@@ -753,7 +753,7 @@ class Veneer(object):
 
                 df = self._create_timeseries_dataframe(data_dict, common_index=False)
                 for k, v in units:
-                    df[k].units = v
+                    df[k].attrs['units'] = v
                 return df
             return res
 
@@ -908,7 +908,7 @@ class Veneer(object):
 
         result = self._create_timeseries_dataframe(retrieved,dates)
         for k, u in units_store.items():
-            result[k].units = u
+            result[k].attrs['units'] = u
 
         if hasattr(timestep,'__call__'):
             return timestep(result)

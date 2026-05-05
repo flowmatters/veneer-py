@@ -317,15 +317,15 @@ class SourceExtractor(object):
             df = self.v.data_source_item(data_source,column,input_set)
 
             for col in df.columns:
-                if not hasattr(df[col],'units'):
+                if 'units' not in df[col].attrs:
                     logger.debug('No units on ',col)
                     continue
-                units = df[col].units
+                units = df[col].attrs['units']
                 if units=='ML/d':
                     df[col] *= ML_PER_DAY_TO_M3_PER_SEC
                 elif units=='mg/L':
                     df[col] *= MG_PER_LITER_TO_KG_PER_M3
-                df[col].units = units
+                df[col].attrs['units'] = units
 
             self.write_csv(fn_template.substitute(row),df)
 
@@ -506,11 +506,11 @@ def conversion_factor(src_units,dest_units,lbl):
 
 def ensure_units(dataframe,dest_units,lbl=None):
     for col in dataframe.columns:
-        factor = conversion_factor(dataframe[col].units,dest_units,lbl)
+        factor = conversion_factor(dataframe[col].attrs.get('units'),dest_units,lbl)
         if factor != 1.0:
             logger.info(f'Converting {col} with factor {factor}')
             dataframe[col] *= factor
-            dataframe[col].units = dest_units
+            dataframe[col].attrs['units'] = dest_units
     return dataframe
 
 def _base_arg_parser(model=True):
