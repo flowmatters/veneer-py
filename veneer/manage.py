@@ -479,6 +479,12 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
     # Timestamp of "Server started. Ctrl-C to exit" for instance i. Used to fall back to the
     # Veneer-announced port if Kestrel's authoritative message never arrives (legacy Source).
     server_started_at = [None for p in range(n_instances)]
+    # Timestamp of the most recent Veneer port announcement. Some Source builds emit no Kestrel
+    # "Now listening on:" line on stdout and no "Server started. Ctrl-C to exit" line either,
+    # leaving the Veneer announcement as the only stdout signal. After a grace period with no
+    # further announcements (re-announcements supersede earlier ones), accept the latest
+    # Veneer-announced port as ready.
+    veneer_announced_at = [None for p in range(n_instances)]
     LEGACY_GRACE_SECS = 5.0
 
     all_ready = False
@@ -523,8 +529,9 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
                         veneer_match = _VENEER_BOUND_RE.search(line)
                         if veneer_match and not port_authoritative[i]:
                             actual_ports[i] = int(veneer_match.group(1))
+                            veneer_announced_at[i] = _now()
 
-                    if line.startswith('Server started. Ctrl-C to exit'):
+                    if 'Server started. Ctrl-C to exit' in line:
                         if server_started_at[i] is None:
                             server_started_at[i] = _now()
                     elif line.startswith('Cannot find project') or line.startswith('Unhandled exception'):
@@ -543,10 +550,15 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
             # - Legacy Source (no Kestrel output): after "Server started" plus a short grace,
             #   accept the Veneer-announced port. Without any port signal, fall back to the
             #   requested port — the legacy behaviour prior to this change.
+            # - Source builds that emit neither "Now listening on:" nor "Server started":
+            #   after a grace with no further Veneer port announcements, treat the latest
+            #   announced port as ready.
             if not ready[i] and not failed[i]:
                 legacy_timeout = (server_started_at[i] is not None
                                   and (_now() - server_started_at[i]) >= LEGACY_GRACE_SECS)
-                if port_authoritative[i] or legacy_timeout:
+                veneer_settled = (veneer_announced_at[i] is not None
+                                  and (_now() - veneer_announced_at[i]) >= LEGACY_GRACE_SECS)
+                if port_authoritative[i] or legacy_timeout or veneer_settled:
                     ready[i] = True
                     ready_count = sum(ready)
                     _emit_progress('veneer-start', ready_count, n_instances,
