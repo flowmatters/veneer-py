@@ -1,5 +1,6 @@
 import json
 from .manage import start, kill_all_now
+from ._proxy import AttributeChainProxy
 from dask.distributed import LocalCluster, Client
 from psutil import Process
 import dask
@@ -98,19 +99,27 @@ def check_existing_cluster_temp_directory(prefix,behaviour_on_existing):
         raise Exception('Unknown behaviour on existing temporary directories: %s'%behaviour_on_existing)
 
 class ClusterVeneerClient(object):
-    def __init__(self,cluster):
+    def __init__(self, cluster):
         self._cluster = cluster
         self._dummy_v = Veneer(0)
 
-    def __getattr__(self,attrname):
-        def wrapped(*args,**kwargs):
+    def __getattr__(self, attrname):
+        if attrname.startswith('_'):
+            raise AttributeError(attrname)
+        return AttributeChainProxy(self._make_resolver(), (attrname,))
+
+    def _make_resolver(self):
+        cluster = self._cluster
+        def resolve(path, args, kwargs):
             @dask.delayed
             def fn(p):
-                v = Veneer(p)
-                method = getattr(v,attrname)
-                return method(*args,**kwargs)
-            return self._cluster.run_on_each(fn)
-        return wrapped
+                target = Veneer(p)
+                for n in path:
+                    target = getattr(target, n)
+                return target(*args, **kwargs)
+            return cluster.run_on_each(fn)
+        return resolve
+
     def __dir__(self):
         return self._dummy_v.__dir__()
 
