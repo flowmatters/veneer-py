@@ -12,6 +12,7 @@ import tempfile
 import shutil
 import threading
 from .general import Veneer
+from ._proxy import AttributeChainProxy
 from pathlib import Path
 import logging
 logger = logging.getLogger(__name__)
@@ -756,45 +757,38 @@ def cleanup_project_temp_dir(dir,background=True):
         else:
             print('Cleaning up %s.'%holding_dir)
             shutil.rmtree(str(holding_dir))
-class BulkVeneerApplication(object):
-    def __init__(self,clients,name):
-        self.clients = clients
-        self.names = [name] 
-
-    def __getattr__(self,attrname):
-        self.names.append(attrname)
-        return self
-
-    def __call__(self,*pargs,**kwargs):
-        return self.clients.call_on_all(self.names,*pargs,**kwargs)
-
 class BulkVeneer(object):
-    def __init__(self,ports=[],clients=[],verbose=False):
+    def __init__(self, ports=[], clients=[], verbose=False):
         self.veneers = [Veneer(port) for port in ports]
         self.veneers += clients
         self.verbose = verbose
 
-    def call_path(self,client,path,*pargs,**kwargs):
+    def call_path(self, client, path, *pargs, **kwargs):
         if self.verbose:
-            print('Calling %s on port %d'%('.'.join(path),client.port))
+            print('Calling %s on port %d' % ('.'.join(path), client.port))
         target = client
         for p in path:
-            target = getattr(target,p)
-        return target(*pargs,**kwargs)
+            target = getattr(target, p)
+        return target(*pargs, **kwargs)
 
-    def call_on_all(self,path,*pargs,**kwargs):
-        result = [self.call_path(v,path,*pargs,**kwargs) for v in self.veneers]
-        result = [r for r in result if not r is None]
-
-        if 'run_async' in kwargs and kwargs['run_async']:
+    def call_on_all(self, path, *pargs, **kwargs):
+        result = [self.call_path(v, path, *pargs, **kwargs) for v in self.veneers]
+        result = [r for r in result if r is not None]
+        if kwargs.get('run_async'):
             return [r.getresponse().getcode() for r in result]
-
         if len(result):
             return result
         return None
 
-    def __getattr__(self,attrname):
-        return BulkVeneerApplication(self,attrname)
+    def __getattr__(self, attrname):
+        if attrname.startswith('_'):
+            raise AttributeError(attrname)
+        return AttributeChainProxy(self._make_resolver(), (attrname,))
+
+    def _make_resolver(self):
+        def resolve(path, args, kwargs):
+            return self.call_on_all(list(path), *args, **kwargs)
+        return resolve
 
 # +++ Need something to read latest messages from processes...
 
