@@ -10,6 +10,13 @@ _WU_ICON='/resources/WaterUserNodeModel'
 _EP_ICON='/resources/ExtractionNodeModel'
 _RP_ICON='/resources/RegulatedEffluentPartitioner'
 
+# Feature-type classification. Extend these sets to opt new connector
+# types (e.g. 'lateral_link', 'conveyance_link') into graph traversal
+# once their semantics are supported.
+LINK_FEATURE_TYPES = {'link'}
+NODE_FEATURE_TYPES = {'node'}
+CATCHMENT_FEATURE_TYPES = {'catchment'}
+
 def _feature_id(f):
     if hasattr(f,'keys'):
         if 'properties' in f:
@@ -37,12 +44,15 @@ def network_downstream_links(self,node_or_link):
     '''
     features = self['features']
     source = self.by_id(_node_id(node_or_link))
-    if source['properties']['feature_type']=='node':
+    f_type = source['properties']['feature_type']
+    if f_type in NODE_FEATURE_TYPES:
         node = _node_id(source)
         if 'downstream_links' in source:
           return [self.by_id(link_id) for link_id in source['downstream_links']]
-    else:
+    elif f_type in LINK_FEATURE_TYPES:
         node = source['properties']['to_node']
+    else:
+        return _feature_list([])
 
     links = features.find_by_feature_type('link')
     return links.find_by_from_node(node)
@@ -57,12 +67,15 @@ def network_upstream_links(self,node_or_link):
     '''
     features = self['features']
     source = self.by_id(_node_id(node_or_link))
-    if source['properties']['feature_type']=='node':
+    f_type = source['properties']['feature_type']
+    if f_type in NODE_FEATURE_TYPES:
         node = _feature_id(source)
         if 'upstream_links' in source:
           return [self.by_id(link_id) for link_id in source['upstream_links']]
-    else:
+    elif f_type in LINK_FEATURE_TYPES:
         node = source['properties']['from_node']
+    else:
+        return _feature_list([])
 
     links = features.find_by_feature_type('link')
     return links.find_by_to_node(node)
@@ -178,16 +191,21 @@ def network_add_model_types(self):
         f_type = f['properties']['feature_type']
         f['properties']['model'] = None
         f['properties']['splitter'] = None
-        if f_type=='catchment':
+        if f_type in CATCHMENT_FEATURE_TYPES:
             continue
-        source = node_models if f_type=='node' else routing_models
+        if f_type in NODE_FEATURE_TYPES:
+            source = node_models
+        elif f_type in LINK_FEATURE_TYPES:
+            source = routing_models
+        else:
+            continue
         match = source[source.NetworkElement==f['properties']['name']].iloc[0]
         f['properties']['model'] = match.model
-        if f_type=='node':
+        if f_type in NODE_FEATURE_TYPES:
             f['properties']['splitter'] = match.splitter
 
 def network_headwater_nodes(self):
-    return [f for f in self['features'] if f['properties']['feature_type']=='node' and len(self.upstream_links(f))==0]
+    return [f for f in self['features'] if f['properties']['feature_type'] in NODE_FEATURE_TYPES and len(self.upstream_links(f))==0]
 
 def network_headwater_links(self):
     hw_nodes = self.headwater_nodes()
@@ -312,11 +330,11 @@ def network_partition(self,
 
         f_type = feature['properties']['feature_type']
 
-        if f_type=='catchment':
+        if f_type in CATCHMENT_FEATURE_TYPES:
             ds_feature_id = feature['properties']['link']
-        elif f_type=='link':
+        elif f_type in LINK_FEATURE_TYPES:
             ds_feature_id = feature['properties']['to_node']
-        else: # f_type=='node'
+        elif f_type in NODE_FEATURE_TYPES:
             downstream_links = self.downstream_links(feature)
             if len(downstream_links)==0:
                 # Outlet and we didn't find one of the key features...
@@ -360,6 +378,14 @@ def network_partition(self,
 
             # Just one downstream link, usual case
             ds_feature_id = _feature_id(downstream_links[0])
+        else:
+            # Unknown feature type (e.g. lateral_link, conveyance_link).
+            # Don't try to walk it; tag it with the default and stop.
+            default_value = force_key or default_tag
+            if default_value is None:
+                default_value = feature['properties']['name']
+            feature['properties'][new_prop] = default_value
+            return feature['properties'][new_prop]
 
         ds_feature = features.find_by_id(ds_feature_id)[0]
         key = attribute_next_down(ds_feature,force_key=force_key)
@@ -451,15 +477,19 @@ def network_match_name(self,regexp):
 
 def network_downstream_nodes(self,feature):
     feature_type = feature['properties']['feature_type']
-    if feature_type == 'link':
+    if feature_type in LINK_FEATURE_TYPES:
         return [self.by_id(feature['properties']['to_node'])]
+    if feature_type not in NODE_FEATURE_TYPES:
+        return []
     downstream_links = self.downstream_links(feature)
     return sum([self.downstream_nodes(l) for l in downstream_links],[])
 
 def network_upstream_nodes(self,feature):
     feature_type = feature['properties']['feature_type']
-    if feature_type == 'link':
+    if feature_type in LINK_FEATURE_TYPES:
         return [self.by_id(feature['properties']['from_node'])]
+    if feature_type not in NODE_FEATURE_TYPES:
+        return []
     upstream_links = self.upstream_links(feature)
     return sum([self.upstream_nodes(l) for l in upstream_links],[])
 
@@ -546,17 +576,21 @@ def network_path_between(self,from_feature,to_feature,include_start=False):
 
     feature = self['features'].find_one_by_id(from_id)
     initial = [feature] if include_start else []
+    f_type = feature['properties']['feature_type']
 
-    if from_id.startswith('/network/catchments'):
+    if f_type in CATCHMENT_FEATURE_TYPES:
         immediate_down = self['features'].find_one_by_id(feature['properties']['link'])
-    elif from_id.startswith('/network/link'):
+    elif f_type in LINK_FEATURE_TYPES:
         immediate_down = self['features'].find_one_by_id(feature['properties']['to_node'])
-    else: # node
+    elif f_type in NODE_FEATURE_TYPES:
         possible_downs = self.downstream_links(feature)
         for pd in possible_downs:
             path_via = self.path_between(pd,to_feature)
             if path_via is not None:
                 return SearchableList(initial+[pd]+path_via._list,nested=['properties'])
+        return None
+    else:
+        # Unknown connector type (e.g. lateral_link, conveyance_link) — not traversable.
         return None
     path_to = self.path_between(immediate_down,to_feature)
     if path_to is None:
@@ -608,15 +642,19 @@ def network_build_lookups(self):
     Build lookup tables for features in the network.
     nw['by_id'] = {feature_id: feature}
     node['upstream_links']
+
+    Note: only 'link' features contribute to upstream_links/downstream_links.
+    New connector types (lateral_link, conveyance_link) are intentionally
+    excluded from the connectivity graph for now.
     '''
     self['by_id'] = {_feature_id(f):f for f in self['features']}
     for f in self['features']:
-        if f['properties']['feature_type']=='node':
+        if f['properties']['feature_type'] in NODE_FEATURE_TYPES:
             f['upstream_links'] = []
             f['downstream_links'] = []
 
     for f in self['features']:
-      if f['properties']['feature_type']=='link':
+      if f['properties']['feature_type'] in LINK_FEATURE_TYPES:
         feature_id = _feature_id(f)
         from_id = f['properties']['from_node']
         to_id = f['properties']['to_node']
@@ -628,7 +666,7 @@ def network_build_lookups(self):
         from_node['downstream_links'].append(feature_id)
 
     for f in self['features']:
-        if f['properties']['feature_type']=='catchment':
+        if f['properties']['feature_type'] in CATCHMENT_FEATURE_TYPES:
             catchment_id = _feature_id(f)
             link_id = f['properties']['link']
             link = self['by_id'][link_id]
@@ -641,12 +679,12 @@ def network_drop_lookups(self):
     if 'by_id' in self:
       del self['by_id']
     for f in self['features']:
-        if f['properties']['feature_type']=='node':
+        if f['properties']['feature_type'] in NODE_FEATURE_TYPES:
             if 'upstream_links' in f:
               del f['upstream_links']
             if 'downstream_links' in f:
               del f['downstream_links']
-        if f['properties']['feature_type']=='link':
+        if f['properties']['feature_type'] in LINK_FEATURE_TYPES:
             if 'catchment' in f:
               del f['catchment']
 
