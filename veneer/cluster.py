@@ -438,6 +438,21 @@ class VeneerCluster(object):
             self._workers = [Veneer(p) for p in self.veneer_ports]
         return self._workers
 
+    def worker_alive(self, port: int) -> bool:
+        '''psutil-based liveness check for the VeneerCmd process on this port.
+
+        Does not hit HTTP. Returns False for unknown ports, and for ports whose
+        WorkerInfo.veneer_pid is None (legacy reconnect path where the PID was
+        not preserved in the cluster config JSON).
+        '''
+        import psutil
+        for info in self.worker_affinity.values():
+            if info.port == port:
+                if info.veneer_pid is None:
+                    return False
+                return psutil.pid_exists(info.veneer_pid)
+        return False
+
     def to_json(self,fn=None):
         '''
         Save the cluster configuration to a JSON file
