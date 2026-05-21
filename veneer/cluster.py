@@ -49,6 +49,21 @@ class WorkerInfo:
         )
 
 
+class WorkerDied(RuntimeError):
+    """Raised by run_jobs(partial=False) when one or more cluster jobs
+    failed because their VeneerCmd worker process exited.
+
+    failures: list of structured failure dicts as produced by the wrapper.
+    """
+    def __init__(self, failures):
+        self.failures = failures
+        dead_ports = sorted({f['port'] for f in failures if f.get('status') == 'worker_dead'})
+        super().__init__(
+            f'{len(failures)} cluster job(s) failed; '
+            f'workers down on ports: {dead_ports}'
+        )
+
+
 MAX_DEFAULT_CLUSTER_SIZE=64
 
 def _make_emitter(callback):
@@ -104,17 +119,56 @@ def run_on_cluster(cluster,fn):
     worker_map = cluster.worker_affinity
     copy_projects = cluster.copy_projects
     @dask.delayed
-    def inner_wrapped(*args,**kwargs):
+    def inner_wrapped(*args, **kwargs):
         import os
+        import time
+        import requests
+        import psutil
         import veneer
+        from veneer._failure import safe_exit_code, tail
+
         worker_pid = os.getpid()
         info = worker_map[worker_pid]
-        inner_args = {
-            'v': veneer.Veneer(info.port)
-        }
+        pid_known = info.veneer_pid is not None
+        alive_before = psutil.pid_exists(info.veneer_pid) if pid_known else None
+        inner_args = {'v': veneer.Veneer(info.port)}
         if copy_projects:
             inner_args['directory'] = info.directory
-        return worker_pid, fn(*args,**kwargs,**inner_args)
+        try:
+            started_at = time.time()
+            value = fn(*args, **kwargs, **inner_args)
+            return {
+                'status': 'ok',
+                'port': info.port,
+                'pid': info.veneer_pid,
+                'value': value,
+                'directory': info.directory,
+            }
+        except (
+            requests.ConnectionError,
+            requests.Timeout,
+            requests.exceptions.ChunkedEncodingError,
+        ) as exc:
+            # Without a known PID we cannot tell whether the worker process died,
+            # so we cannot promise a 'worker_dead' classification — propagate the
+            # original exception unchanged.
+            if not pid_known:
+                raise
+            if not psutil.pid_exists(info.veneer_pid):
+                return {
+                    'status': 'worker_dead',
+                    'port': info.port,
+                    'pid': info.veneer_pid,
+                    'directory': info.directory,
+                    'log_path': info.log_path,
+                    'started_at': started_at,
+                    'died_at': time.time(),
+                    'alive_before': alive_before,
+                    'exit_code': safe_exit_code(info.veneer_pid),
+                    'log_tail': tail(info.log_path, 200),
+                    'exception': repr(exc),
+                }
+            raise  # Process alive — propagate as today (transient or Source-side).
 
     return inner_wrapped
 
