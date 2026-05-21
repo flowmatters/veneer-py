@@ -10,7 +10,43 @@ import tempfile
 import shutil
 from functools import partial
 import logging
+from dataclasses import dataclass, asdict
+
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class WorkerInfo:
+    """Per-worker information held in VeneerCluster.worker_affinity.
+
+    port: the Veneer HTTP port for this worker.
+    directory: directory containing the Source project file used by this worker.
+    veneer_pid: PID of the FlowMatters.Source.VeneerCmd.exe process. None when
+                the PID is not known (e.g., legacy cluster-config reconnect
+                from a JSON file written before the migration); downstream
+                liveness checks must guard for None and treat it as "unknown,
+                cannot detect death" rather than passing it to psutil.
+    log_path: filesystem path to the captured stdout+stderr log for this
+              VeneerCmd process. None when capture is not configured (e.g.,
+              start() called without capture_output_dir).
+    """
+    port: int
+    directory: str
+    veneer_pid: int | None = None
+    log_path: str | None = None
+
+    def to_dict(self):
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d):
+        raw_pid = d.get('veneer_pid')
+        return cls(
+            port=int(d['port']),
+            directory=d['directory'],
+            veneer_pid=int(raw_pid) if raw_pid is not None else None,
+            log_path=d.get('log_path'),
+        )
 
 
 MAX_DEFAULT_CLUSTER_SIZE=64
@@ -72,12 +108,12 @@ def run_on_cluster(cluster,fn):
         import os
         import veneer
         worker_pid = os.getpid()
-        port, directory = worker_map[worker_pid]
+        info = worker_map[worker_pid]
         inner_args = {
-            'v': veneer.Veneer(port)
+            'v': veneer.Veneer(info.port)
         }
         if copy_projects:
-            inner_args['directory'] = directory
+            inner_args['directory'] = info.directory
         return worker_pid, fn(*args,**kwargs,**inner_args)
 
     return inner_wrapped
@@ -205,7 +241,12 @@ class VeneerCluster(object):
             self.veneer_ports = existing_cluster['veneer_ports']
             self.veneer_processes = [Process(p) for p in existing_cluster['veneer_processes']]
             self.temp_directories = existing_cluster['temp_directories']
-            self.worker_affinity = {int(k):v for k,v in existing_cluster['worker_affinity'].items()}
+            self.worker_affinity = {
+                int(k): WorkerInfo.from_dict(v) if isinstance(v, dict) else WorkerInfo(
+                    port=int(v[0]), directory=v[1], veneer_pid=None, log_path=None,
+                )
+                for k, v in existing_cluster['worker_affinity'].items()
+            }
             self.copy_projects = existing_cluster['copy_projects']
             emit('connect-existing', 1, 1, f'Connected to existing cluster ({self.n_workers} workers)')
             return
@@ -266,7 +307,17 @@ class VeneerCluster(object):
             worker_info = self.dask_cluster.workers
             veneer_info_map = self.run_on_each(scenario_info)
 
-            self.worker_affinity = {w.pid:(info['port'],os.path.dirname(info['ProjectFullFilename'])) for w,info in zip(worker_info.values(),veneer_info_map)}
+            # veneer_processes already aligned to ports by index (see start() return shape).
+            veneer_pid_by_port = {port: proc.pid for port, proc in zip(self.veneer_ports, self.veneer_processes)}
+            self.worker_affinity = {
+                w.pid: WorkerInfo(
+                    port=info['port'],
+                    directory=os.path.dirname(info['ProjectFullFilename']),
+                    veneer_pid=veneer_pid_by_port[info['port']],
+                    log_path=None,  # filled in by Task 3 once capture is wired
+                )
+                for w, info in zip(worker_info.values(), veneer_info_map)
+            }
             emit('affinity-mapping', 1, 1, 'Mapping complete')
             emit('ready', 1, 1, f'Cluster ready ({self.n_workers} workers)')
         except BaseException:
@@ -336,7 +387,7 @@ class VeneerCluster(object):
             'veneer_ports': self.veneer_ports,
             'veneer_processes': [p.pid for p in self.veneer_processes],
             'temp_directories': self.temp_directories,
-            'worker_affinity': self.worker_affinity,
+            'worker_affinity': {pid: info.to_dict() for pid, info in self.worker_affinity.items()},
             'dask_scheduler': self.dask_client.scheduler.address,
             'copy_projects': self.copy_projects,
         }
@@ -375,9 +426,16 @@ class VeneerCluster(object):
         Returns a list of tuples, each containing the worker port, the temporary directory and the result of the job
         '''
 
+        # Convert WorkerInfo dataclasses back to (port, directory) tuples here
+        # to preserve the legacy return contract: callers destructure with
+        # (port, _) = entry. Task 5 of the worker-failure plan replaces this
+        # path with a structured-result aware unwrapper.
+        def _legacy_tuple(info):
+            return (info.port, info.directory)
+
         if sync:
             results = self.dask_client.compute(jobs,sync=True)
-            workers = [self.worker_affinity[pid] for pid,_ in results]
+            workers = [_legacy_tuple(self.worker_affinity[pid]) for pid,_ in results]
             return list(zip(workers,[r for _,r in results]))
 
         # Return a future that will compute the same structure when resolved
@@ -385,7 +443,7 @@ class VeneerCluster(object):
         worker_affinity = self.worker_affinity
 
         def process_results(results):
-            workers = [worker_affinity[pid] for pid,_ in results]
+            workers = [_legacy_tuple(worker_affinity[pid]) for pid,_ in results]
             return list(zip(workers,[r for _,r in results]))
 
         return self.dask_client.submit(process_results, future_results)
