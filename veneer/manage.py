@@ -85,10 +85,28 @@ def kill_every_running_instance_of_veneer_cmd_line():
             print(f'Killing {pid}')
             proc.kill()
 
-def _enqueue_output(out, queue):
-    for line in iter(out.readline, b''):
-        queue.put(line)
-    out.close()
+def _enqueue_output(out, queue, tee_path=None):
+    tee = open(tee_path, 'a', buffering=1, encoding='utf-8', errors='replace') if tee_path else None
+    tee_failed = False
+    try:
+        for line in iter(out.readline, b''):
+            queue.put(line)
+            if tee is not None and not tee_failed:
+                try:
+                    decoded = line.decode('utf-8', errors='replace') if isinstance(line, bytes) else line
+                    tee.write(decoded)
+                except OSError:
+                    # Disk-full, permission revoked, etc. Log once and stop teeing
+                    # rather than letting the daemon thread die (which would silently
+                    # stop draining stdout/stderr and cause the worker to block).
+                    logger.warning('Tee write failed for %s; disabling file capture for this stream',
+                                  tee_path, exc_info=True)
+                    tee_failed = True
+        out.close()
+    finally:
+        if tee is not None:
+            try: tee.close()
+            except Exception: pass
 
 def find_veneer_cmd_line_exe(project_fn=None,source_version=None):
     if project_fn:
@@ -193,7 +211,7 @@ def create_command_line(veneer_path,source_version=None,
     assert exe_path.exists()
 
     if init_db:
-        _proc,_ = start(project_fn=None,n_instances=1,debug=False,veneer_exe=exe_path,ports=9878)
+        _proc,_,_ = start(project_fn=None,n_instances=1,debug=False,veneer_exe=exe_path,ports=9878)
         kill_all_now(_proc)
 
     return exe_path
@@ -204,13 +222,18 @@ def clean_up_cmd_line_exe(path=None):
 
     shutil.rmtree(path)
 
-def configure_non_blocking_io(processes,stream):
-    queues = [Queue() for p in range(len(processes))]
-    threads = [Thread(target=_enqueue_output,args=(getattr(p,stream),q)) for (p,q) in zip(processes,queues)]
+def configure_non_blocking_io(processes, stream, tee_paths=None):
+    queues = [Queue() for _ in processes]
+    if tee_paths is None:
+        tee_paths = [None] * len(processes)
+    threads = [
+        Thread(target=_enqueue_output, args=(getattr(p, stream), q, tp))
+        for p, q, tp in zip(processes, queues, tee_paths)
+    ]
     for t in threads:
         t.daemon = True
         t.start()
-    return queues,threads
+    return queues, threads
 
 def _find_plugins_file(project_path):
     project_path = Path(project_path)
@@ -288,7 +311,7 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
           script=True, veneer_exe=None,overwrite_plugins=None,return_io=False,
           model=None,start_new_session=False,additional_plugins=[],
           custom_endpoints=[],projects=None,quiet=False,
-          progress_callback=None,
+          progress_callback=None,capture_output_dir=None,
           detached=False,detached_timeout=120.0,leave_open=False):
     """
     Start one or more copies of the Veneer command line progeram with a given project file
@@ -334,6 +357,12 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
                      thread; exceptions raised by the callback are caught and
                      logged but do not interrupt startup.
 
+    - capture_output_dir - Optional directory path. When provided, each VeneerCmd's combined
+                     stdout and stderr are teed to a per-port log file
+                     ``<capture_output_dir>/veneer_port_<port>.log``. Existing log files are
+                     truncated at the start of each call (session-scoped logs). Default None
+                     (no file capture).
+
     - detached - If True, spawn a sibling Python process in a new terminal window to host the Veneer
                  instances, rather than creating them as children of the current process. Useful when
                  the current interpreter is hosted by something that interferes with child-process IO
@@ -347,10 +376,15 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
                    children are killed, so the user can read final log output. Default False, which
                    lets the terminal close once its children die.
 
-        returns processes, ports
+        returns processes, ports, log_paths
        processes - list of process objects that can be used to terminate the servers
        ports - the port numbers used for each copy of the server
-       ((stdout_queues,stdout_threads),(stderr_queues,stderr_threads)) if return_io
+       log_paths - list of per-port log file paths (str), or list of None when
+                   capture_output_dir is not provided.
+       When return_io=True, returns (processes, ports,
+           ((stdout_queues, stdout_threads), (stderr_queues, stderr_threads)),
+           log_paths)
+       — a 4-tuple, with the io-tuple inserted between ports and log_paths.
     """
     if additional_plugins:
         missing = [p for p in additional_plugins if not os.path.exists(p)]
@@ -360,6 +394,11 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
             )
 
     if detached:
+        if capture_output_dir is not None:
+            logger.warning(
+                'capture_output_dir is ignored when detached=True; '
+                'VeneerCmd stdout/stderr will not be captured for the detached cluster'
+            )
         return _start_detached(
             start_kwargs=dict(
                 project_fn=str(project_fn) if project_fn else None,
@@ -459,10 +498,25 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
         else:
             cmd_line = 'start "Veneer server for %s" %s'%(os.path.basename(project_fn),cmd_line)
             kwargs['shell']=True
+    log_paths = [None] * n_instances
+    if capture_output_dir is not None:
+        os.makedirs(capture_output_dir, exist_ok=True)
+        log_paths = [
+            os.path.join(capture_output_dir, f'veneer_port_{port}.log')
+            for port in ports
+        ]
+        # Truncate at start of each cluster — these are session-scoped logs.
+        for p in log_paths:
+            try:
+                with open(p, 'w'):
+                    pass
+            except OSError:
+                logger.warning('Could not initialise log file %s', p, exc_info=True)
+
     processes = [Popen(cmd,stdout=PIPE,stderr=PIPE,bufsize=1, close_fds=ON_POSIX, **kwargs) for cmd in cmd_lines]
     _emit_progress('veneer-start', 0, n_instances, f'Starting {n_instances} Veneer instances')
-    std_out_queues,std_out_threads = configure_non_blocking_io(processes,'stdout')
-    std_err_queues,std_err_threads = configure_non_blocking_io(processes,'stderr')
+    std_out_queues,std_out_threads = configure_non_blocking_io(processes,'stdout', tee_paths=log_paths)
+    std_err_queues,std_err_threads = configure_non_blocking_io(processes,'stderr', tee_paths=log_paths)
 
     ready = [False for p in range(n_instances)]
     failed = [False for p in range(n_instances)]
@@ -604,8 +658,8 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
     kill_all_on_exit(processes)
 
     if return_io:
-        return processes,actual_ports,((std_out_queues,std_out_threads),(std_err_queues,std_err_threads))
-    return processes,actual_ports
+        return processes,actual_ports,((std_out_queues,std_out_threads),(std_err_queues,std_err_threads)),log_paths
+    return processes,actual_ports,log_paths
 
 def _start_detached(start_kwargs, detached_timeout, leave_open):
     """Spawn ``veneer.detached_start`` in a new terminal window, wait for it
@@ -692,7 +746,10 @@ def _start_detached(start_kwargs, detached_timeout, leave_open):
     if not leave_open and launcher_proc is not None:
         kill_all_on_exit([launcher_proc])
 
-    return processes, actual_ports
+    # Note: capture_output_dir is not supported for the detached path (Veneer
+    # instances run in a separate terminal process whose IO cannot be redirected
+    # here). log_paths is therefore always all-None in this path.
+    return processes, actual_ports, [None] * len(actual_ports)
 
 def print_from_all(queues,prefix=''):
     for i in range(len(queues)):

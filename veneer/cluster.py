@@ -291,15 +291,25 @@ class VeneerCluster(object):
                 self.project_files = [self.original_project_file] * self.n_workers
 
             logger.info('Starting %d Veneer instances',self.n_workers)
-            veneer_processes, veneer_ports = start(
+            # Capture VeneerCmd stdout/stderr next to the (first) project temp dir so the
+            # incident reporter can read it post-mortem. When project files aren't being
+            # copied per-worker, fall back to the system temp dir.
+            capture_dir = (
+                os.path.join(self.temp_directories[0], 'veneer_logs')
+                if self.temp_directories else
+                os.path.join(tempfile.gettempdir(), f'{tempdir_prefix}veneer_logs')
+            )
+            veneer_processes, veneer_ports, veneer_log_paths = start(
                 n_instances=self.n_workers,debug=debug,remote=remote,
                 script=script, veneer_exe=veneer_exe,overwrite_plugins=overwrite_plugins,
                 additional_plugins=additional_plugins or [],custom_endpoints=custom_endpoints or [],
                 projects=self.project_files,
                 progress_callback=progress_callback,
+                capture_output_dir=capture_dir,
             )
             self.veneer_ports = veneer_ports
             self.veneer_processes = veneer_processes
+            self.veneer_log_paths = veneer_log_paths
 
             logger.info('Assigning Veneer instances to DASK workers')
             emit('affinity-mapping', 0, 1, 'Mapping Veneer ports to Dask workers')
@@ -309,12 +319,13 @@ class VeneerCluster(object):
 
             # veneer_processes already aligned to ports by index (see start() return shape).
             veneer_pid_by_port = {port: proc.pid for port, proc in zip(self.veneer_ports, self.veneer_processes)}
+            log_path_by_port = dict(zip(self.veneer_ports, self.veneer_log_paths))
             self.worker_affinity = {
                 w.pid: WorkerInfo(
                     port=info['port'],
                     directory=os.path.dirname(info['ProjectFullFilename']),
                     veneer_pid=veneer_pid_by_port[info['port']],
-                    log_path=None,  # filled in by Task 3 once capture is wired
+                    log_path=log_path_by_port.get(info['port']),
                 )
                 for w, info in zip(worker_info.values(), veneer_info_map)
             }
