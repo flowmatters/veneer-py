@@ -50,8 +50,8 @@ class WorkerInfo:
 
 
 class WorkerDied(RuntimeError):
-    """Raised by run_jobs(partial=False) when one or more cluster jobs
-    failed because their VeneerCmd worker process exited.
+    """Raised by run_jobs(partial_results=False) when one or more cluster
+    jobs failed because their VeneerCmd worker process exited.
 
     failures: list of structured failure dicts as produced by the wrapper.
     """
@@ -478,40 +478,47 @@ class VeneerCluster(object):
         jobs = [operation_(p) for p in self.veneer_ports]
         return self.dask_client.compute(jobs,sync=True)
 
-    def run_jobs(self,jobs,sync=True):
+    def run_jobs(self, jobs, sync=True, partial_results=False):
+        '''Run a set of jobs on the cluster.
+
+        jobs: list of dask.delayed jobs (wrapped via cluster.wrap or otherwise).
+        sync: True (default) → block and return results; False → return Future.
+        partial_results: False (default) → preserve historical behaviour. If
+                 every result is 'ok', unwrap to the legacy
+                 [(worker_tuple, value), ...] shape. If any result has
+                 status != 'ok', raise WorkerDied carrying the structured
+                 failure list. True → return the structured list of dicts as
+                 produced by the wrapper (empty input returns an empty list).
         '''
-        Run a set of jobs on the cluster.
-
-        jobs: list
-            A list of tuples, each containing a dask delayed job. Note that the job need not involve Source/Veneer,
-            but if veneer is required, the original function should be wrapped with self.wrap
-        sync: bool
-            Whether to run synchronously (default True). If False, returns a Dask Future.
-
-        Returns a list of tuples, each containing the worker port, the temporary directory and the result of the job
-        '''
-
-        # Convert WorkerInfo dataclasses back to (port, directory) tuples here
-        # to preserve the legacy return contract: callers destructure with
-        # (port, _) = entry. Task 5 of the worker-failure plan replaces this
-        # path with a structured-result aware unwrapper.
-        def _legacy_tuple(info):
-            return (info.port, info.directory)
-
         if sync:
-            results = self.dask_client.compute(jobs,sync=True)
-            workers = [_legacy_tuple(self.worker_affinity[pid]) for pid,_ in results]
-            return list(zip(workers,[r for _,r in results]))
+            results = self.dask_client.compute(jobs, sync=True)
+            if partial_results:
+                return list(results)
+            return _unwrap_or_raise(results)
 
-        # Return a future that will compute the same structure when resolved
-        future_results = self.dask_client.compute(jobs,sync=False)
-        worker_affinity = self.worker_affinity
+        # sync=False: dask_client.compute returns list[Future] when jobs is a
+        # list, not a single Future. Both branches below wrap it into a single
+        # Future via dask_client.submit, which deep-resolves Futures inside
+        # the args before calling — so the closure receives the resolved list.
+        future_results = self.dask_client.compute(jobs, sync=False)
 
-        def process_results(results):
-            workers = [_legacy_tuple(worker_affinity[pid]) for pid,_ in results]
-            return list(zip(workers,[r for _,r in results]))
+        if partial_results:
+            return self.dask_client.submit(list, future_results)
 
-        return self.dask_client.submit(process_results, future_results)
+        return self.dask_client.submit(_unwrap_or_raise, future_results)
+
+
+def _unwrap_or_raise(results):
+    '''Convert a list of wrapper-produced dicts to the legacy shape, or raise.
+
+    Empty input returns []. Non-dict elements will raise AttributeError on
+    .get(); the caller is responsible for only passing wrapper output.
+    '''
+    failures = [r for r in results if r.get('status') != 'ok']
+    if failures:
+        raise WorkerDied(failures)
+    # Legacy shape: [( (port, directory), value ), ...]
+    return [((r['port'], r['directory']), r['value']) for r in results]
 
     def shutdown(self, progress_callback=None):
         '''
