@@ -211,7 +211,7 @@ def create_command_line(veneer_path,source_version=None,
     assert exe_path.exists()
 
     if init_db:
-        _proc,_,_ = start(project_fn=None,n_instances=1,debug=False,veneer_exe=exe_path,ports=9878)
+        _proc,_ = start(project_fn=None,n_instances=1,debug=False,veneer_exe=exe_path,ports=9878,return_log_paths=False)
         kill_all_now(_proc)
 
     return exe_path
@@ -307,12 +307,16 @@ def _format_startup_failure(n_instances, failed, ports, cmd_lines, processes,
     return '\n'.join(msg_lines)
 
 
+_RETURN_LOG_PATHS_UNSET = object()  # sentinel so we can detect omission vs explicit False
+
+
 def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
           script=True, veneer_exe=None,overwrite_plugins=None,return_io=False,
           model=None,start_new_session=False,additional_plugins=[],
           custom_endpoints=[],projects=None,quiet=False,
           progress_callback=None,capture_output_dir=None,
-          detached=False,detached_timeout=120.0,leave_open=False):
+          detached=False,detached_timeout=120.0,leave_open=False,
+          return_log_paths=_RETURN_LOG_PATHS_UNSET):
     """
     Start one or more copies of the Veneer command line progeram with a given project file
 
@@ -376,15 +380,21 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
                    children are killed, so the user can read final log output. Default False, which
                    lets the terminal close once its children die.
 
-        returns processes, ports, log_paths
-       processes - list of process objects that can be used to terminate the servers
-       ports - the port numbers used for each copy of the server
-       log_paths - list of per-port log file paths (str), or list of None when
-                   capture_output_dir is not provided.
-       When return_io=True, returns (processes, ports,
-           ((stdout_queues, stdout_threads), (stderr_queues, stderr_threads)),
-           log_paths)
-       — a 4-tuple, with the io-tuple inserted between ports and log_paths.
+    - return_log_paths - Opt-in flag for the new per-port log_paths element appended to the return
+                         tuple. Defaults to False for back-compat; a DeprecationWarning is emitted
+                         in that case to flag that the default will flip to True in a future release.
+                         Set explicitly (True or False) to silence the warning. Callers that don't
+                         care about log paths can pass False indefinitely.
+
+       returns processes, ports
+                — when return_log_paths=False (legacy default; emits DeprecationWarning).
+       returns processes, ports, log_paths
+                — when return_log_paths=True. log_paths is a list of per-port log file paths (str),
+                  or list of None when capture_output_dir is not provided.
+       When return_io=True:
+          - returns (processes, ports, io_tuple) when return_log_paths=False
+          - returns (processes, ports, io_tuple, log_paths) when return_log_paths=True
+          io_tuple = ((stdout_queues, stdout_threads), (stderr_queues, stderr_threads))
     """
     if additional_plugins:
         missing = [p for p in additional_plugins if not os.path.exists(p)]
@@ -393,13 +403,26 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
                 'additional_plugins not found: %s' % ', '.join(repr(p) for p in missing)
             )
 
+    if return_log_paths is _RETURN_LOG_PATHS_UNSET:
+        import warnings
+        warnings.warn(
+            'veneer.manage.start() will gain a log_paths element in its return tuple '
+            'in a future release; default return_log_paths will flip from False to True. '
+            'Pass return_log_paths=True now to receive (processes, ports, log_paths) and '
+            'silence this warning, or pass return_log_paths=False to keep the legacy '
+            '(processes, ports) shape and silence this warning.',
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return_log_paths = False
+
     if detached:
         if capture_output_dir is not None:
             logger.warning(
                 'capture_output_dir is ignored when detached=True; '
                 'VeneerCmd stdout/stderr will not be captured for the detached cluster'
             )
-        return _start_detached(
+        detached_result = _start_detached(
             start_kwargs=dict(
                 project_fn=str(project_fn) if project_fn else None,
                 n_instances=n_instances,
@@ -420,6 +443,12 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
             detached_timeout=detached_timeout,
             leave_open=leave_open,
         )
+        # _start_detached always returns the 3-tuple shape; strip log_paths if
+        # the caller wants legacy 2-tuple.
+        det_procs, det_ports, det_log_paths = detached_result
+        if return_log_paths:
+            return det_procs, det_ports, det_log_paths
+        return det_procs, det_ports
 
     if problem_launcher_warning := _detect_problematic_launcher():
         logger.warning(problem_launcher_warning)
@@ -657,9 +686,14 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
 
     kill_all_on_exit(processes)
 
+    io_tuple = ((std_out_queues,std_out_threads),(std_err_queues,std_err_threads))
     if return_io:
-        return processes,actual_ports,((std_out_queues,std_out_threads),(std_err_queues,std_err_threads)),log_paths
-    return processes,actual_ports,log_paths
+        if return_log_paths:
+            return processes, actual_ports, io_tuple, log_paths
+        return processes, actual_ports, io_tuple
+    if return_log_paths:
+        return processes, actual_ports, log_paths
+    return processes, actual_ports
 
 def _start_detached(start_kwargs, detached_timeout, leave_open):
     """Spawn ``veneer.detached_start`` in a new terminal window, wait for it

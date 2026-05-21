@@ -360,6 +360,7 @@ class VeneerCluster(object):
                 projects=self.project_files,
                 progress_callback=progress_callback,
                 capture_output_dir=capture_dir,
+                return_log_paths=True,
             )
             self.veneer_ports = veneer_ports
             self.veneer_processes = veneer_processes

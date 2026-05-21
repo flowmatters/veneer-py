@@ -587,7 +587,7 @@ def _get_veneer(model_fn,port,veneerpath,sourceversion,buildpath,plugins,**kwarg
                 'Pass the full path to an existing .rsproj as the first positional argument.'
                 % model_fn
             )
-        proc,port,_log_paths = manage.start(model_fn,1,debug=True,remote=kwargs.get('remote',True),veneer_exe=exe_path,additional_plugins=plugins)
+        proc,port = manage.start(model_fn,1,debug=True,remote=kwargs.get('remote',True),veneer_exe=exe_path,additional_plugins=plugins,return_log_paths=False)
         process_details['pid'] = proc[0]
         client = veneer.Veneer(port[0])
         return client
