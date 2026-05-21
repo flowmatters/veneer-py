@@ -386,3 +386,116 @@ temporalCharacteristics = TimeTools.findTemporalCharacteristics(
     config.StartDate, config.EndDate);
 result = [temporalCharacteristics.minimum,temporalCharacteristics.maximum]
 '''
+
+# Sets (or clears) a suffix on the Source main window (WinForms) title for the
+# lifetime of the Source session. The original title is cached in
+# AppDomain.CurrentDomain so repeated set/clear cycles restore exactly and never
+# accumulate suffixes.
+#
+# Format arg: a Python literal for the suffix text (string repr, or 'None' to clear).
+SET_STATUS_INDICATOR_SCRIPT='''
+import clr
+clr.AddReference("System.Windows.Forms")
+from System import Action, AppDomain
+from System.Windows.Forms import Application as WFApp
+
+KEY = "VeneerStatusIndicator.OriginalTitle"
+TEXT = %s
+
+form = None
+for f in WFApp.OpenForms:
+    if f.Text and f.Text.startswith("Source "):
+        form = f
+        break
+if form is None:
+    raise Exception("Source main window not found in WinForms Application.OpenForms")
+
+def _do():
+    cached = AppDomain.CurrentDomain.GetData(KEY)
+    if cached is None:
+        AppDomain.CurrentDomain.SetData(KEY, form.Text or "")
+        cached = form.Text or ""
+    if TEXT is None or TEXT == "":
+        form.Text = cached
+    else:
+        form.Text = cached + "  " + TEXT
+
+if form.InvokeRequired:
+    form.Invoke(Action(_do))
+else:
+    _do()
+'''
+
+# Shows (or removes) a styled banner Label docked at the top of the Source
+# WinForms main form. The Label reference is cached in AppDomain so updates
+# and clears find the existing control rather than stacking new ones.
+#
+# Format args (named): text, bg, fg, height, font_size, bold, font_family
+# Each is a Python literal as produced by repr().
+SET_STATUS_BANNER_SCRIPT='''
+import clr
+clr.AddReference("System.Windows.Forms")
+clr.AddReference("System.Drawing")
+from System import Action, AppDomain
+from System.Windows.Forms import Application as WFApp, Label, DockStyle
+from System.Drawing import Color, Font, FontStyle, ContentAlignment, ColorTranslator
+
+KEY = "VeneerStatusBanner.Control"
+TEXT = %(text)s
+BG = %(bg)s
+FG = %(fg)s
+HEIGHT = %(height)s
+FONT_SIZE = %(font_size)s
+BOLD = %(bold)s
+FONT_FAMILY = %(font_family)s
+
+form = None
+for f in WFApp.OpenForms:
+    if f.Text and f.Text.startswith("Source "):
+        form = f
+        break
+if form is None:
+    raise Exception("Source main window not found in WinForms Application.OpenForms")
+
+def _parse_color(s):
+    s = str(s)
+    if s.startswith("#"):
+        return ColorTranslator.FromHtml(s)
+    return Color.FromName(s)
+
+def _do():
+    label = AppDomain.CurrentDomain.GetData(KEY)
+    if label is not None:
+        try:
+            if label.IsDisposed:
+                label = None
+        except:
+            label = None
+
+    if TEXT is None or TEXT == "":
+        if label is not None:
+            form.Controls.Remove(label)
+            label.Dispose()
+            AppDomain.CurrentDomain.SetData(KEY, None)
+        return
+
+    if label is None:
+        label = Label()
+        label.Dock = DockStyle.Top
+        label.AutoSize = False
+        label.TextAlign = ContentAlignment.MiddleCenter
+        form.Controls.Add(label)
+        AppDomain.CurrentDomain.SetData(KEY, label)
+
+    label.Text = TEXT
+    label.Height = HEIGHT
+    label.BackColor = _parse_color(BG)
+    label.ForeColor = _parse_color(FG)
+    style = FontStyle.Bold if BOLD else FontStyle.Regular
+    label.Font = Font(FONT_FAMILY, float(FONT_SIZE), style)
+
+if form.InvokeRequired:
+    form.Invoke(Action(_do))
+else:
+    _do()
+'''

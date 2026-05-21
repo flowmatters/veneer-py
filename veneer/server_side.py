@@ -802,6 +802,69 @@ class VeneerSourceUIHelpers(object):
         logs = [val['Value'] for val in self.runScript(script)['Response']['Value']]
         return logs
 
+    def set_status_indicator(self, text):
+        '''
+        Append a status indicator to the Source main window title.
+
+        The suffix persists for the lifetime of the Source session (no extra
+        process required). Pass None or an empty string to clear and restore
+        the original title.
+
+        The original title is cached in Application.Properties on first call,
+        so repeated set/clear cycles never accumulate suffixes.
+        '''
+        text_literal = 'None' if text is None else repr(str(text))
+        script = self._ironpy._init_script() + (SET_STATUS_INDICATOR_SCRIPT % text_literal)
+        return self._ironpy._safe_run(script)
+
+    def clear_status_indicator(self):
+        '''
+        Restore the Source main window title to its original value.
+        '''
+        return self.set_status_indicator(None)
+
+    def set_status_banner(self, text, background='#cc0000', foreground='#ffffff',
+                          font_size=14, bold=True, height=30, font_family='Segoe UI'):
+        '''
+        Show a styled banner Label docked at the top of the Source main window.
+
+        The banner persists for the lifetime of the Source session (no extra
+        process required). Repeat calls update the existing banner in place.
+        Pass None or an empty string to remove it.
+
+        Parameters
+        ----------
+        text : str or None
+            Banner text; None or '' removes the banner.
+        background, foreground : str
+            Color as a '#RRGGBB' hex string or a .NET named color (e.g. 'Red').
+        font_size : int or float
+            Font point size.
+        bold : bool
+            Bold weight if True.
+        height : int
+            Banner height in pixels.
+        font_family : str
+            Font family name.
+        '''
+        subs = {
+            'text': 'None' if text is None else repr(str(text)),
+            'bg': repr(str(background)),
+            'fg': repr(str(foreground)),
+            'height': repr(int(height)),
+            'font_size': repr(float(font_size)),
+            'bold': repr(bool(bold)),
+            'font_family': repr(str(font_family)),
+        }
+        script = self._ironpy._init_script() + (SET_STATUS_BANNER_SCRIPT % subs)
+        return self._ironpy._safe_run(script)
+
+    def clear_status_banner(self):
+        '''
+        Remove the status banner from the Source main window.
+        '''
+        return self.set_status_banner(None)
+
 class VeneerNetworkElementActions(object):
     def __init__(self, ironpython):
         self._ironpy = ironpython
