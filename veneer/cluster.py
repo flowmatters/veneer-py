@@ -102,8 +102,8 @@ def remove_copy(directory):
     shutil.rmtree(directory)
 
 @dask.delayed
-def scenario_info(port):
-    v = Veneer(port)
+def scenario_info(port, veneer_kwargs=None):
+    v = Veneer(port, **(veneer_kwargs or {}))
     info = v.scenario_info()
     info['port'] = port
     return info
@@ -118,6 +118,7 @@ def run_on_cluster(cluster,fn):
     logger.info('Wrapping %s to run on cluster %s'%(fn.__name__,cluster.name))
     worker_map = cluster.worker_affinity
     copy_projects = cluster.copy_projects
+    veneer_kwargs = cluster._veneer_kwargs
     @dask.delayed
     def inner_wrapped(*args, **kwargs):
         import os
@@ -131,7 +132,7 @@ def run_on_cluster(cluster,fn):
         info = worker_map[worker_pid]
         pid_known = info.veneer_pid is not None
         alive_before = psutil.pid_exists(info.veneer_pid) if pid_known else None
-        inner_args = {'v': veneer.Veneer(info.port)}
+        inner_args = {'v': veneer.Veneer(info.port, **veneer_kwargs)}
         if copy_projects:
             inner_args['directory'] = info.directory
         try:
@@ -191,7 +192,7 @@ def check_existing_cluster_temp_directory(prefix,behaviour_on_existing):
 class ClusterVeneerClient(object):
     def __init__(self, cluster):
         self._cluster = cluster
-        self._dummy_v = Veneer(0)
+        self._dummy_v = Veneer(0, **cluster._veneer_kwargs)
 
     def __getattr__(self, attrname):
         if attrname.startswith('_'):
@@ -200,10 +201,11 @@ class ClusterVeneerClient(object):
 
     def _make_resolver(self):
         cluster = self._cluster
+        veneer_kwargs = cluster._veneer_kwargs
         def resolve(path, args, kwargs):
             @dask.delayed
             def fn(p):
-                target = Veneer(p)
+                target = Veneer(p, **veneer_kwargs)
                 for n in path:
                     target = getattr(target, n)
                 return target(*args, **kwargs)
@@ -217,7 +219,8 @@ class VeneerCluster(object):
     def __init__(self,project_file=None,veneer_exe=None,n_workers=None,debug=False,remote=False,
           script=True,overwrite_plugins=None,custom_endpoints=None,additional_plugins=None,
           copy=False,tempdir_prefix='source-cluster-',copy_extras=None,existing='raise',
-          existing_cluster=None,cleanup_on_failure=True,progress_callback=None):
+          existing_cluster=None,cleanup_on_failure=True,progress_callback=None,
+          trust_env=None,proxies=None):
         '''
         Create a cluster of Veneer instances, each running in a separate process
 
@@ -262,10 +265,18 @@ class VeneerCluster(object):
             manage.start), 'affinity-mapping', 'ready', 'connect-existing',
             'shutdown-veneer', 'shutdown-temp', 'shutdown-dask'. The callback runs
             on the calling thread; exceptions are caught and logged.
+        trust_env, proxies: Forwarded to every Veneer client constructed by this
+            cluster (workers, ClusterVeneerClient, and the per-job clients used
+            inside dask tasks). Default behaviour is unchanged: loopback hosts
+            automatically bypass any inherited HTTP_PROXY/HTTPS_PROXY environment
+            variables. Set trust_env=True or pass an explicit proxies dict only
+            when you genuinely need the cluster's HTTP calls routed through a
+            proxy. See Veneer.__init__ for full semantics.
         '''
 
         self._progress_callback = progress_callback
         emit = _make_emitter(progress_callback)
+        self._veneer_kwargs = {'trust_env': trust_env, 'proxies': proxies}
 
         self.wrap = partial(run_on_cluster,self)
         self.v = ClusterVeneerClient(self)
@@ -370,7 +381,8 @@ class VeneerCluster(object):
             emit('affinity-mapping', 0, 1, 'Mapping Veneer ports to Dask workers')
             self.worker_affinity = {}
             worker_info = self.dask_cluster.workers
-            veneer_info_map = self.run_on_each(scenario_info)
+            scenario_jobs = [scenario_info(p, self._veneer_kwargs) for p in self.veneer_ports]
+            veneer_info_map = self.dask_client.compute(scenario_jobs, sync=True)
 
             # veneer_processes already aligned to ports by index (see start() return shape).
             veneer_pid_by_port = {port: proc.pid for port, proc in zip(self.veneer_ports, self.veneer_processes)}
@@ -436,7 +448,7 @@ class VeneerCluster(object):
         Example: cluster.workers[0].retrieve_json('/runs')
         '''
         if self._workers is None or len(self._workers) != len(self.veneer_ports):
-            self._workers = [Veneer(p) for p in self.veneer_ports]
+            self._workers = [Veneer(p, **self._veneer_kwargs) for p in self.veneer_ports]
         return self._workers
 
     def worker_alive(self, port: int) -> bool:

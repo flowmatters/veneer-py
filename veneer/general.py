@@ -61,7 +61,8 @@ class Veneer(object):
       False: Replace forward slash in identifer with %2F
     '''
 
-    def __init__(self, port=9876, host='localhost', protocol='http', prefix='', live=True):
+    def __init__(self, port=9876, host='localhost', protocol='http', prefix='', live=True,
+                 trust_env=None, proxies=None):
         '''
         Instantiate a new Veneer client.
 
@@ -72,6 +73,16 @@ class Veneer(object):
         prefix: path prefix for all queries. Useful if Veneer is running behind some kind of proxy
 
         live: Connecting to a live Veneer service or a statically served copy of the results? Default: True
+
+        trust_env: Whether the underlying requests Session should consult environment variables
+        (HTTP_PROXY, HTTPS_PROXY, NO_PROXY, REQUESTS_CA_BUNDLE, .netrc, etc). Default: None, which
+        means True for non-loopback hosts and False for loopback hosts (localhost/127.0.0.1/::1).
+        This avoids the common case where a corporate HTTP_PROXY causes requests to a local Veneer
+        instance to be tunnelled through (and timed out by) the proxy.
+
+        proxies: Optional dict of proxy URLs to use, e.g. {'http': 'http://proxy:8080'}. Pass an
+        empty dict ({}) or {'http': None, 'https': None} to force-disable proxies. If provided,
+        this takes precedence over the trust_env default.
         '''
         self.port = port
         self.host = host
@@ -93,7 +104,20 @@ class Veneer(object):
 
         self.model = VeneerIronPython(self)
         self.double_escape_slashes = True
-        self._session = requests.Session()
+        self._session = self._build_session(trust_env, proxies)
+
+    def _build_session(self, trust_env, proxies):
+        session = requests.Session()
+        is_loopback = self.host in ('localhost', '127.0.0.1', '::1')
+        loopback_default = trust_env is None and proxies is None and is_loopback
+        if trust_env is None:
+            trust_env = not is_loopback
+        session.trust_env = trust_env
+        if proxies is not None:
+            session.proxies = dict(proxies)
+        elif loopback_default:
+            session.proxies = {'http': None, 'https': None}
+        return session
 
     def make_connection(self):
         '''

@@ -27,7 +27,8 @@ class VeneerRetriever(object):
                  retrieve_ts_json=True,retrieve_ts_csv=False,
                  retrieve_data_sources=True,retrieve_spatial=False,
                  print_all = False, print_urls = False,
-                 update_frequency = -1, logger=None):
+                 update_frequency = -1, logger=None,
+                 trust_env=None, proxies=None):
         from .general import Veneer,log
         self.destination = destination
         self.port = port
@@ -47,7 +48,8 @@ class VeneerRetriever(object):
         self.print_all = print_all
         self.print_urls = print_urls
         self.base_url = "%s://%s:%d" % (protocol,host,port)
-        self._veneer = Veneer(host=self.host,port=self.port,protocol=self.protocol)
+        self._veneer = Veneer(host=self.host,port=self.port,protocol=self.protocol,
+                              trust_env=trust_env, proxies=proxies)
         self.log = logger or log
         self.last_update_at = 0
         self.update_frequency = update_frequency
@@ -75,7 +77,7 @@ class VeneerRetriever(object):
             print("*** %s ***" % (url))
     
         try:
-            response = requests.get(self.base_url + quote(url))
+            response = self._veneer._session.get(self.base_url + quote(url))
             response.raise_for_status()
             text = response.text
         except Exception as e:
@@ -97,7 +99,7 @@ class VeneerRetriever(object):
         if self.print_urls:
             print("*** %s ***" % (url))
     
-        response = requests.get(self.base_url+quote(url))
+        response = self._veneer._session.get(self.base_url+quote(url))
         response.raise_for_status()
         self.save_data(url[1:],response.content,ext,mode="b")
 
