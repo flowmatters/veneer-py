@@ -273,18 +273,38 @@ def network_use_schematic_coordinates(self):
                 to_node['properties']['schematic_location']
             ]
 
-def network_as_dataframe(self):
+def network_as_dataframe(self, geo=None):
+    '''
+    Convert the network to a DataFrame.
+
+    geo: controls whether a GeoDataFrame is produced.
+        * None (default) — try GeoDataFrame, fall back to a regular DataFrame
+          if geopandas is unavailable or construction fails.
+        * True — force GeoDataFrame; raise if geopandas is unavailable.
+        * False — force regular DataFrame, skipping geopandas entirely.
+    '''
     import pandas as pd
-    try:
-        from geopandas import GeoDataFrame
-        result = GeoDataFrame.from_features(self['features'])
-        if 'id' in result.columns:
-            result['veneer_id'] = result['id']
-        result['id'] = [_feature_id(f) for f in self['features']]
-        return result
-    except Exception as e:
-        logger.error('Could not create GeoDataFrame. Using regular DataFrame.')
-        logger.error(e)
+
+    if geo is not False:
+        try:
+            from geopandas import GeoDataFrame
+        except ImportError:
+            if geo is True:
+                raise
+            GeoDataFrame = None
+
+        if GeoDataFrame is not None:
+            try:
+                result = GeoDataFrame.from_features(self['features'])
+                if 'id' in result.columns:
+                    result['veneer_id'] = result['id']
+                result['id'] = [_feature_id(f) for f in self['features']]
+                return result
+            except Exception as e:
+                if geo is True:
+                    raise
+                logger.error('Could not create GeoDataFrame. Using regular DataFrame.')
+                logger.error(e)
 
     def flat_feature(f):
         result = {k:v for k,v in f.items() if k != 'properties'}
