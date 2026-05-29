@@ -535,19 +535,6 @@ class VeneerCluster(object):
 
         return self.dask_client.submit(_unwrap_or_raise, future_results)
 
-
-def _unwrap_or_raise(results):
-    '''Convert a list of wrapper-produced dicts to the legacy shape, or raise.
-
-    Empty input returns []. Non-dict elements will raise AttributeError on
-    .get(); the caller is responsible for only passing wrapper output.
-    '''
-    failures = [r for r in results if r.get('status') != 'ok']
-    if failures:
-        raise WorkerDied(failures)
-    # Legacy shape: [( (port, directory), value ), ...]
-    return [((r['port'], r['directory']), r['value']) for r in results]
-
     def shutdown(self, progress_callback=None):
         '''
         Shutdown the cluster. Remove any temporary directories created for the project files.
@@ -584,6 +571,19 @@ def _unwrap_or_raise(results):
         except Exception:
             logger.exception('Error closing Dask cluster during shutdown')
         emit('shutdown-dask', 1, 1, 'Cluster shut down')
+
+
+def _unwrap_or_raise(results):
+    '''Convert a list of wrapper-produced dicts to the legacy shape, or raise.
+
+    Empty input returns []. Non-dict elements will raise AttributeError on
+    .get(); the caller is responsible for only passing wrapper output.
+    '''
+    failures = [r for r in results if r.get('status') != 'ok']
+    if failures:
+        raise WorkerDied(failures)
+    # Legacy shape: [( (port, directory), value ), ...]
+    return [((r['port'], r['directory']), r['value']) for r in results]
 
 
 def main():
