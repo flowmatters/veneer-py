@@ -290,10 +290,10 @@ targets = %s
 fm = scenario.Network.FunctionManager
 result = []
 for variable in fm.Variables:
-    if (targets is not None) and variable.Name not in targets:
-        result.append('%%s not in targets'%%variable.Name)
+    if (targets is not None) and variable.Name not in targets and variable.FullName not in targets:
+        result.append('%%s not in targets'%%variable.FullName)
         continue
-    result.append('Updating %%s to DateRange=%%s'%%(variable.Name,date_range.Name))
+    result.append('Updating %%s to DateRange=%%s'%%(variable.FullName,date_range.Name))
     variable.DateRange = date_range
 '''
 
@@ -308,10 +308,10 @@ new_units=Unit.PredefinedUnit(CommonUnits.%s)
 fm = scenario.Network.FunctionManager
 result = []
 for variable in fm.Variables:
-    if (targets is not None) and variable.Name not in targets:
-        result.append('%%s not in targets'%%variable.Name)
+    if (targets is not None) and variable.Name not in targets and variable.FullName not in targets:
+        result.append('%%s not in targets'%%variable.FullName)
         continue
-    result.append('Updating %%s to ResultUnit=%%s'%%(variable.Name,new_units))
+    result.append('Updating %%s to ResultUnit=%%s'%%(variable.FullName,new_units))
     variable.ResultUnit = new_units
 '''
 

@@ -89,6 +89,16 @@ ADDITIONAL_PARAMETERS={
     ]
 }
 
+def _normalise_function_names(functions):
+    '''
+    Normalise one or more function/variable names to the form Source stores
+    them in: a single leading `$`, preserving any nested folder path (the dots
+    in `$Folder.SubFolder.Name`).
+
+    Returns a list, so a single name passed as a string becomes `['$name']`.
+    '''
+    return ['$' + name.lstrip('$') for name in _stringToList(functions)]
+
 def _transform_node_type_name(n):
     n = n[0].upper() + n[1:]
     splits = n.split('_')
@@ -1939,8 +1949,14 @@ class VeneerFunctionActions():
     def _accessor(self, option, functions=None):
         accessor = 'scenario.Network.FunctionManager.Functions'
         if functions is not None:
-            functions = _stringToList(functions)
-            accessor += '.Where(lambda v: v.Name in %s)' % functions
+            functions = _normalise_function_names(functions)
+            # A function's Name is only its final segment, so nested functions
+            # ($Folder.SubFolder.Name) must be matched on FullName, while
+            # un-nested functions ($Name) match on Name. Matching on both lets
+            # callers identify a function unambiguously by its full path -- the
+            # same logic as search_by_name in templates.APPLY_FUNCTION_INIT.
+            accessor += '.Where(lambda v: v.Name in %s or v.FullName in %s)' % (
+                functions, functions)
         accessor += '.*' + option
 
         return accessor
@@ -2017,10 +2033,11 @@ class VeneerFunctionActions():
             self._ironpy._veneer.update_variable_piecewise(variable_name,table)
 
     def delete_variables(self, names):
+        names = _normalise_function_names(names)
         script = self._ironpy._init_script()
         script += 'names = %s\n' % names
-        script += 'to_remove = scenario.Network.FunctionManager.Variables.Where(lambda v: v.Name in names).ToList()\n'
-        script += 'result = [v.Name for v in to_remove]\n'
+        script += 'to_remove = scenario.Network.FunctionManager.Variables.Where(lambda v: v.Name in names or v.FullName in names).ToList()\n'
+        script += 'result = [v.FullName for v in to_remove]\n'
         script += 'for v in to_remove: scenario.Network.FunctionManager.Variables.Remove(v)\n'
         result = self._ironpy.run_script(script)
         if not result['Exception'] is None:
@@ -2029,24 +2046,17 @@ class VeneerFunctionActions():
         return self._ironpy.simplify_response(result['Response'])
 
     def delete_functions(self, names):
+        names = _normalise_function_names(names)
         script = self._ironpy._init_script()
         script += 'names = %s\n' % names
-        script += 'to_remove = scenario.Network.FunctionManager.Functions.Where(lambda v: v.Name in names).ToList()\n'
-        script += 'result = [v.Name for v in to_remove]\n'
+        script += 'to_remove = scenario.Network.FunctionManager.Functions.Where(lambda v: v.Name in names or v.FullName in names).ToList()\n'
+        script += 'result = [v.FullName for v in to_remove]\n'
         script += 'for v in to_remove: scenario.Network.FunctionManager.Functions.Remove(v)\n'
         result = self._ironpy.run_script(script)
         if not result['Exception'] is None:
             raise Exception(result['Exception'])
 #        data = result['Response']['Value'] if result['Response'] else result['Response']
         return self._ironpy.simplify_response(result['Response'])
-
-    def get_options(self, option, functions=None):
-        '''
-        Return the current value of `option` for one or more functions.
-        '''
-        accessor = self._accessor(option, functions)
-        resp = self._ironpy.get(accessor)
-        return resp
 
     def get_options(self, option, functions=None):
         '''
@@ -2127,11 +2137,15 @@ class VeneerFunctionActions():
         return self._ironpy.simplify_response(self._ironpy._safe_run(script)['Response'])
 
     def set_modelled_variable_time_period(self,tp,variables=None):
+        if variables is not None:
+            variables = _normalise_function_names(variables)
         template = self._ironpy._init_script() + SET_TIME_PERIODS
         script = template%(tp,variables)
         self._ironpy._safe_run(script)
 
     def set_modelled_variable_units(self,units,variables):
+        if variables is not None:
+            variables = _normalise_function_names(variables)
         template = self._ironpy._init_script() + SET_MODEL_VARIABLE_UNITS
         script = template%(variables,units)
         self._ironpy._safe_run(script)
