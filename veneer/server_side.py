@@ -2223,6 +2223,96 @@ class VeneerSimulationActions():
         date_strings = self._ironpy.simplify_response(result['Response'])
         return [parse_iron_python_date(ds) for ds in date_strings]
 
+    def recorder_sets(self):
+        '''
+        Return the names of all recorder sets defined in the model.
+
+        Recorder sets are named collections of recording instructions, managed through
+        Source's Recording Manager. The special 'Current Recorder Tree' set corresponds
+        to the manually configured recorders that v.configure_recording() manipulates.
+
+        See also: selected_recorder_sets, recorder_set_instructions, select_recorder_sets.
+        '''
+        return self._ironpy.get(
+            'scenario.GetPluginModel[RecorderSetManager]().Sets.*Name',
+            namespace=RECORDER_SET_MANAGER_NS)
+
+    def selected_recorder_sets(self):
+        '''
+        Return the names of the recorder sets selected for the current run configuration.
+
+        IMPORTANT: When one or more *named* recorder sets are selected, they OVERRIDE any
+        recording configured through v.configure_recording() when the model is run. When the
+        selection is empty, Source reverts to the 'Current Recorder Tree', ie recording is
+        governed by v.configure_recording(). Use this to diagnose why configure_recording()
+        appears to have no effect.
+        '''
+        return self._ironpy.get('scenario.CurrentConfiguration.SelectedRecorderSets.*Name')
+
+    def recorder_set_instructions(self, name=None):
+        '''
+        Return the recording instructions of a recorder set (the items it records).
+
+        name: Name of a recorder set. If None (default), uses the first currently-selected set.
+
+        Returns the raw instruction text, or None if the named set does not exist or has no
+        manual configuration (eg the 'Current Recorder Tree', which has no fixed instructions).
+        '''
+        script = self._ironpy._init_script(RECORDER_SET_MANAGER_NS)
+        if name is None:
+            script += 'matches = list(scenario.CurrentConfiguration.SelectedRecorderSets)\n'
+        else:
+            script += 'mgr = scenario.GetPluginModel[RecorderSetManager]()\n'
+            script += 'matches = [s for s in mgr.Sets if s.Name==%r]\n' % name
+        script += 'result = None\n'
+        script += 'if len(matches):\n'
+        script += '    cfg = getattr(matches[0],"Configuration",None)\n'
+        script += '    result = cfg.Instructions if cfg is not None else None\n'
+        resp = self._ironpy.run_script(script)
+        if not resp['Exception'] is None:
+            raise Exception(resp['Exception'])
+        return self._ironpy.simplify_response(resp['Response'])
+
+    def select_recorder_sets(self, names):
+        '''
+        Set the recorder sets selected for the current run configuration, replacing any
+        existing selection.
+
+        names: A recorder set name, or a list of names, to select. Selecting one or more
+               *named* sets causes them to OVERRIDE v.configure_recording() at run time.
+               Pass an empty list (or use clear_recorder_sets) to revert to the
+               'Current Recorder Tree', so that v.configure_recording() governs recording.
+
+        Returns the resulting list of selected recorder set names.
+
+        Raises ValueError if any requested name is not a defined recorder set (see
+        recorder_sets() for the available names).
+
+        Note: this changes the active in-memory configuration. The persisted selection
+        (saved with the project) is a derived view that follows the selection.
+        '''
+        if isinstance(names, str):
+            names = [names]
+        script = self._ironpy._init_script(RECORDER_SET_MANAGER_NS) + \
+            SELECT_RECORDER_SETS_SCRIPT % {'wanted': list(names)}
+        resp = self._ironpy.run_script(script)
+        if not resp['Exception'] is None:
+            raise Exception(resp['Exception'])
+        result = self._ironpy.simplify_response(resp['Response'])
+        if result['missing']:
+            raise ValueError('Unknown recorder set(s): %s. Available: %s' %
+                             (result['missing'], self.recorder_sets()))
+        return result['selected']
+
+    def clear_recorder_sets(self):
+        '''
+        Deselect all named recorder sets, reverting to the 'Current Recorder Tree'.
+
+        After this, recording is governed by the manually configured recorder tree, ie by
+        v.configure_recording(). Equivalent to select_recorder_sets([]).
+        '''
+        return self.select_recorder_sets([])
+
 class VeneerGeographicDataActions(object):
     def __init__(self,ironpython):
         self._ironpy = ironpython

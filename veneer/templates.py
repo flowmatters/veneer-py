@@ -387,6 +387,34 @@ temporalCharacteristics = TimeTools.findTemporalCharacteristics(
 result = [temporalCharacteristics.minimum,temporalCharacteristics.maximum]
 '''
 
+# Namespace import for the recorder set manager (an IPluginDataModel), used by the
+# recorder set helpers on VeneerSimulationActions.
+RECORDER_SET_MANAGER_NS='RiverSystem.ScenarioSets.RecorderSets.RecorderSetManager as RecorderSetManager'
+
+# Replaces the recorder set selection for the current run configuration. A named
+# recorder set, once selected, OVERRIDES v.configure_recording() at run time. An
+# empty selection reverts to the special 'Current Recorder Tree' set, ie recording
+# is then governed by the manually configured recorders (v.configure_recording()).
+#
+# Only SelectedRecorderSets is mutated: PersistedSelectedRecorderSets is a derived
+# view that follows the selection, so there is nothing separate to update. We also
+# avoid reading PersistedSelectedRecorderSets here, as doing so can cause Source to
+# inject the 'Current Recorder Tree' set into the selection as a side effect.
+#
+# Format arg: wanted (a Python list literal of set names).
+SELECT_RECORDER_SETS_SCRIPT='''
+mgr = scenario.GetPluginModel[RecorderSetManager]()
+selected = scenario.CurrentConfiguration.SelectedRecorderSets
+wanted = %(wanted)s
+available = [s.Name for s in mgr.Sets]
+missing = [w for w in wanted if w not in available]
+selected.Clear()
+for recorder_set in mgr.Sets:
+    if recorder_set.Name in wanted:
+        selected.Add(recorder_set)
+result = {'selected': [s.Name for s in selected], 'missing': missing}
+'''
+
 # Sets (or clears) a suffix on the Source main window (WinForms) title for the
 # lifetime of the Source session. The original title is cached in
 # AppDomain.CurrentDomain so repeated set/clear cycles restore exactly and never
