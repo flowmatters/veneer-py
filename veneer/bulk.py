@@ -3,6 +3,7 @@ try:
     from urllib import quote
 except:
     from urllib.parse import quote
+import argparse
 import requests
 import json
 import shutil
@@ -13,6 +14,24 @@ from veneer.general import MODEL_TABLES
 from veneer.actions import get_big_data_source
 
 STANDARD_RASTERS=[('DEM',False),('FunctionalUnitMap',True),('StreamMap',False)]
+
+
+def _long_path(path):
+    '''
+    On Windows, rewrite ``path`` to its extended-length (``\\\\?\\``) form so
+    paths longer than the legacy 260-character MAX_PATH limit can be created
+    and written. Source models can generate very long network/variable names,
+    which push archived time-series paths past that limit. No-op elsewhere.
+    '''
+    if os.name != 'nt':
+        return path
+    abs_path = os.path.abspath(path)  # also normalises forward slashes to '\\'
+    if abs_path.startswith('\\\\?\\'):
+        return abs_path
+    if abs_path.startswith('\\\\'):
+        # UNC path: \\server\share -> \\?\UNC\server\share
+        return '\\\\?\\UNC\\' + abs_path[2:]
+    return '\\\\?\\' + abs_path
 
 class VeneerRetriever(object):
     '''
@@ -55,7 +74,7 @@ class VeneerRetriever(object):
         self.update_frequency = update_frequency
 
     def mkdirs(self,directory):
-        import os
+        directory = _long_path(directory)
         if not os.path.exists(directory):
             os.makedirs(directory)
 
@@ -68,9 +87,14 @@ class VeneerRetriever(object):
 
     def save_data(self,base_name,data,ext,mode="b"):
         full_name = self.make_dest(base_name,ext)
-        f = open(full_name,"w"+mode)
-        f.write(data)
-        f.close()
+        # Use the extended-length path for the actual write so over-long names
+        # don't fail, and log+skip (rather than aborting the whole archive) on
+        # any other filesystem error, mirroring retrieve_json/retrieve_csv.
+        try:
+            with open(_long_path(full_name),"w"+mode) as f:
+                f.write(data)
+        except OSError as e:
+            self.log("Couldn't write %s: %s"%(full_name, str(e)))
     
     def retrieve_json(self,url,**kwargs):
         if self.print_urls:
@@ -92,15 +116,28 @@ class VeneerRetriever(object):
         return json.loads(text)
     
     def retrieve_csv(self,url):
-        text = self._veneer.retrieve_csv(url)
+        # Resilient like retrieve_json: a missing/unsupported table (e.g. the
+        # 'fus' table on a model with no functional units) is logged and skipped
+        # rather than aborting the whole retrieval.
+        try:
+            text = self._veneer.retrieve_csv(url)
+        except Exception as e:
+            self.log("Couldn't retrieve %s: %s"%(url, str(e)))
+            return None
         self.save_data(url[1:],bytes(text,'utf-8'),"csv")
 
-    def retrieve_resource(self,url,ext):
+    def retrieve_resource(self,url,ext,optional=False):
         if self.print_urls:
             print("*** %s ***" % (url))
-    
-        response = self._veneer._session.get(self.base_url+quote(url))
-        response.raise_for_status()
+
+        try:
+            response = self._veneer._session.get(self.base_url+quote(url))
+            response.raise_for_status()
+        except Exception as e:
+            if optional:
+                self.log("Couldn't retrieve %s: %s"%(url, str(e)))
+                return None
+            raise
         self.save_data(url[1:],response.content,ext,mode="b")
 
     # Process Run list and results
@@ -229,6 +266,38 @@ class VeneerRetriever(object):
             fn = self.make_dest(f'dataSources/{ds_name}','csv')
             ds.to_csv(fn)
 
+    def retrieve_tables(self):
+        # Discover model tables dynamically from the /tables index endpoint.
+        # Older Veneer instances lack this endpoint (retrieve_json returns None),
+        # in which case fall back to the known MODEL_TABLES. When the endpoint IS
+        # present we trust its (possibly empty) table list: a model with no
+        # functional units legitimately reports zero tables and must not be
+        # forced to fetch the non-existent 'fus' table.
+        index = self.retrieve_json('/tables')
+        if index is None:
+            table_names = MODEL_TABLES
+        else:
+            table_names = [tbl['Name'] for tbl in index.get('Tables', [])]
+        for tbl in table_names:
+            self.retrieve_csv('/tables/%s'%tbl)
+
+    def retrieve_network(self):
+        network = self.retrieve_json("/network")
+        icons_retrieved = []
+        for f in network['features']:
+            #retrieve_json(f['id'])
+            if not f['properties']['feature_type'] == 'node': continue
+            if f['properties']['icon'] in icons_retrieved: continue
+            self.retrieve_resource(f['properties']['icon'],'png')
+            icons_retrieved.append(f['properties']['icon'])
+
+        # Newer Veneer endpoints. These degrade gracefully on older instances:
+        # retrieve_json swallows 404s, and the schematic SVG is fetched as an
+        # optional resource (absent when the scenario has no schematic).
+        self.retrieve_json("/network/geographic")
+        self.retrieve_resource("/network/schematic.svg","svg",optional=True)
+        self.retrieve_json("/network/schematic.svg/tags")
+
     def retrieve_spatial_data(self):
         # List of rasters. Check which are present and write. Check which have attribute tables and write
         # List of vectors. Write... (columns?)
@@ -247,8 +316,7 @@ class VeneerRetriever(object):
                 raise Exception("Destination (%s) already exists. Use clean=True to overwrite"%self.destination)
         self.mkdirs(self.destination)
 
-        for tbl in MODEL_TABLES:
-            self.retrieve_csv('/tables/%s'%tbl)
+        self.retrieve_tables()
 
         if self.retrieve_data_sources:
             self.retrieve_data_sources_values()
@@ -265,14 +333,7 @@ class VeneerRetriever(object):
         self.retrieve_json("/inputSets")
         self.retrieve_json("/")
 
-        network = self.retrieve_json("/network")
-        icons_retrieved = []
-        for f in network['features']:
-            #retrieve_json(f['id'])
-            if not f['properties']['feature_type'] == 'node': continue
-            if f['properties']['icon'] in icons_retrieved: continue
-            self.retrieve_resource(f['properties']['icon'],'png')
-            icons_retrieved.append(f['properties']['icon'])
+        self.retrieve_network()
         self.update('Finished ',100)
     
     def update(self,msg,prog):
@@ -346,16 +407,115 @@ class PruneVeneer(object):
         json.dump(run,open(run_fn,'w'))
 
 
-if __name__ == '__main__':
-    if len(sys.argv)>1:
-        config_fn = sys.argv[1]
-        config = json.load(open(config_fn,'r'))
+DEFAULT_DESTINATION = 'C:\\temp\\veneer_download'
+
+
+def build_arg_parser():
+    '''
+    Build the command line argument parser for the bulk retriever.
+
+    Every overridable option defaults to None so that, after parsing, we can
+    tell whether the user actually supplied a flag. Resolution order for each
+    setting is: explicit CLI flag -> value from --config JSON -> built-in default.
+    '''
+    bool_action = argparse.BooleanOptionalAction
+    parser = argparse.ArgumentParser(
+        prog='python -m veneer.bulk',
+        description='Bulk-retrieve all data from a running Veneer instance and '
+                    'write it to disk (time series, tables, data sources, '
+                    'network and optionally spatial data).')
+
+    parser.add_argument('destination', nargs='?', default=None,
+                        help='Output directory for the retrieved data '
+                             '(default: %s, or "destination" from --config).' % DEFAULT_DESTINATION)
+    parser.add_argument('--config', metavar='PATH', default=None,
+                        help='JSON config file providing default settings. '
+                             'Explicit CLI flags override values from this file. '
+                             'Use the config for structured/niche settings such '
+                             'as slack, proxies, retrieve_daily_for and print flags.')
+
+    parser.add_argument('--host', default=None,
+                        help='Veneer host (default: localhost).')
+    parser.add_argument('--port', type=int, default=None,
+                        help='Veneer port (default: 9876).')
+    parser.add_argument('--protocol', default=None, choices=['http', 'https'],
+                        help='Protocol (default: http).')
+    parser.add_argument('--clean', action=bool_action, default=None,
+                        help='Delete the destination directory first if it '
+                             'already exists (default: off).')
+    parser.add_argument('--update-frequency', dest='update_frequency', type=int, default=None,
+                        help='Progress logging frequency as a percent step; '
+                             'negative to silence progress (default: 5).')
+    parser.add_argument('--run', action=bool_action, default=None,
+                        help='Trigger a simulation run with default settings '
+                             'before retrieving (default: off).')
+    parser.add_argument('--drop-runs', dest='drop_runs', action=bool_action, default=None,
+                        help='Drop all existing runs before triggering the run, '
+                             'so the archive reflects only the fresh run. Only '
+                             'applies with --run (default: off).')
+
+    parser.add_argument('--daily', dest='retrieve_daily', action=bool_action, default=None,
+                        help='Retrieve daily time series (default: on).')
+    parser.add_argument('--monthly', dest='retrieve_monthly', action=bool_action, default=None,
+                        help='Retrieve monthly-aggregated time series (default: on).')
+    parser.add_argument('--annual', dest='retrieve_annual', action=bool_action, default=None,
+                        help='Retrieve annually-aggregated time series (default: on).')
+    parser.add_argument('--data-sources', dest='retrieve_data_sources', action=bool_action, default=None,
+                        help='Retrieve data sources (default: on).')
+    parser.add_argument('--spatial', dest='retrieve_spatial', action=bool_action, default=None,
+                        help='Retrieve spatial/raster data (default: off).')
+    parser.add_argument('--ts-json', dest='retrieve_ts_json', action=bool_action, default=None,
+                        help='Write time series as JSON (default: on).')
+    parser.add_argument('--ts-csv', dest='retrieve_ts_csv', action=bool_action, default=None,
+                        help='Write time series as CSV (default: off).')
+
+    return parser
+
+
+# CLI flags whose resolved values are passed straight through to VeneerRetriever
+# as keyword arguments (and may also appear in a config file's "options" dict).
+_OPTION_FLAGS = [
+    'host', 'protocol',
+    'retrieve_daily', 'retrieve_monthly', 'retrieve_annual',
+    'retrieve_data_sources', 'retrieve_spatial',
+    'retrieve_ts_json', 'retrieve_ts_csv',
+]
+
+
+def main(argv=None):
+    args = build_arg_parser().parse_args(argv)
+
+    if args.config is not None:
+        with open(args.config, 'r') as f:
+            config = json.load(f)
     else:
         config = {}
 
-    port = config.get('port',9876)
-    slack = config.get('slack',None)
+    # Start from the config's "options" dict; CLI flags layer on top of it.
+    options = dict(config.get('options', {}))
 
+    port = args.port if args.port is not None else config.get('port', 9876)
+    dest = args.destination if args.destination is not None \
+        else config.get('destination', DEFAULT_DESTINATION)
+    clean = args.clean if args.clean is not None else config.get('clean', False)
+    run = args.run if args.run is not None else config.get('run', False)
+    drop_runs = args.drop_runs if args.drop_runs is not None else config.get('drop_runs', False)
+
+    # update_frequency historically defaulted to 5 in the CLI (not the
+    # constructor's -1); preserve that. CLI flag > config options > 5.
+    # Always pop it from options so it can't collide with the explicit kwarg.
+    config_update_frequency = options.pop('update_frequency', 5)
+    if args.update_frequency is not None:
+        update_frequency = args.update_frequency
+    else:
+        update_frequency = config_update_frequency
+
+    for flag in _OPTION_FLAGS:
+        value = getattr(args, flag)
+        if value is not None:
+            options[flag] = value
+
+    slack = config.get('slack', None)
     if slack is not None:
         import nbslack
         nbslack.notifying(slack)
@@ -365,11 +525,20 @@ if __name__ == '__main__':
         if slack is not None:
             import nbslack
             nbslack.notify(msg)
-    
-    options = config.get('options',{})
-    dest = config.get('destination','C:\\temp\\veneer_download')
-    clean = config.get('clean',False)
 
-    vr = VeneerRetriever(dest,port,update_frequency=5,logger=notify,**options)
+    vr = VeneerRetriever(dest, port, update_frequency=update_frequency, logger=notify, **options)
+
+    if run:
+        if drop_runs:
+            notify('Dropping existing runs')
+            vr._veneer.drop_all_runs()
+        notify('Triggering simulation run with default settings')
+        vr._veneer.run_model()
+        notify('Simulation run complete')
+
     vr.retrieve_all(clean=clean)
+
+
+if __name__ == '__main__':
+    main()
 
