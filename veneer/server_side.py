@@ -22,15 +22,19 @@ NODE_TYPES = {
     'farm_dam': 'RiverSystem.Nodes.FarmDam.FarmDamNodeModel'
 }
 
+STORAGE_INPUTS=[
+    'StorageInternal.EvaporationInMetresPerSecond',
+    'StorageInternal.RainfallInMetresPerSecond'
+]
 ADDITIONAL_INPUTS={
     'RiverSystem.Flow.StorageRouting':[
         'link.RainFall',
         'link.Evaporation',
         'link.TimeSeriesFlux'
     ],
-    'RiverSystem.Nodes.StorageNodeModel':[
-        'StorageInternal.EvaporationInMetresPerSecond',
-        'StorageInternal.RainfallInMetresPerSecond'
+    'RiverSystem.Nodes.StorageNodeModel':STORAGE_INPUTS,
+    'RiverSystem.Nodes.WeirNodeModel':STORAGE_INPUTS+[
+        'UpstreamReach.TimeSeriesFlux'
     ]
 }
 
