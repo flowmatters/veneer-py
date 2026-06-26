@@ -2,7 +2,7 @@
 
 `veneer.manage.IsolatedSource` runs a single Veneer command-line instance
 against a **throwaway copy** of a Source project. It is the single-instance
-counterpart to the isolation that [`VeneerCluster`](VeneerBatchRuns.ipynb)
+counterpart to the isolation that [`VeneerCluster`](VeneerCluster.md)
 provides per worker.
 
 Use it when a workload needs to **modify on-disk inputs** (e.g. rewrite
