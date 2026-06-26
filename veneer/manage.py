@@ -310,6 +310,33 @@ def _format_startup_failure(n_instances, failed, ports, cmd_lines, processes,
 _RETURN_LOG_PATHS_UNSET = object()  # sentinel so we can detect omission vs explicit False
 
 
+def copy_project_files(project_file, extras, dest):
+    """Copy project_file and each extra into dest (an existing directory).
+
+    project_file: path to the project file (e.g. .rsproj). Its basename is
+                  written directly into dest.
+    extras: iterable of paths, each resolved relative to the project file's
+            directory and copied into dest preserving that relative path.
+            Directories are copied recursively.
+    dest: an existing destination directory.
+
+    Returns the full path to the copied project file inside dest.
+    """
+    assert os.path.exists(project_file)
+    dest_fn = os.path.join(dest, os.path.basename(project_file))
+    shutil.copyfile(project_file, dest_fn)
+    src_dir = os.path.dirname(project_file)
+    for e in extras:
+        source = os.path.abspath(os.path.join(src_dir, e))
+        assert os.path.exists(source)
+        target = os.path.abspath(os.path.join(dest, e))
+        if os.path.isdir(source):
+            shutil.copytree(source, target)
+        else:
+            shutil.copyfile(source, target)
+    return dest_fn
+
+
 def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
           script=True, veneer_exe=None,overwrite_plugins=None,return_io=False,
           model=None,start_new_session=False,additional_plugins=[],
