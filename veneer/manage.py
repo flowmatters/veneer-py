@@ -337,6 +337,133 @@ def copy_project_files(project_file, extras, dest):
     return dest_fn
 
 
+_CLEANUP_POLICIES = ('always', 'never', 'on_clean')
+
+
+def _normalise_cleanup(cleanup):
+    if cleanup is True:
+        return 'always'
+    if cleanup is False:
+        return 'never'
+    if cleanup in _CLEANUP_POLICIES:
+        return cleanup
+    raise ValueError(
+        "cleanup must be one of 'always', 'never', 'on_clean' (or True/False); "
+        "got %r" % (cleanup,)
+    )
+
+
+class IsolatedSource(object):
+    """Run a single Veneer instance against an isolated, throwaway copy of a
+    Source project.
+
+    Copies project_file (and related_files) into a fresh temporary directory,
+    starts one VeneerCmd instance against the copy, and exposes a ready Veneer
+    client (``.v``) plus the sandbox path (``.directory``). Intended for
+    workloads that must modify on-disk input files without disturbing the
+    original model.
+
+    Usable as a context manager (recommended) or inline with an explicit
+    ``shutdown()``.
+
+    Attributes set once construction succeeds:
+      v            - ready Veneer client
+      directory    - the temp copy directory (modify/read files here)
+      project_file - the copied project-file path inside ``directory``
+      port         - the actual bound port (may differ from requested)
+      process      - the VeneerCmd process
+      log_path     - captured stdout/stderr log path, or None
+    """
+
+    def __init__(self, project_file, related_files=None, *, veneer_exe=None,
+                 port=9876, tempdir_prefix='source-isolated-',
+                 remote=False, script=True, overwrite_plugins=None,
+                 additional_plugins=None, custom_endpoints=None, model=None,
+                 debug=False, cleanup='always',
+                 trust_env=None, proxies=None):
+        self._cleanup = _normalise_cleanup(cleanup)
+        self._shutdown = False
+        self.directory = None
+        self.project_file = None
+        self.process = None
+        self.port = None
+        self.log_path = None
+        self.v = None
+
+        self.directory = tempfile.mkdtemp(prefix=tempdir_prefix)
+        try:
+            self.project_file = copy_project_files(
+                project_file, related_files or [], self.directory)
+            # Pass the copy as project_fn (not projects=[...]) so that
+            # overwrite_plugins actually takes effect; start() then defaults
+            # projects to [project_fn] for the single instance.
+            processes, ports, log_paths = start(
+                project_fn=self.project_file,
+                n_instances=1,
+                ports=port,
+                veneer_exe=veneer_exe,
+                remote=remote,
+                script=script,
+                overwrite_plugins=overwrite_plugins,
+                additional_plugins=additional_plugins or [],
+                custom_endpoints=custom_endpoints or [],
+                model=model,
+                debug=debug,
+                return_log_paths=True,
+            )
+            self.process = processes[0]
+            self.port = ports[0]
+            self.log_path = log_paths[0]
+            self.v = Veneer(self.port, trust_env=trust_env, proxies=proxies)
+        except BaseException:
+            # Startup failure is "not clean": only the 'always' policy removes
+            # the temp dir. The process (if any) is always killed.
+            self._teardown(remove=(self._cleanup == 'always'))
+            self._shutdown = True
+            raise
+
+    def _teardown(self, remove):
+        if self.process is not None:
+            try:
+                kill_all_now(self.process)
+            except Exception:
+                logger.exception('Error killing Veneer process during teardown')
+            self.process = None
+        if remove and self.directory is not None and os.path.exists(self.directory):
+            try:
+                shutil.rmtree(self.directory)
+            except Exception:
+                logger.exception('Error removing temp directory %s during teardown',
+                                 self.directory)
+
+    def shutdown(self, clean=True):
+        """Kill the Veneer instance and (per cleanup policy) remove the temp
+        copy. Idempotent. ``clean`` indicates whether the surrounding work
+        finished without error; it only affects the 'on_clean' policy. Inline
+        callers using 'on_clean' must pass clean=False on their error path to
+        keep the sandbox (the context-manager form does this automatically)."""
+        if self._shutdown:
+            return
+        self._shutdown = True
+        if self._cleanup == 'always':
+            remove = True
+        elif self._cleanup == 'never':
+            remove = False
+        else:  # 'on_clean'
+            remove = clean
+        self._teardown(remove=remove)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.shutdown(clean=(exc_type is None))
+        return False
+
+
+isolated_copy = IsolatedSource
+
+
 def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
           script=True, veneer_exe=None,overwrite_plugins=None,return_io=False,
           model=None,start_new_session=False,additional_plugins=[],
