@@ -143,3 +143,14 @@ def test_startup_failure_keeps_dir_under_on_clean(project, monkeypatch):
         manage.IsolatedSource(project, veneer_exe='X', cleanup='on_clean')
     assert os.path.exists(holder['dir'])
     shutil.rmtree(holder['dir'])
+
+
+def test_captures_output_to_sandbox_by_default(project, patched):
+    with manage.IsolatedSource(project, veneer_exe='X') as s:
+        assert patched['started']['capture_output_dir'] == \
+            os.path.join(s.directory, 'veneer_logs')
+
+
+def test_capture_output_can_be_disabled(project, patched):
+    with manage.IsolatedSource(project, veneer_exe='X', capture_output=False):
+        assert patched['started']['capture_output_dir'] is None

@@ -372,14 +372,22 @@ class IsolatedSource(object):
       project_file - the copied project-file path inside ``directory``
       port         - the actual bound port (may differ from requested)
       process      - the VeneerCmd process
-      log_path     - captured stdout/stderr log path, or None
+      log_path     - captured stdout/stderr log path inside ``directory``
+                     (``<directory>/veneer_logs/``), or None when
+                     capture_output is False
+
+    capture_output: when True (default), the instance's combined stdout/stderr
+    are teed to a per-port log file under ``<directory>/veneer_logs/``, so the
+    log survives alongside the sandbox under cleanup='never'/'on_clean' for
+    post-mortem inspection. Set False to disable capture (``log_path`` is then
+    None).
     """
 
     def __init__(self, project_file, related_files=None, *, veneer_exe=None,
                  port=9876, tempdir_prefix='source-isolated-',
                  remote=False, script=True, overwrite_plugins=None,
                  additional_plugins=None, custom_endpoints=None, model=None,
-                 debug=False, cleanup='always',
+                 debug=False, cleanup='always', capture_output=True,
                  trust_env=None, proxies=None):
         self._cleanup = _normalise_cleanup(cleanup)
         self._shutdown = False
@@ -394,6 +402,10 @@ class IsolatedSource(object):
         try:
             self.project_file = copy_project_files(
                 project_file, related_files or [], self.directory)
+            # Capture VeneerCmd output inside the sandbox so it survives with
+            # the temp copy under cleanup='never'/'on_clean'.
+            capture_dir = (os.path.join(self.directory, 'veneer_logs')
+                           if capture_output else None)
             # Pass the copy as project_fn (not projects=[...]) so that
             # overwrite_plugins actually takes effect; start() then defaults
             # projects to [project_fn] for the single instance.
@@ -409,6 +421,7 @@ class IsolatedSource(object):
                 custom_endpoints=custom_endpoints or [],
                 model=model,
                 debug=debug,
+                capture_output_dir=capture_dir,
                 return_log_paths=True,
             )
             self.process = processes[0]
