@@ -121,11 +121,18 @@ class IsolatedSource:
 1. Validate `cleanup` (see policy below).
 2. `tmp = tempfile.mkdtemp(prefix=tempdir_prefix)`.
 3. `copied_project = copy_project_files(project_file, related_files or [], tmp)`.
-4. `start(projects=[copied_project], n_instances=1, ports=port,
+4. `start(project_fn=copied_project, n_instances=1, ports=port,
    veneer_exe=veneer_exe, remote=remote, script=script,
    overwrite_plugins=overwrite_plugins, additional_plugins=additional_plugins
    or [], custom_endpoints=custom_endpoints or [], model=model, debug=debug,
    return_log_paths=True)` → reads back the **actual** bound port and log path.
+
+   Note: the copied project is passed as `project_fn` (not `projects=[...]`).
+   `start()` only applies `overwrite_plugins` when given `project_fn`
+   (`manage.py:475-478`); with a single instance it then defaults `projects` to
+   `[project_fn]`. Passing `project_fn` therefore makes `overwrite_plugins`
+   actually take effect, whereas `projects=[...]` would silently no-op it (the
+   same latent quirk that exists in the cluster path).
 5. `self.v = Veneer(actual_port, trust_env=trust_env, proxies=proxies)`.
 6. On any exception in steps 2–5: always kill any started process, then remove
    the temp dir iff policy is `'always'`; re-raise.
@@ -192,9 +199,15 @@ with IsolatedSource(model_file,
 s = IsolatedSource(model_file, veneer_exe=exe, cleanup='on_clean')
 try:
     s.v.run_model()
-finally:
-    s.shutdown()
+    s.shutdown()              # clean=True -> removed under 'on_clean'
+except Exception:
+    s.shutdown(clean=False)   # keep sandbox for post-mortem under 'on_clean'
+    raise
 ```
+
+Note: `shutdown()` defaults to `clean=True`. Inline callers using `'on_clean'`
+must pass `clean=False` on their error path to keep the sandbox; the
+context-manager form does this automatically via `exc_type`.
 
 ## Error handling
 
