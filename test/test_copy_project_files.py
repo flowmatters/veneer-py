@@ -33,3 +33,24 @@ def test_missing_extra_raises(tmp_path):
     dest.mkdir()
     with pytest.raises(AssertionError):
         manage.copy_project_files(str(proj), ['nope.csv'], str(dest))
+
+
+def test_cluster_copy_project_parity(tmp_path):
+    """cluster.copy_project still produces the expected on-disk layout after
+    delegating to copy_project_files."""
+    import shutil
+    from veneer.cluster import copy_project
+
+    src = tmp_path / 'src'
+    src.mkdir()
+    proj = src / 'm.rsproj'
+    proj.write_text('P')
+    (src / 'data.csv').write_text('D')
+
+    # copy_project is dask.delayed; .compute() runs it with the default scheduler.
+    tmp = copy_project('veneer-parity-test-', str(proj), ['data.csv']).compute()
+    try:
+        assert os.path.exists(os.path.join(tmp, 'm.rsproj'))
+        assert os.path.exists(os.path.join(tmp, 'data.csv'))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)

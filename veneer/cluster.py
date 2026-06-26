@@ -1,5 +1,5 @@
 import json
-from .manage import start, kill_all_now
+from .manage import start, kill_all_now, copy_project_files
 from ._proxy import AttributeChainProxy
 from dask.distributed import LocalCluster, Client
 from psutil import Process
@@ -80,21 +80,9 @@ def _make_emitter(callback):
 @dask.delayed
 def copy_project(prefix,project_file,extras):
     assert os.path.exists(project_file)
-
     tmp = tempfile.mkdtemp(prefix=prefix)
     assert os.path.exists(tmp)
-
-    dest_fn = os.path.join(tmp,os.path.basename(project_file))
-    shutil.copyfile(project_file,dest_fn)
-    src_dir = os.path.dirname(project_file)
-    for e in extras:
-        source = os.path.abspath(os.path.join(src_dir,e))
-        assert os.path.exists(source)
-        dest = os.path.abspath(os.path.join(tmp,e))
-        if os.path.isdir(source):
-            shutil.copytree(source,dest)
-        else:
-            shutil.copyfile(source,dest)
+    copy_project_files(project_file, extras, tmp)
     return tmp
 
 @dask.delayed
