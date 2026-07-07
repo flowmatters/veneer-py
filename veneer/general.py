@@ -702,11 +702,40 @@ class Veneer(object):
             [_transform_data_source_item(i) for i in result['Items']])
         return result
 
-    def create_data_source(self, name, data=None, units='mm/day', precision=3, reload_on_run=False):
+    def create_data_source(self, name, data=None, units=None, precision=3, reload_on_run=False):
         '''
         Create a new data source (name) using a Pandas dataframe (data)
 
-        If no dataframe is provided, name is interpreted as a filename
+        If no dataframe is provided, name is interpreted as a filename, which Source
+        will load directly (and reload before each run if reload_on_run=True).
+
+        units: units to apply to the columns of the new data source.
+
+            Units must be identifiers recognised by Source: the short or alternate names
+            of the units built in to Source (eg 'ML/d', 'mm/d', 'm3/s') or compound
+            expressions of recognised components (eg 'ML/day'). Unrecognised units cause
+            an error ("Unrecognised units: ..."). Use v.model.predefined_units() to see
+            the full list of recognised units.
+
+            Provide a single unit (applied to every column) or a comma separated string
+            of units (applied to columns in order, cycling if there are more columns
+            than units).
+
+            When a dataframe is provided, units defaults to 'mm/day' (for backwards
+            compatibility) and is applied by the Veneer service when it creates the
+            time series.
+
+            When loading from a file, the Veneer service (at least up to Source 6.1)
+            ignores units at creation time. Instead, Source infers units from the file,
+            including any units embedded in CSV column headers - a column named
+            "Flow (ML/d)" loads as "Flow" with units of ML/d. If units are specified
+            here, veneer-py applies them after creation with a server side script,
+            which requires the "Allow Scripts" option in Veneer.
+
+            NOTE: With reload_on_run=True, Source reloads the file (and re-infers units)
+            before each run, so units applied via this parameter may not persist. For
+            reloaded file-based data sources, embed the units in the CSV column headers
+            as described above.
         '''
         dummy_data_group = {}
         dummy_data_group['Name'] = name
@@ -724,10 +753,19 @@ class Veneer(object):
                 float_format='%%.%df' % precision)
         dummy_item['ReloadOnRun'] = reload_on_run
 
-        dummy_item['UnitsForNewTS'] = units
+        if units is None:
+            # File-based sources: don't force units the user didn't ask for.
+            dummy_item['UnitsForNewTS'] = 'mm/day' if data is not None else ''
+        else:
+            dummy_item['UnitsForNewTS'] = units
         dummy_data_group['Items'] = [dummy_item]
 
-        return self.post_json('/dataSources', data=dummy_data_group)
+        result = self.post_json('/dataSources', data=dummy_data_group)
+
+        if data is None and units is not None:
+            self.model.set_data_source_units(name, units)
+
+        return result
 
     def delete_data_source(self, group):
         '''

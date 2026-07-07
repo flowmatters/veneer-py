@@ -686,6 +686,61 @@ class VeneerIronPython(object):
         s += 'result = scenario.SystemConfiguration.Constituents.Select(lambda c: c.Name)\n'
         return self.simplify_response(self._safe_run(s)['Response'])
 
+    def predefined_units(self):
+        '''
+        Return a DataFrame of the units built in to Source (TIME.Core.Unit.GetPredefinedUnits).
+
+        Columns: name, short_name, long_name, alternate_name
+
+        The short_name and alternate_name forms (eg 'ML/d', 'm3/s'), and compound
+        expressions of recognised components (eg 'ML/day'), are accepted wherever
+        veneer-py accepts units (eg v.create_data_source, set_data_source_units).
+        '''
+        script = self._init_script()
+        script += "clr.AddReference('TIME')\n"
+        script += 'from TIME.Core import Unit\n'
+        script += "result = '\\n'.join(['|'.join([u.Name,u.ShortName,u.LongName,str(u.AlternateName)]) for u in Unit.GetPredefinedUnits()])\n"
+        res = self._safe_run(script)
+        rows = [line.split('|') for line in self.simplify_response(res['Response']).split('\n')]
+        return pd.DataFrame(rows, columns=['name', 'short_name', 'long_name', 'alternate_name'])
+
+    def set_data_source_units(self, data_source, units):
+        '''
+        Set the units on each time series in an existing data source (data group).
+
+        Works around the Veneer service (at least up to Source 6.1) ignoring requested
+        units when creating a data source from a file.
+
+        data_source: name of the data group. For file-based data sources this is the
+                     filename the group was created from.
+
+        units: a single unit or a comma separated string of units, applied to the
+               items of the group in order (cycling if there are more items than units).
+               See predefined_units() for valid identifiers.
+
+        Returns the number of time series updated.
+
+        NOTE: For data sources with reload-on-run set, Source reloads the file (and
+        re-infers units) before each run, so units set here may not persist. Embed
+        units in the CSV column headers (eg "Flow (ML/d)") if they need to survive
+        reload.
+        '''
+        script = self._init_script()
+        script += "clr.AddReference('TIME')\n"
+        script += 'from TIME.Core import Unit\n'
+        script += 'units = [Unit.parse(s.strip()) for s in {0}.split(",")]\n'.format(json.dumps(units))
+        script += 'grp = scenario.Network.DataManager.DataGroups.FirstOrDefault(lambda g: g.Name == {0})\n'.format(json.dumps(data_source))
+        script += 'assert grp is not None, "Unknown data source: " + {0}\n'.format(json.dumps(data_source))
+        script += 'count = 0\n'
+        script += 'for isi in grp.InputSetItems:\n'
+        script += '    ds = isi.DataSource\n'
+        script += '    data = ds.Data if hasattr(ds, "Data") else ds.PersistedData\n'
+        script += '    for i, item in enumerate(data):\n'
+        script += '        item.Data.TimeSeries.units = units[i % len(units)]\n'
+        script += '        count += 1\n'
+        script += 'result = count\n'
+        return self.simplify_response(self._safe_run(script)['Response'])
+
     def add_constituent(self, new_constituent):
         s = self._init_script(
             namespace='RiverSystem.Constituents.Constituent as Constituent')
