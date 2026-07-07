@@ -699,7 +699,15 @@ class VeneerIronPython(object):
         script = self._init_script()
         script += "clr.AddReference('TIME')\n"
         script += 'from TIME.Core import Unit\n'
-        script += "result = '\\n'.join(['|'.join([u.Name,u.ShortName,u.LongName,str(u.AlternateName)]) for u in Unit.GetPredefinedUnits()])\n"
+        # Unit names include non-ASCII characters (superscripts, degree signs). Build
+        # the response with .NET string operations so the script also works on Source
+        # versions embedding IronPython 2, where Python str is ASCII-only.
+        script += 'from System import String, Array, Object\n'
+        script += 'rows = []\n'
+        script += 'for u in Unit.GetPredefinedUnits():\n'
+        script += "    alt = u.AlternateName if u.AlternateName is not None else ''\n"
+        script += "    rows.append(String.Join('|', Array[Object]([u.Name, u.ShortName, u.LongName, alt])))\n"
+        script += "result = String.Join('\\n', Array[Object](rows))\n"
         res = self._safe_run(script)
         rows = [line.split('|') for line in self.simplify_response(res['Response']).split('\n')]
         return pd.DataFrame(rows, columns=['name', 'short_name', 'long_name', 'alternate_name'])
