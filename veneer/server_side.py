@@ -728,10 +728,11 @@ class VeneerIronPython(object):
 
         Returns the number of time series updated.
 
-        NOTE: For data sources with reload-on-run set, Source reloads the file (and
-        re-infers units) before each run, so units set here may not persist. Embed
-        units in the CSV column headers (eg "Flow (ML/d)") if they need to survive
-        reload.
+        NOTE: For data sources with reload-on-run set, Source re-reads the file before
+        each run and re-derives units from the CSV column headers: header-embedded
+        units (eg "Flow (ML/d)") take effect on every load and override units set here.
+        When the file's headers carry no units, units set here persist across reloads
+        (verified on Source 5.30).
         '''
         script = self._init_script()
         script += "clr.AddReference('TIME')\n"

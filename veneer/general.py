@@ -732,10 +732,13 @@ class Veneer(object):
             here, veneer-py applies them after creation with a server side script,
             which requires the "Allow Scripts" option in Veneer.
 
-            NOTE: With reload_on_run=True, Source reloads the file (and re-infers units)
-            before each run, so units applied via this parameter may not persist. For
-            reloaded file-based data sources, embed the units in the CSV column headers
-            as described above.
+            NOTE: With reload_on_run=True, Source re-reads the file before each run and
+            re-derives units from the CSV column headers, so header-embedded units take
+            effect on every load and override units applied via this parameter. When the
+            file's headers carry no units, units applied via this parameter persist
+            across reloads (verified on Source 5.30). Embedding units in the column
+            headers is the most robust option for reloaded file-based data sources
+            since the file then remains self-describing.
         '''
         dummy_data_group = {}
         dummy_data_group['Name'] = name
