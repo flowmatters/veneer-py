@@ -390,6 +390,22 @@ class Veneer(object):
 
         kwargs: optional named parameters to be used to update the params dictionary
 
+        Note on run parameters and Veneer protocol version:
+            Any run parameters supplied here (including start/end and anything in params/kwargs)
+            are applied to the scenario's running configuration. The behaviour of that change
+            depends on the Veneer plugin version, which you can check via v.status()['Version']:
+
+            - Protocol version 20260716 and later: run parameters apply to this run ONLY. The
+              running configuration is restored to its previous values once the run finishes
+              (on success, failure or cancellation), so a subsequent run_model() call that omits
+              a parameter uses the scenario's own configured value rather than the value from a
+              previous call.
+            - Earlier protocol versions: run parameters are applied PERMANENTLY to the running
+              configuration. A value supplied on one call persists to later runs and, if the
+              project is saved, into the saved project. To reproduce this durable behaviour
+              against a newer Veneer, change the configuration in the Source GUI (or via the API)
+              rather than relying on run_model().
+
         In the default behaviour (run_async=False), this method will return once the Source simulation has finished, and will return
         the URL of the results set in the Veneer service
         '''
