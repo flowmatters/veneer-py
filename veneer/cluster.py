@@ -208,7 +208,7 @@ class VeneerCluster(object):
           script=True,overwrite_plugins=None,custom_endpoints=None,additional_plugins=None,
           copy=False,tempdir_prefix='source-cluster-',copy_extras=None,existing='raise',
           existing_cluster=None,cleanup_on_failure=True,progress_callback=None,
-          trust_env=None,proxies=None):
+          trust_env=None,proxies=None,localhost_only=True):
         '''
         Create a cluster of Veneer instances, each running in a separate process
 
@@ -260,6 +260,11 @@ class VeneerCluster(object):
             variables. Set trust_env=True or pass an explicit proxies dict only
             when you genuinely need the cluster's HTTP calls routed through a
             proxy. See Veneer.__init__ for full semantics.
+        localhost_only: bool
+            If True (default), bind the Dask scheduler to 127.0.0.1 so it only
+            accepts connections from the local machine. This avoids the Windows
+            Firewall "allow incoming connections?" prompt on first run. Set to
+            False when the scheduler needs to be reachable from other hosts.
         '''
 
         self._progress_callback = progress_callback
@@ -315,7 +320,8 @@ class VeneerCluster(object):
         try:
             logger.info('Initialising DASK cluster with %d workers',self.n_workers)
             emit('dask-init', 0, 1, 'Initialising Dask cluster')
-            self.dask_cluster = LocalCluster(threads_per_worker=1,n_workers=self.n_workers)
+            dask_host = '127.0.0.1' if localhost_only else None
+            self.dask_cluster = LocalCluster(threads_per_worker=1,n_workers=self.n_workers,host=dask_host)
             self.dask_client = Client(self.dask_cluster)
             emit('dask-init', 1, 1, 'Dask cluster ready')
 
