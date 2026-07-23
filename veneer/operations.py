@@ -48,6 +48,41 @@ def get_override_time_series(location,variable,secondary):
 
 
 
+TRAVEL_TIME_OFFSETS_TEMPLATE='''
+import clr
+import System
+import RiverSystem.Operations.TabularColumnFormatting as TCF
+from System.Reflection import BindingFlags
+
+def _tt_name(e):
+    return e.Name if hasattr(e,'Name') else str(e)
+
+seq = TCF.NodeLinkNetworkOptimisedSequencer()
+net = scenario.Network
+offsets = seq.GetDisplayColumnTravelTimes(net, %s)
+order = seq.NetworkElementOrder(net)
+
+_MIN = System.Int32.MinValue
+element_offsets = {}
+for kv in offsets:
+    val = kv.Value
+    element_offsets[_tt_name(kv.Key)] = None if val == _MIN else val
+
+fld = seq.GetType().GetField('_linkTravelTimes', BindingFlags.NonPublic | BindingFlags.Instance)
+link_tt = fld.GetValue(seq)
+link_travel_times = {}
+for kv in link_tt:
+    link_travel_times[_tt_name(kv.Key)] = kv.Value
+
+result = {
+    'element_offsets': element_offsets,
+    'link_travel_times': link_travel_times,
+    'order': [_tt_name(e) for e in order],
+    'use_max': %s,
+}
+'''
+
+
 class VeneerOperationsActions(object):
     def __init__(self,ironpython):
         self._ironpy = ironpython
@@ -136,6 +171,46 @@ class VeneerOperationsActions(object):
                 script += f"ts[dt] = {val}\n"
 
         return self._ironpy._veneer.run_server_side_script(script)
+
+    def travel_time_offsets(self,use_max=True):
+        '''
+        Retrieve the network travel-time data used to draw the 'travel time cutout'
+        in the Source tabular editor.
+
+        This drives Source's own NodeLinkNetworkOptimisedSequencer (the class the
+        tabular editor uses), so the values match what the GUI would paint. Per-link
+        travel times are derived from each link's flow-routing model and accumulated
+        along the network to give a cumulative travel time (in whole timesteps) for
+        every display column (network element).
+
+        Parameters:
+        use_max: if True (default), use the maximum travel-time bound of each link's
+                 (flow-dependent) routing range; if False, use the minimum bound.
+                 Mirrors the sequencer's own useMax option.
+
+        Returns:
+        A dict with:
+        * 'element_offsets': {element name: cumulative travel time in timesteps (int),
+                              or None for elements with no defined travel time (e.g.
+                              disconnected / off-path)}
+        * 'link_travel_times': {link name: raw per-link travel time (float, in model
+                                timesteps)}
+        * 'order': list of element names in the tabular editor's upstream->downstream
+                   column order
+        * 'use_max': the bound used for this query
+
+        To draw the cutout for a selected column, the relative row offset of any other
+        column is the difference of their cumulative offsets:
+            offset(selected -> col) = element_offsets[col] - element_offsets[selected]
+
+        Note: elements are keyed by name to match the rest of this module; if two
+        elements share a name their offsets will collide in the returned dict.
+        '''
+        use_max_str = 'True' if use_max else 'False'
+        script = self._ironpy._init_script() + \
+                 TRAVEL_TIME_OFFSETS_TEMPLATE%(use_max_str,use_max_str)
+        response = self._ironpy._safe_run(script)
+        return self._ironpy.simplify_response(response['Response'])
 
 
 
