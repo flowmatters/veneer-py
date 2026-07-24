@@ -273,7 +273,7 @@ def network_use_schematic_coordinates(self):
                 to_node['properties']['schematic_location']
             ]
 
-def network_as_dataframe(self, geo=None):
+def network_as_dataframe(self, geo=None, crs=None):
     '''
     Convert the network to a DataFrame.
 
@@ -282,6 +282,14 @@ def network_as_dataframe(self, geo=None):
           if geopandas is unavailable or construction fails.
         * True — force GeoDataFrame; raise if geopandas is unavailable.
         * False — force regular DataFrame, skipping geopandas entirely.
+
+    crs: Optional: coordinate reference system of the network coordinates, in any
+        form accepted by geopandas (eg 3577, 'EPSG:3577'). Ignored when geo is False.
+
+        The Veneer /network response carries no CRS information, so the coordinates
+        are in whatever projection the Source project uses and the caller must
+        declare it. If omitted, the frame has no CRS, and anything written out as
+        GeoJSON will be read back as EPSG:4326.
     '''
     import pandas as pd
 
@@ -295,7 +303,7 @@ def network_as_dataframe(self, geo=None):
 
         if GeoDataFrame is not None:
             try:
-                result = GeoDataFrame.from_features(self['features'])
+                result = GeoDataFrame.from_features(self['features'],crs=crs)
                 if 'id' in result.columns:
                     result['veneer_id'] = result['id']
                 result['id'] = [_feature_id(f) for f in self['features']]
@@ -742,12 +750,12 @@ def add_network_methods(target):
         setattr(target, f_name, MethodType(f, target))
 
 def add_geodataframe_method_to_list(target):
-    def as_dataframe(self):
+    def as_dataframe(self,crs=None):
         feature_collection = {
             'type':'FeatureCollection',
             'features':self._list
         }
-        return network_as_dataframe(feature_collection)
+        return network_as_dataframe(feature_collection,crs=crs)
     setattr(target, 'as_dataframe', MethodType(as_dataframe, target))
     return target
 

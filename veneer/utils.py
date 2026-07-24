@@ -241,11 +241,17 @@ class SearchableList(object):
                 return lambda x: SearchableList(list(filter(lambda y: self._search_all(field_name, x, y, op), self._list)), self._nested)
         raise AttributeError(name + ' not allowed')
 
-    def as_dataframe(self):
+    def as_dataframe(self,crs=None):
+        '''
+        :param crs: Optional: coordinate reference system of the feature coordinates,
+                    in any form accepted by geopandas (eg 3577, 'EPSG:3577'). Veneer
+                    doesn't report the Source project's CRS, so it must be declared here
+                    if the resulting frame is to be written out or reprojected.
+        '''
         if len(self._list) and 'geometry' in self._list[0]:
             try:
                 import geopandas as gpd
-                result = gpd.GeoDataFrame.from_features(self._list)
+                result = gpd.GeoDataFrame.from_features(self._list,crs=crs)
                 result['id'] = [f['id'] for f in self._list]
                 return result
             except Exception as e:
