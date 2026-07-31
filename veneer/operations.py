@@ -46,6 +46,27 @@ def get_override_time_series(location,variable,secondary):
     return item.%sMapping.OverrideTimeSeries
 '''
 
+CLEAR_OVERRIDES_TEMPLATE='''
+items = scenario.OperationsMaster.NetworkElementOperationsDataItems
+cleared = 0
+touched = 0
+%s
+for item in items:
+    ts = item.%sMapping.OverrideTimeSeries
+    vals = ts.ToArray()
+    n = 0
+    for i in range(ts.Count):
+        if vals[i] != -9999:
+            t = ts.timeForItem(i)
+            if (start is None or t >= start) and (end is None or t <= end):
+                ts[t] = -9999
+                n = n + 1
+    if n > 0:
+        touched = touched + 1
+        cleared = cleared + n
+result = {'items':touched,'cells':cleared}
+'''
+
 
 
 TRAVEL_TIME_OFFSETS_TEMPLATE='''
@@ -171,6 +192,34 @@ class VeneerOperationsActions(object):
                 script += f"ts[dt] = {val}\n"
 
         return self._ironpy._veneer.run_server_side_script(script)
+
+    def clear_overrides(self,time_period,start=None,end=None):
+        '''
+        Clear every operator override in the given time period.
+
+        Removes all override values (sets them to Source's -9999 'no override'
+        sentinel) across every override series in the scenario, in a single
+        server-side pass. This is the deterministic counterpart to
+        apply_overrides: clear, then apply exactly the values you want.
+
+        Parameters:
+        time_period: 'Historic' or 'Forecast'
+        start: optional datetime/date — only clear values on or after this date
+        end: optional datetime/date — only clear values on or before this date
+
+        Returns:
+        A dict: {'items': number of override series touched,
+                 'cells': number of values cleared}
+        '''
+        def _dt(d):
+            if d is None:
+                return 'None'
+            return 'System.DateTime(%d,%d,%d)'%(d.year,d.month,d.day)
+        preamble = 'start = %s\nend = %s\n'%(_dt(start),_dt(end))
+        script = self._ironpy._init_script()
+        script += CLEAR_OVERRIDES_TEMPLATE%(preamble,time_period)
+        result = self._ironpy._safe_run(script)
+        return self._ironpy.simplify_response(result['Response'])
 
     def travel_time_offsets(self,use_max=True):
         '''
