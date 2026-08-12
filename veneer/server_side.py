@@ -72,7 +72,8 @@ ADDITIONAL_PARAMETERS={
         'IsInitFlow',
         'AverageRegFlow',
         'Divisions',
-        'TriangularWeir'
+        'TriangularWeir',
+        'IsGeneric'
     ]+GENERAL_LINK_PARAMETERS,
     'RiverSystem.Nodes.StorageNodeModel':OTHER_STORAGE_PARAMETERS+COMMON_STORAGE_PARAMETERS,
     'RiverSystem.Nodes.Loss.LossNodeModel':[
