@@ -691,8 +691,11 @@ class Veneer(object):
                 data_dict = {d['Name']: d['TimeSeries']['Events']
                              for d in details}
                 df = self._create_timeseries_dataframe(data_dict, common_index=False)
-                for d in details:
-                    df[d['Name']].attrs['units'] = d['TimeSeries']['Units']
+                # Units go on the FRAME's attrs, keyed by column name. Assigning
+                # to df[col].attrs writes to a temporary Series (which holds a
+                # COPY of the frame's attrs), so the units are silently lost.
+                df.attrs['units'] = {d['Name']: d['TimeSeries']['Units']
+                                     for d in details}
                 return df
 
             # Slim Time Series...
@@ -704,8 +707,9 @@ class Veneer(object):
             index = pd.date_range(start_t, end_t, freq=freq)
             data_dict = {d['Name']: d['TimeSeries']['Values'] for d in details}
             df = pd.DataFrame(data_dict, index=index)
-            for d in details:
-                df[d['Name']].attrs['units'] = d['TimeSeries']['Units']
+            # Frame-level attrs — see note above: per-column assignment is lost.
+            df.attrs['units'] = {d['Name']: d['TimeSeries']['Units']
+                                 for d in details}
 
             extensions._apply_time_series_helpers(df)
             return df
@@ -814,7 +818,8 @@ class Veneer(object):
         def _transform(res):
             if 'TimeSeries' in res:
                 df = self._create_timeseries_dataframe({name: res['TimeSeries']['Events']}, common_index=False)
-                df[df.columns[0]].attrs['units'] = res['TimeSeries']['Units']
+                # Frame-level attrs: df[col].attrs writes to a temporary Series.
+                df.attrs['units'] = {df.columns[0]: res['TimeSeries']['Units']}
                 return df
             elif 'Items' in res:
                 data_dict = {}
@@ -828,13 +833,13 @@ class Veneer(object):
                         keys = ["%s%s" % (d['Name'], suffix) for d in item['Details']]
                         update = {
                             (key): d['TimeSeries']['Events'] for key,d in zip(keys,item['Details'])}
-                        for k,d in zip(keys,items['Details']):
+                        for k,d in zip(keys,item['Details']):
                             units[k] = d['TimeSeries']['Units']
                         data_dict.update(update)
 
                 df = self._create_timeseries_dataframe(data_dict, common_index=False)
-                for k, v in units:
-                    df[k].attrs['units'] = v
+                # Frame-level attrs: df[col].attrs writes to a temporary Series.
+                df.attrs['units'] = dict(units)
                 return df
             return res
 
@@ -988,8 +993,8 @@ class Veneer(object):
             units_store.update(units)
 
         result = self._create_timeseries_dataframe(retrieved,dates)
-        for k, u in units_store.items():
-            result[k].attrs['units'] = u
+        # Frame-level attrs: result[col].attrs writes to a temporary Series.
+        result.attrs['units'] = dict(units_store)
 
         if hasattr(timestep,'__call__'):
             return timestep(result)
