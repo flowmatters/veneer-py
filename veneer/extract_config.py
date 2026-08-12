@@ -316,16 +316,20 @@ class SourceExtractor(object):
 
             df = self.v.data_source_item(data_source,column,input_set)
 
+            # Declared units live on the FRAME's attrs, keyed by column name.
+            # df[col].attrs is a COPY of the frame's attrs, so reading a unit
+            # per-column yields the whole map and writing one is discarded.
+            units_map = df.attrs.setdefault('units',{})
             for col in df.columns:
-                if 'units' not in df[col].attrs:
-                    logger.debug('No units on ',col)
+                units = units_map.get(col)
+                if units is None:
+                    logger.debug('No units on %s',col)
                     continue
-                units = df[col].attrs['units']
                 if units=='ML/d':
                     df[col] *= ML_PER_DAY_TO_M3_PER_SEC
                 elif units=='mg/L':
                     df[col] *= MG_PER_LITER_TO_KG_PER_M3
-                df[col].attrs['units'] = units
+                units_map[col] = units
 
             self.write_csv(fn_template.substitute(row),df)
 
@@ -491,6 +495,11 @@ UNIT_CONVERSIONS={
 }
 
 def conversion_factor(src_units,dest_units,lbl):
+    if src_units is None:
+        lbl = '' if lbl is None else f' in {lbl}'
+        logger.warn(f'Missing source units {lbl}, assuming no conversion factor')
+        return 1.0
+
     dest_units = dest_units.split('/')
     src_units = src_units.split('/')
 
@@ -505,12 +514,15 @@ def conversion_factor(src_units,dest_units,lbl):
     return conversions[0]
 
 def ensure_units(dataframe,dest_units,lbl=None):
+    # Declared units live on the FRAME's attrs, keyed by column name — see the
+    # note in _write_data_source_timeseries.
+    units_map = dataframe.attrs.setdefault('units',{})
     for col in dataframe.columns:
-        factor = conversion_factor(dataframe[col].attrs.get('units'),dest_units,lbl)
+        factor = conversion_factor(units_map.get(col),dest_units,lbl)
         if factor != 1.0:
             logger.info(f'Converting {col} with factor {factor}')
             dataframe[col] *= factor
-            dataframe[col].attrs['units'] = dest_units
+            units_map[col] = dest_units
     return dataframe
 
 def _base_arg_parser(model=True):
