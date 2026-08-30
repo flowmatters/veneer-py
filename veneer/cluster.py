@@ -161,21 +161,35 @@ def run_on_cluster(cluster,fn):
 
     return inner_wrapped
 
+EXISTING_BEHAVIOURS = ['raise','remove','try_remove','ignore']
+
 def check_existing_cluster_temp_directory(prefix,behaviour_on_existing):
+    existing = [d for d in os.listdir(tempfile.gettempdir()) if d.startswith(prefix)]
+
     if behaviour_on_existing == 'raise':
-        if len([d for d in os.listdir(tempfile.gettempdir()) if d.startswith(prefix)]):
+        if len(existing):
             raise Exception('Found existing temporary directories with prefix %s. Use existing="remove" to automatically remove old directories.'%prefix)
-    elif behaviour_on_existing == 'remove':
-        for d in os.listdir(tempfile.gettempdir()):
-            if d.startswith(prefix):
-                logger.info('Removing existing temporary directory %s with prefix %s',d,prefix)
-                shutil.rmtree(os.path.join(tempfile.gettempdir(),d))
+    elif behaviour_on_existing in ('remove','try_remove','tryremove'):
+        # try_remove is best effort: a directory that is locked (eg by a Source
+        # instance that outlived its cluster, or a file browser) is left in place
+        # with a warning rather than blocking startup of the new cluster.
+        best_effort = behaviour_on_existing != 'remove'
+        for d in existing:
+            full_path = os.path.join(tempfile.gettempdir(),d)
+            logger.info('Removing existing temporary directory %s with prefix %s',d,prefix)
+            try:
+                shutil.rmtree(full_path)
+            except OSError as e:
+                if not best_effort:
+                    raise
+                # Remove whatever isn't locked, so the leftovers are as small as possible
+                shutil.rmtree(full_path,ignore_errors=True)
+                logger.warning('Could not remove existing temporary directory %s (%s). Leaving it in place and continuing.',full_path,e)
     elif behaviour_on_existing == 'ignore':
-        for d in os.listdir(tempfile.gettempdir()):
-            if d.startswith(prefix):
-                logger.info('Found existing temporary directory %s with prefix %s',d,prefix)
+        for d in existing:
+            logger.info('Found existing temporary directory %s with prefix %s',d,prefix)
     else:
-        raise Exception('Unknown behaviour on existing temporary directories: %s'%behaviour_on_existing)
+        raise Exception('Unknown behaviour on existing temporary directories: %s. Expected one of %s'%(behaviour_on_existing,', '.join(EXISTING_BEHAVIOURS)))
 
 class ClusterVeneerClient(object):
     def __init__(self, cluster):
@@ -239,7 +253,9 @@ class VeneerCluster(object):
         existing: str
             What to do if there are existing temporary directories with the same prefix
             - 'raise': raise an exception
-            - 'remove': remove the existing directories
+            - 'remove': remove the existing directories, failing if any cannot be removed
+            - 'try_remove': remove what can be removed, logging a warning and
+              continuing for any directory that is locked or otherwise undeletable
             - 'ignore': ignore the existing directories
         existing_cluster: str
             The path to an existing cluster to use. If None, a new cluster will be created
@@ -606,7 +622,7 @@ def main():
                         help='Disable IronPython scripting')
     parser.add_argument('--overwrite-plugins', action='store_true', default=None,
                         help='Overwrite Source plugin configuration')
-    parser.add_argument('--existing', choices=['raise', 'remove', 'ignore'], default='raise',
+    parser.add_argument('--existing', choices=EXISTING_BEHAVIOURS, default='raise',
                         help='Behaviour when existing temp directories are found (default: raise)')
     parser.add_argument('--save', default=None,
                         help='Save cluster config to a JSON file for later reconnection')
