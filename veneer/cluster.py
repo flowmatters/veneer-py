@@ -516,7 +516,8 @@ class VeneerCluster(object):
         jobs = [operation_(p) for p in self.veneer_ports]
         return self.dask_client.compute(jobs,sync=True)
 
-    def run_jobs(self, jobs, sync=True, partial_results=False):
+    def run_jobs(self, jobs, sync=True, partial_results=False,
+                 progress_callback=None):
         '''Run a set of jobs on the cluster.
 
         jobs: list of dask.delayed jobs (wrapped via cluster.wrap or otherwise).
@@ -527,9 +528,37 @@ class VeneerCluster(object):
                  status != 'ok', raise WorkerDied carrying the structured
                  failure list. True → return the structured list of dicts as
                  produced by the wrapper (empty input returns an empty list).
+        progress_callback: optional (stage, current, total, message) callable,
+                 invoked as each job COMPLETES. None (the default) is the
+                 historical path exactly — no as_completed loop, no thread and
+                 no emit — so an existing caller's behaviour is unchanged to
+                 the statement. Exceptions raised by the callback are swallowed
+                 (_make_emitter): a progress annotation must never fail a run.
         '''
+        emit = _make_emitter(progress_callback)
+        total = len(jobs)
+        watching = progress_callback is not None and total
+
+        def _message(completed):
+            return f'Simulations complete ({completed}/{total})'
+
         if sync:
-            results = self.dask_client.compute(jobs, sync=True)
+            if not watching:
+                results = self.dask_client.compute(jobs, sync=True)
+            else:
+                # as_completed yields in COMPLETION order, but the result order
+                # is part of this method's contract, so reassemble by the
+                # original index — the same shape the project-copy loop in the
+                # constructor uses.
+                from dask.distributed import as_completed
+                futures = self.dask_client.compute(jobs, sync=False)
+                fut_to_idx = {f: i for i, f in enumerate(futures)}
+                results = [None] * total
+                completed = 0
+                for fut in as_completed(futures):
+                    results[fut_to_idx[fut]] = fut.result()
+                    completed += 1
+                    emit('run-jobs', completed, total, _message(completed))
             if partial_results:
                 return list(results)
             return _unwrap_or_raise(results)
@@ -539,6 +568,25 @@ class VeneerCluster(object):
         # Future via dask_client.submit, which deep-resolves Futures inside
         # the args before calling — so the closure receives the resolved list.
         future_results = self.dask_client.compute(jobs, sync=False)
+
+        if watching:
+            # A daemon thread, because the caller wants the aggregate Future
+            # back immediately (run_ensemble's run_jobs_with_cancellation polls
+            # it to notice a cancellation). The thread only OBSERVES: it never
+            # touches the returned Future, so cancelling that is unaffected,
+            # and nothing joins it — a consumer that can be reached after the
+            # run has ended must say so for itself.
+            def _watch(futures):
+                from dask.distributed import as_completed
+                completed = 0
+                for _ in as_completed(futures):
+                    completed += 1
+                    emit('run-jobs', completed, total, _message(completed))
+
+            import threading
+            threading.Thread(target=_watch, args=(future_results,),
+                             daemon=True,
+                             name='veneer-run-jobs-progress').start()
 
         if partial_results:
             return self.dask_client.submit(list, future_results)
