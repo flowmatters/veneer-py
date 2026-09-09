@@ -804,16 +804,25 @@ class VeneerIronPython(object):
             script = script % (collection, new_value)
         return self._safe_run(script)
 
-    def save(self, fn=None):
+    def save(self, fn=None, preserve_current=True):
         '''
         Save the current *project* to disk.
 
         fn - filename to save to. Should include .rsproj extension. If None, save using current filename
+
+        preserve_current - (default True) restore the project's OutputFile and Project
+                           after saving. Pass False to keep the previous behaviour, where
+                           the caller intends the project to adopt the new output file.
         '''
         if fn:
             fn = "'%s'" % os.path.abspath(fn).replace('\\', '\\\\')
         else:
             fn = 'ph.ProjectMetaStructure.OutputFile'
+        if preserve_current:
+            restore_output_file = 'ph.ProjectMetaStructure.OutputFile = saved_output_file'
+            restore_project = 'ph.ProjectMetaStructure.Project = saved_project'
+        else:
+            restore_output_file = restore_project = 'pass'
         script = '''
                  from RiverSystem.ApplicationLayer.Consumers import DefaultCallback
                  from RiverSystem.ApplicationLayer.Creation import ProjectHandlerFactory
@@ -823,6 +832,8 @@ class VeneerIronPython(object):
                  cb = DefaultCallback()
                  cb.OutputFileName=%s
                  saved_cb = ph.CallBackHandler
+                 saved_output_file = ph.ProjectMetaStructure.OutputFile
+                 saved_project = ph.ProjectMetaStructure.Project
                  try:
                      ph.CallBackHandler = cb
                      ph.ProjectMetaStructure.Project = scenario.Project
@@ -831,7 +842,9 @@ class VeneerIronPython(object):
                      ph.SaveProject()
                  finally:
                      ph.CallBackHandler = saved_cb
-                 ''' % fn
+                     %s
+                     %s
+                 ''' % (fn, restore_output_file, restore_project)
         return self._safe_run(script)
 
 
