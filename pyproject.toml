@@ -7,7 +7,7 @@ name = 'veneer-py'
 description="Support for scripting eWater Source models through the Veneer (RESTful HTTP) plugin"
 keywords = ["hydrology", "ewater", "veneer", "scripting", "http", "rest"]
 license = {text = "ISC License"}
-version = "0.1"
+dynamic = ["version"]
 readme = {file = "README.md", content-type = "text/markdown"}
 # dependencies = ["numpy", "pandas"]
 authors = [
@@ -38,3 +38,6 @@ include-package-data = true
 zip-safe = true
 packages = ["veneer","veneer.nodes"]
 py_modules=['veneer']
+
+[tool.setuptools.dynamic]
+version = {attr = "veneer.__version__"}
