@@ -6,6 +6,7 @@ import sys
 from time import sleep, time as _now
 from glob import glob
 import atexit
+import json
 import os
 import re
 import tempfile
@@ -215,6 +216,76 @@ def create_command_line(veneer_path,source_version=None,
         kill_all_now(_proc)
 
     return exe_path
+
+CMD_LINE_STAMP_FN = 'veneer_cmdline_stamp.json'
+VENEER_PLUGIN_DLL = 'flowmatters.source.veneer.dll'  # compared against a lower-cased basename
+
+def command_line_for(v, cache_dir, force=False):
+    '''
+    Build (or reuse) a Veneer command line matching the Source instance behind client v.
+
+    Derives the Source build directory and the Veneer plugin directory from the
+    instance's own status (the `/` endpoint), so no Source version string is guessed
+    and the command line cannot disagree with the Source actually running.
+
+    The cache is keyed on SourceVersion, HostExe, veneer_path, and the mtime/size of
+    the Veneer plugin DLL itself — so a Source restart against an unchanged install
+    reuses the cached build, but an in-place rebuild of the Veneer plugin DLL (as
+    happens during veneer-py development) is detected and triggers a rebuild even
+    though the paths and SourceVersion are unchanged. Pass force=True to always rebuild
+    regardless of the cache.
+
+    v: a Veneer client connected to a running instance.
+    cache_dir: directory to build into and reuse. Building copies the whole Source
+               distribution, so this should be stable across sessions.
+    force: rebuild even if a matching cached build exists.
+
+    Returns: full path to FlowMatters.Source.VeneerCmd.exe
+    '''
+    status = v.status()
+    source_path = _dirname(status['HostExe'])
+
+    plugins = status.get('PluginsLoaded') or []
+    veneer_dlls = [p for p in plugins
+                   if _basename(p).lower() == VENEER_PLUGIN_DLL]
+    if not veneer_dlls:
+        raise Exception(
+            'Veneer plugin (%s) not found in PluginsLoaded (%s). Cannot locate the '
+            'Veneer files needed to build a command line.' % (VENEER_PLUGIN_DLL, plugins))
+    veneer_dll = veneer_dlls[0]
+    veneer_path = _dirname(veneer_dll)
+
+    try:
+        veneer_dll_mtime = os.path.getmtime(veneer_dll)
+        veneer_dll_size = os.path.getsize(veneer_dll)
+    except OSError:
+        veneer_dll_mtime = None
+        veneer_dll_size = None
+
+    stamp = {'SourceVersion': status.get('SourceVersion'),
+             'HostExe': status['HostExe'],
+             'veneer_path': veneer_path,
+             'veneer_dll_mtime': veneer_dll_mtime,
+             'veneer_dll_size': veneer_dll_size}
+
+    stamp_path = os.path.join(cache_dir, CMD_LINE_STAMP_FN)
+    exe_path = os.path.join(cache_dir, VENEER_EXE_FN)
+
+    if not force and os.path.exists(stamp_path) and os.path.exists(exe_path):
+        try:
+            with open(stamp_path) as f:
+                cached_stamp = json.load(f)
+            if cached_stamp == stamp:
+                return exe_path
+        except (ValueError, OSError):
+            pass  # unreadable stamp: fall through and rebuild
+
+    result = create_command_line(veneer_path, source_version=None,
+                                 source_path=source_path, dest=cache_dir,
+                                 force=True)
+    with open(stamp_path, 'w') as f:
+        json.dump(stamp, f)
+    return str(result)
 
 def clean_up_cmd_line_exe(path=None):
     if path is None:
