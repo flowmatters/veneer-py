@@ -4,15 +4,26 @@ A registry of named, throwaway Source sandboxes.
 Wraps veneer.manage.IsolatedSource so that several sandboxes can coexist, be
 listed and reused across process invocations, and be torn down without
 disturbing sandboxes belonging to other sessions.
+
+Typical workflow, composing with veneer.manage.command_line_for() and
+VeneerIronPython.save() (v.model.save()):
+
+    v.model.save('scratch_model.rsproj')     # seed a project file from live GUI state
+    veneer_exe = command_line_for(v, cache_dir='./.veneer-cache')
+    registry = SandboxRegistry(project_dir='.', session_id=os.environ['VENEER_SESSION_ID'])
+    sandbox = registry.create('scratch', 'scratch_model.rsproj', veneer_exe)
+
+Each step supplies exactly what the next needs: save() gives a project file
+reflecting the live model, command_line_for() gives the veneer_exe to launch
+it standalone, and create() launches an isolated, named, throwaway copy.
 '''
 import json
 import os
 import random
-import tempfile
 import time
 
 from .general import Veneer
-from .manage import IsolatedSource
+from .manage import IsolatedSource, write_json_atomic
 
 REGISTRY_DIR = '.veneer'
 REGISTRY_FN = 'sandboxes.json'
@@ -22,30 +33,6 @@ GUI_DEFAULT_PORT = 9876
 
 STATUS_RUNNING = 'running'
 STATUS_FAILED = 'failed'
-
-# On Windows, a freshly created temp file can be transiently held open by an
-# antivirus or search-indexer filter driver scanning it, which makes
-# os.replace() fail with PermissionError (WinError 5, Access is denied) even
-# though no handle in THIS process is open on either path - confirmed by
-# instrumenting a failure and finding our own process holds nothing on
-# either file at that moment. It is an external, momentary condition, not a
-# resource leak, and it clears within milliseconds. A short bounded retry is
-# the correct mitigation here; do not delete it as superstition, and do not
-# widen it into an unbounded loop that could mask a genuine persistent
-# failure (e.g. the destination locked open by another process for real).
-_REPLACE_RETRIES = 5
-_REPLACE_BACKOFF = 0.01     # seconds; multiplied by attempt number
-
-
-def _replace_with_retry(src, dst):
-    for attempt in range(1, _REPLACE_RETRIES + 1):
-        try:
-            os.replace(src, dst)
-            return
-        except PermissionError:
-            if attempt == _REPLACE_RETRIES:
-                raise
-            time.sleep(_REPLACE_BACKOFF * attempt)
 
 
 def _pid_alive(pid):
@@ -145,24 +132,42 @@ class SandboxRegistry(object):
             return []
 
     def _write(self, records):
-        if not os.path.exists(self.dir):
-            os.makedirs(self.dir)
-        tmp_fd, tmp_path = tempfile.mkstemp(dir=self.dir, suffix='.tmp')
-        try:
-            with os.fdopen(tmp_fd, 'w') as fp:
-                json.dump(records, fp, indent=2)
-            _replace_with_retry(tmp_path, self.path)     # atomic
-        except BaseException:
-            try:
-                os.remove(tmp_path)
-            except OSError:
-                pass
-            raise
+        # Atomic (temp file + rename) and tolerant of the transient Windows
+        # AV/indexer PermissionError on that rename - see write_json_atomic's
+        # docstring in veneer.manage for why. Shared with command_line_for()'s
+        # build-stamp cache, which hits the exact same failure mode.
+        write_json_atomic(self.path, records, tmp_dir=self.dir)
 
     def list(self):
         return self._read()
 
     def create(self, name, project_file, veneer_exe, related_files=None, **kwargs):
+        '''
+        Start a new sandbox named `name` and record it.
+
+        veneer_exe: path to FlowMatters.Source.VeneerCmd.exe - typically the
+                    return value of veneer.manage.command_line_for().
+
+        Sequence, and why:
+          1. Claim the name by writing a placeholder record (status='failed')
+             before starting anything, so a concurrent create() for the same
+             name fails fast rather than racing.
+          2. Start IsolatedSource(), which can take seconds and copies the
+             project - a genuinely long-running step with real failure modes.
+          3. On success, re-read the registry fresh (not the list read in
+             step 1) and write back the promoted record (status='running',
+             actual port/directory/log_path/veneer_pid). Re-reading matters
+             because another process may have changed the registry - its own
+             create/close/reap_orphans - while step 2 was running; writing
+             back a stale list would silently discard that change. Mirrors
+             close()'s existing re-read-before-final-write.
+
+        A name whose existing record is 'failed', or whose sandbox process is
+        no longer alive, is reusable. A name with a live 'running' record
+        raises. If IsolatedSource() itself raises, the placeholder record from
+        step 1 survives with status='failed' and its tempdir_prefix intact
+        (see cleanup='on_clean' below) and the exception propagates.
+        '''
         records = self._read()
         existing = [r for r in records if r['name'] == name]
         for record in existing:

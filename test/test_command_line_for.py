@@ -159,3 +159,30 @@ def test_builds_when_cache_dir_does_not_exist(built, tmp_path):
     exe = manage.command_line_for(FakeClient(), cache_dir=str(cache_dir))
     assert len(built) == 1
     assert os.path.exists(exe)
+
+
+def test_stamp_write_retries_a_transient_permission_error_then_succeeds(built, tmp_path, monkeypatch):
+    """Mirrors the SandboxRegistry test for the same underlying helper
+    (write_json_atomic / _replace_with_retry in veneer.manage). The stamp
+    write follows the expensive create_command_line rebuild, so a transient
+    AV/indexer PermissionError on the atomic rename here must not both raise
+    AND throw away a build that just succeeded - the cache must still land."""
+    real_replace = manage.os.replace
+    attempts = {'n': 0}
+
+    def flaky_replace(src, dst):
+        attempts['n'] += 1
+        if attempts['n'] <= 2:
+            raise PermissionError('simulated WinError 5: Access is denied')
+        real_replace(src, dst)
+
+    monkeypatch.setattr(manage.os, 'replace', flaky_replace)
+    exe = manage.command_line_for(FakeClient(), cache_dir=str(tmp_path))
+
+    assert attempts['n'] == 3
+    assert os.path.exists(exe)
+
+    # The build must not have been thrown away: a second call still hits the
+    # cache rather than rebuilding.
+    manage.command_line_for(FakeClient(), cache_dir=str(tmp_path))
+    assert len(built) == 1

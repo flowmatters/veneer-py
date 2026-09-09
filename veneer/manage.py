@@ -220,6 +220,64 @@ def create_command_line(veneer_path,source_version=None,
 CMD_LINE_STAMP_FN = 'veneer_cmdline_stamp.json'
 VENEER_PLUGIN_DLL = 'flowmatters.source.veneer.dll'  # compared against a lower-cased basename
 
+# On Windows, a freshly created temp file can be transiently held open by an
+# antivirus or search-indexer filter driver scanning it, which makes
+# os.replace() fail with PermissionError (WinError 5, Access is denied) even
+# though no handle in this process is open on either path - confirmed by
+# instrumenting a failure during veneer.sandbox's registry writes and finding
+# our own process held nothing on either file at that moment (roughly 5% of
+# full-suite runs hit it before this retry existed). It is an external,
+# momentary condition, not a resource leak, and it clears within
+# milliseconds. A short bounded retry is the correct mitigation here; do not
+# delete it as superstition, and do not widen it into an unbounded loop that
+# could mask a genuine persistent failure (e.g. the destination locked open
+# by another process for real).
+#
+# Shared by command_line_for()'s build-stamp cache below and
+# veneer.sandbox.SandboxRegistry's registry file - two small JSON caches on
+# the same machine, hit by the same failure mode.
+_REPLACE_RETRIES = 5
+_REPLACE_BACKOFF = 0.01     # seconds; multiplied by attempt number
+
+
+def _replace_with_retry(src, dst):
+    for attempt in range(1, _REPLACE_RETRIES + 1):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if attempt == _REPLACE_RETRIES:
+                raise
+            sleep(_REPLACE_BACKOFF * attempt)
+
+
+def write_json_atomic(path, data, tmp_dir=None):
+    '''
+    Write `data` as JSON to `path` atomically.
+
+    Writes to a temp file (in tmp_dir, defaulting to path's own directory -
+    created first if it doesn't exist) and replaces `path` with it via
+    _replace_with_retry() above, so a transient AV/indexer PermissionError on
+    the rename does not lose data that was otherwise ready to land. On any
+    failure the temp file is removed and the exception propagates; `path`
+    itself is left untouched either way.
+    '''
+    directory = tmp_dir if tmp_dir is not None else (os.path.dirname(path) or '.')
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+    tmp_fd, tmp_path = tempfile.mkstemp(dir=directory, suffix='.tmp')
+    try:
+        with os.fdopen(tmp_fd, 'w') as fp:
+            json.dump(data, fp, indent=2)
+        _replace_with_retry(tmp_path, path)
+    except BaseException:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
 def command_line_for(v, cache_dir, force=False):
     '''
     Build (or reuse) a Veneer command line matching the Source instance behind client v.
@@ -241,6 +299,9 @@ def command_line_for(v, cache_dir, force=False):
     force: rebuild even if a matching cached build exists.
 
     Returns: full path to FlowMatters.Source.VeneerCmd.exe
+
+    See also: veneer.sandbox.SandboxRegistry.create(), which takes the returned
+    path as its veneer_exe argument.
     '''
     status = v.status()
     source_path = _dirname(status['HostExe'])
@@ -283,8 +344,10 @@ def command_line_for(v, cache_dir, force=False):
     result = create_command_line(veneer_path, source_version=None,
                                  source_path=source_path, dest=cache_dir,
                                  force=True)
-    with open(stamp_path, 'w') as f:
-        json.dump(stamp, f)
+    # Atomic + retrying: this write follows the ~1144-file rebuild above, so a
+    # transient PermissionError here must not both raise AND throw away a
+    # build that just succeeded (see write_json_atomic's docstring).
+    write_json_atomic(stamp_path, stamp)
     return str(result)
 
 def clean_up_cmd_line_exe(path=None):
