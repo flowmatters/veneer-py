@@ -17,7 +17,8 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class WorkerInfo:
-    """Per-worker information held in VeneerCluster.worker_affinity.
+    """Per-worker information held in VeneerCluster.worker_affinity, which is
+    keyed by dask worker name (see build_worker_affinity).
 
     port: the Veneer HTTP port for this worker.
     directory: directory containing the Source project file used by this worker.
@@ -47,6 +48,113 @@ class WorkerInfo:
             veneer_pid=int(raw_pid) if raw_pid is not None else None,
             log_path=d.get('log_path'),
         )
+
+
+class ClusterAffinityError(RuntimeError):
+    """Raised when a dask worker cannot be matched to a Veneer instance.
+
+    Replaces the bare KeyError that used to escape the job wrapper, whose
+    message was just an integer pid and told an operator nothing.
+    """
+
+
+def build_worker_affinity(worker_names, worker_infos):
+    """Map each dask worker NAME to exactly one Veneer instance.
+
+    Keyed by name — not by the worker process pid — because a nanny restart
+    (memory limit, crash, external kill) replaces the worker process while
+    keeping its name. The worker's *address* is no better than the pid: the
+    replacement binds a fresh port.
+
+    Keys are strings so that a map built here and a map read back out of a
+    cluster-config JSON (where keys are necessarily strings) compare equal.
+
+    Names and instances are each sorted before pairing, so the assignment is
+    the same every time it is built for the same cluster. Which worker gets
+    which instance doesn't otherwise matter — workers are interchangeable and
+    each Veneer instance has its own project copy — but the pairing must be a
+    bijection: two workers sharing one instance would run concurrent
+    simulations against the same Source process.
+    """
+    names = sorted(str(n) for n in worker_names)
+    infos = sorted(worker_infos, key=lambda i: i.port)
+    if len(names) != len(infos):
+        raise ClusterAffinityError(
+            'Cannot map %d dask worker(s) onto %d Veneer instance(s): the '
+            'cluster needs exactly one Veneer instance per worker.'
+            % (len(names), len(infos)))
+    return dict(zip(names, infos))
+
+
+def current_worker_key():
+    """The affinity-map key for the dask worker running this code.
+
+    Returns None when not running inside a distributed worker (eg under the
+    synchronous scheduler), which resolve_worker_info reports as a missing
+    mapping rather than letting it fail obscurely later.
+    """
+    try:
+        from distributed import get_worker
+        worker = get_worker()
+    except Exception:
+        return None
+    name = getattr(worker, 'name', None)
+    return None if name is None else str(name)
+
+
+def resolve_worker_info(worker_map, worker_key, pid=None):
+    """Look up this worker's Veneer instance, or explain why there isn't one."""
+    if worker_key is not None:
+        info = worker_map.get(str(worker_key))
+        if info is not None:
+            return info
+
+    known = ', '.join(repr(k) for k in sorted(worker_map))
+    raise ClusterAffinityError(
+        'Dask worker %r (pid %s) has no entry in the Veneer affinity map; '
+        'known workers are: %s. The worker was probably added to the cluster '
+        'after it was built (eg by scaling up), or this code is not running '
+        'on a dask worker at all. The Veneer instances themselves may well '
+        'still be alive — but nothing can address this one, so restart the '
+        'cluster to recover.'
+        % (worker_key, pid, known or '<none>'))
+
+
+def live_worker_names(dask_client):
+    """Names of every worker currently known to the scheduler.
+
+    n_workers=-1 is essential: scheduler_info() defaults to 5 and truncates
+    silently, so a larger cluster would come back short with no indication.
+    """
+    info = dask_client.scheduler_info(n_workers=-1)
+    return [w.get('name', address) for address, w in info['workers'].items()]
+
+
+def load_worker_affinity(config, live_names):
+    """Rebuild the affinity map when reconnecting to an existing cluster.
+
+    Configs written since the move to name keys carry affinity_key ==
+    'worker_name' and are read back as-is. Older configs are keyed by dask
+    worker pids, which are meaningless to a reconnecting process (and were
+    already stale the moment any worker restarted), so their recorded Veneer
+    instances are simply re-paired with the live worker names.
+    """
+    raw = config['worker_affinity']
+    infos = [
+        WorkerInfo.from_dict(v) if isinstance(v, dict) else WorkerInfo(
+            port=int(v[0]), directory=v[1], veneer_pid=None, log_path=None,
+        )
+        for v in raw.values()
+    ]
+
+    if config.get('affinity_key') == 'worker_name':
+        return {str(k): info for k, info in zip(raw.keys(), infos)}
+
+    logger.warning(
+        'Cluster config uses the legacy pid-keyed worker affinity map; '
+        're-mapping %d Veneer instance(s) onto the live dask worker names.',
+        len(infos))
+    return build_worker_affinity(live_names, infos)
 
 
 class WorkerDied(RuntimeError):
@@ -115,9 +223,13 @@ def run_on_cluster(cluster,fn):
         import psutil
         import veneer
         from veneer._failure import safe_exit_code, tail
+        from veneer.cluster import current_worker_key, resolve_worker_info
 
-        worker_pid = os.getpid()
-        info = worker_map[worker_pid]
+        # Keyed by worker NAME, which survives a nanny respawning the worker
+        # process; the pid is carried only so the error message can be
+        # cross-checked against the process list.
+        info = resolve_worker_info(worker_map, current_worker_key(),
+                                   pid=os.getpid())
         pid_known = info.veneer_pid is not None
         alive_before = psutil.pid_exists(info.veneer_pid) if pid_known else None
         inner_args = {'v': veneer.Veneer(info.port, **veneer_kwargs)}
@@ -315,12 +427,8 @@ class VeneerCluster(object):
             self.veneer_ports = existing_cluster['veneer_ports']
             self.veneer_processes = [Process(p) for p in existing_cluster['veneer_processes']]
             self.temp_directories = existing_cluster['temp_directories']
-            self.worker_affinity = {
-                int(k): WorkerInfo.from_dict(v) if isinstance(v, dict) else WorkerInfo(
-                    port=int(v[0]), directory=v[1], veneer_pid=None, log_path=None,
-                )
-                for k, v in existing_cluster['worker_affinity'].items()
-            }
+            self.worker_affinity = load_worker_affinity(
+                existing_cluster, live_worker_names(self.dask_client))
             self.copy_projects = existing_cluster['copy_projects']
             emit('connect-existing', 1, 1, f'Connected to existing cluster ({self.n_workers} workers)')
             return
@@ -390,22 +498,22 @@ class VeneerCluster(object):
             logger.info('Assigning Veneer instances to DASK workers')
             emit('affinity-mapping', 0, 1, 'Mapping Veneer ports to Dask workers')
             self.worker_affinity = {}
-            worker_info = self.dask_cluster.workers
+            worker_names = list(self.dask_cluster.workers)
             scenario_jobs = [scenario_info(p, self._veneer_kwargs) for p in self.veneer_ports]
             veneer_info_map = self.dask_client.compute(scenario_jobs, sync=True)
 
             # veneer_processes already aligned to ports by index (see start() return shape).
             veneer_pid_by_port = {port: proc.pid for port, proc in zip(self.veneer_ports, self.veneer_processes)}
             log_path_by_port = dict(zip(self.veneer_ports, self.veneer_log_paths))
-            self.worker_affinity = {
-                w.pid: WorkerInfo(
+            self.worker_affinity = build_worker_affinity(worker_names, [
+                WorkerInfo(
                     port=info['port'],
                     directory=os.path.dirname(info['ProjectFullFilename']),
                     veneer_pid=veneer_pid_by_port[info['port']],
                     log_path=log_path_by_port.get(info['port']),
                 )
-                for w, info in zip(worker_info.values(), veneer_info_map)
-            }
+                for info in veneer_info_map
+            ])
             emit('affinity-mapping', 1, 1, 'Mapping complete')
             emit('ready', 1, 1, f'Cluster ready ({self.n_workers} workers)')
         except BaseException:
@@ -490,7 +598,8 @@ class VeneerCluster(object):
             'veneer_ports': self.veneer_ports,
             'veneer_processes': [p.pid for p in self.veneer_processes],
             'temp_directories': self.temp_directories,
-            'worker_affinity': {pid: info.to_dict() for pid, info in self.worker_affinity.items()},
+            'affinity_key': 'worker_name',
+            'worker_affinity': {key: info.to_dict() for key, info in self.worker_affinity.items()},
             'dask_scheduler': self.dask_client.scheduler.address,
             'copy_projects': self.copy_projects,
         }
