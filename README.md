@@ -32,6 +32,8 @@ python setup.py develop
 
 ## Getting started
 
+**New to Veneer?** [SETUP.md](SETUP.md) walks through the full setup: installing the Veneer plugin, installing veneer-py, creating the Veneer command line and starting instances with `veneer.manage.start`.
+
 1. Install the Veneer plugin for Source as per its [instructions](https://github.com/flowmatters/veneer).
 2. Start Source, load a project and then start the Veneer service from within Source.
 3. Within Python (eg within a notebook), initialise a Veneer client object and run a query. For example
