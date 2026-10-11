@@ -334,7 +334,8 @@ class VeneerCluster(object):
           script=True,overwrite_plugins=None,custom_endpoints=None,additional_plugins=None,
           copy=False,tempdir_prefix='source-cluster-',copy_extras=None,existing='raise',
           existing_cluster=None,cleanup_on_failure=True,progress_callback=None,
-          trust_env=None,proxies=None,localhost_only=True):
+          trust_env=None,proxies=None,localhost_only=True,
+          readiness='http',startup_timeout=600.0,exit_on_stdin_eof=True):
         '''
         Create a cluster of Veneer instances, each running in a separate process
 
@@ -393,6 +394,8 @@ class VeneerCluster(object):
             accepts connections from the local machine. This avoids the Windows
             Firewall "allow incoming connections?" prompt on first run. Set to
             False when the scheduler needs to be reachable from other hosts.
+        readiness, startup_timeout, exit_on_stdin_eof:
+            Passed straight through to manage.start(); see its docstring.
         '''
 
         self._progress_callback = progress_callback
@@ -490,6 +493,9 @@ class VeneerCluster(object):
                 progress_callback=progress_callback,
                 capture_output_dir=capture_dir,
                 return_log_paths=True,
+                readiness=readiness,
+                startup_timeout=startup_timeout,
+                exit_on_stdin_eof=exit_on_stdin_eof,
             )
             self.veneer_ports = veneer_ports
             self.veneer_processes = veneer_processes

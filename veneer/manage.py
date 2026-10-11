@@ -37,6 +37,54 @@ _KESTREL_BOUND_RE = re.compile(r'Now listening on:\s*http://[^:/\s]+:(\d+)')
 # only; the Kestrel message is authoritative when present.
 _VENEER_BOUND_RE = re.compile(r'Started Source RESTful Service on (?:http )?port[ :]\s*(\d+)')
 
+
+class VeneerStartupTimeout(RuntimeError):
+    """An instance announced a port but never answered GET /ready within the timeout."""
+
+    def __init__(self, timeout, captured_lines):
+        tail = '\n'.join(captured_lines[-40:])
+        super().__init__(f'Veneer did not become ready within {timeout:.0f} s. Last output:\n{tail}')
+        self.timeout = timeout
+        self.captured_lines = list(captured_lines)
+
+
+def interpret_readiness(ready_status, ready_body, root_status=None, root_body=None):
+    """Decide readiness from the probe responses. Pure, so it can be tested without a server.
+
+    - GET /ready -> 200 means ready (protocol >= 20261001, once the Veneer side lands).
+    - GET /ready -> 404 means an older server; ready iff GET / reports a Scenario.
+    - Anything else (503, connection error as None) means not yet.
+    """
+    if ready_status == 200:
+        return True
+    if ready_status == 404 and root_status == 200:
+        return bool((root_body or {}).get('Scenario'))
+    return False
+
+
+def _probe_ready(port, expected_pid=None, host='localhost', timeout=2.0):
+    """Ask the instance whether it is ready.
+
+    When `expected_pid` is given, GET / must report that PID: it guards against declaring an
+    instance ready because some *other* Veneer already answers on the port we expected.
+    """
+    import requests
+    base = f'http://{host}:{port}'
+    try:
+        if expected_pid is not None:
+            root = requests.get(f'{base}/', timeout=timeout)
+            if not root.ok or root.json().get('PID') != expected_pid:
+                return False
+        r = requests.get(f'{base}/ready', timeout=timeout)
+        body = r.json() if r.headers.get('content-type', '').startswith('application/json') else None
+        if r.status_code != 404:
+            return interpret_readiness(r.status_code, body)
+        root = requests.get(f'{base}/', timeout=timeout)
+        return interpret_readiness(404, None, root.status_code, root.json() if root.ok else None)
+    except (requests.RequestException, ValueError):
+        return False
+
+
 def _dirname(path):
     return os.path.dirname(str(path))
 
@@ -522,7 +570,8 @@ class IsolatedSource(object):
                  remote=False, script=True, overwrite_plugins=None,
                  additional_plugins=None, custom_endpoints=None, model=None,
                  debug=False, cleanup='always', capture_output=True,
-                 trust_env=None, proxies=None):
+                 trust_env=None, proxies=None,
+                 readiness='http', startup_timeout=600.0, exit_on_stdin_eof=True):
         self._cleanup = _normalise_cleanup(cleanup)
         self._shutdown = False
         self.directory = None
@@ -557,6 +606,9 @@ class IsolatedSource(object):
                 debug=debug,
                 capture_output_dir=capture_dir,
                 return_log_paths=True,
+                readiness=readiness,
+                startup_timeout=startup_timeout,
+                exit_on_stdin_eof=exit_on_stdin_eof,
             )
             self.process = processes[0]
             self.port = ports[0]
@@ -617,7 +669,8 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
           custom_endpoints=[],projects=None,quiet=False,
           progress_callback=None,capture_output_dir=None,
           detached=False,detached_timeout=120.0,leave_open=False,
-          return_log_paths=_RETURN_LOG_PATHS_UNSET):
+          return_log_paths=_RETURN_LOG_PATHS_UNSET,
+          readiness='http',startup_timeout=600.0,exit_on_stdin_eof=True):
     """
     Start one or more copies of the Veneer command line progeram with a given project file
 
@@ -687,6 +740,20 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
                          Set explicitly (True or False) to silence the warning. Callers that don't
                          care about log paths can pass False indefinitely.
 
+    - readiness - 'http' (default) polls GET /ready once the instance has announced a port (or
+                 after a 10 s grace, for servers that suppress the announcement). Falls back to
+                 GET / for servers built before this was added (protocol 20261001). 'stdout' keeps
+                 the legacy log-parsing-only behaviour.
+
+    - startup_timeout - Maximum seconds to wait for all instances to become ready before raising
+                       VeneerStartupTimeout and killing every instance (default 600.0). None
+                       disables the timeout (the legacy behaviour: wait forever).
+
+    - exit_on_stdin_eof - If True (default), hold a pipe to each child's stdin and set
+                         VENEER_EXIT_ON_STDIN_EOF=1 in its environment, so instances stop when this
+                         process dies (its stdin pipe then closes). Servers built before this was
+                         added (protocol 20261001) ignore the unknown environment variable.
+
        returns processes, ports
                 — when return_log_paths=False (legacy default; emits DeprecationWarning).
        returns processes, ports, log_paths
@@ -740,6 +807,9 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
                 custom_endpoints=list(custom_endpoints) if custom_endpoints else [],
                 projects=[str(p) for p in projects] if projects else None,
                 quiet=quiet,
+                readiness=readiness,
+                startup_timeout=startup_timeout,
+                exit_on_stdin_eof=exit_on_stdin_eof,
             ),
             detached_timeout=detached_timeout,
             leave_open=leave_open,
@@ -843,7 +913,10 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
             except OSError:
                 logger.warning('Could not initialise log file %s', p, exc_info=True)
 
-    processes = [Popen(cmd,stdout=PIPE,stderr=PIPE,bufsize=1, close_fds=ON_POSIX, **kwargs) for cmd in cmd_lines]
+    popen_stdin = PIPE if exit_on_stdin_eof else None
+    popen_env = {**os.environ, 'VENEER_EXIT_ON_STDIN_EOF': '1'} if exit_on_stdin_eof else None
+    processes = [Popen(cmd,stdin=popen_stdin,stdout=PIPE,stderr=PIPE,bufsize=1, close_fds=ON_POSIX,
+                       env=popen_env, **kwargs) for cmd in cmd_lines]
     _emit_progress('veneer-start', 0, n_instances, f'Starting {n_instances} Veneer instances')
     std_out_queues,std_out_threads = configure_non_blocking_io(processes,'stdout', tee_paths=log_paths)
     std_err_queues,std_err_threads = configure_non_blocking_io(processes,'stderr', tee_paths=log_paths)
@@ -875,6 +948,8 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
     all_ready = False
     any_failed = False
     actual_ports = ports[:]
+    started_at = _now()
+    last_probe_at = [0.0] * n_instances
     while not (all_ready or any_failed):
         for i in range(n_instances):
             process_exited = processes[i].poll() is not None
@@ -893,6 +968,8 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
                         captured_stderr[i].append(line)
                         if not quiet:
                             print('ERROR[%d] %s'%(i,line))
+                        if line.startswith('Cannot find project') or line.startswith('Unhandled exception'):
+                            failed[i] = True
 
             if ready[i]:
                 continue
@@ -939,11 +1016,29 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
             #   after a grace with no further Veneer port announcements, treat the latest
             #   announced port as ready.
             if not ready[i] and not failed[i]:
-                legacy_timeout = (server_started_at[i] is not None
-                                  and (_now() - server_started_at[i]) >= LEGACY_GRACE_SECS)
-                veneer_settled = (veneer_announced_at[i] is not None
-                                  and (_now() - veneer_announced_at[i]) >= LEGACY_GRACE_SECS)
-                if port_authoritative[i] or legacy_timeout or veneer_settled:
+                if readiness == 'http':
+                    # Probe once the server has announced its port, or after it has been alive
+                    # for ten seconds (covers -v Warning, which suppresses the announcement).
+                    # The PID check inside _probe_ready stops a foreign instance on that port
+                    # counting.
+                    announced = port_authoritative[i] or veneer_announced_at[i] is not None
+                    alive_long_enough = (_now() - started_at) > 10.0
+                    due = (_now() - last_probe_at[i]) >= 0.5     # one probe per half second per instance
+                    decided = False
+                    if (announced or alive_long_enough) and due:
+                        last_probe_at[i] = _now()
+                        # With start_new_session=True on Windows the child is launched through
+                        # cmd.exe (shell=True), so processes[i].pid is not VeneerCmd's; skip the
+                        # guard.
+                        expected = None if kwargs.get('shell') else processes[i].pid
+                        decided = _probe_ready(actual_ports[i], expected_pid=expected)
+                else:
+                    legacy_timeout = (server_started_at[i] is not None
+                                      and (_now() - server_started_at[i]) >= LEGACY_GRACE_SECS)
+                    veneer_settled = (veneer_announced_at[i] is not None
+                                      and (_now() - veneer_announced_at[i]) >= LEGACY_GRACE_SECS)
+                    decided = port_authoritative[i] or legacy_timeout or veneer_settled
+                if decided:
                     ready[i] = True
                     ready_count = sum(ready)
                     _emit_progress('veneer-start', ready_count, n_instances,
@@ -953,6 +1048,9 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
                     sys.stdout.flush()
         all_ready = len([r for r in ready if not r])==0
         any_failed = len([f for f in failed if f])>0
+        if startup_timeout is not None and not all_ready and not any_failed and (_now() - started_at) > startup_timeout:
+            kill_all_now(processes)
+            raise VeneerStartupTimeout(startup_timeout, [l for lines in captured_stdout for l in lines])
 
     if any_failed:
         # Give the reader threads a moment to drain any remaining buffered output from
