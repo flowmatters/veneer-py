@@ -396,9 +396,11 @@ class VeneerCluster(object):
             False when the scheduler needs to be reachable from other hosts.
         readiness, startup_timeout, exit_on_stdin_eof, gc:
             Passed straight through to manage.start(); see its docstring. gc's default
-            policy (DOTNET_GCDynamicAdaptationMode=1) applies to every worker in the
-            cluster, not scaled by n_workers -- pass an explicit int (a heap-count cap)
-            if a fixed per-instance heap budget is wanted instead for many workers on one host.
+            (None) policy is RAM-aware and scales with n_workers: it only applies DATAS
+            (DOTNET_GCDynamicAdaptationMode=1) when physical RAM / (n_workers + 1) is below
+            16 GB, otherwise it leaves the VeneerCmd build's own default alone. Pass gc=
+            'dynamic' to force DATAS unconditionally, or an explicit int (a heap-count cap)
+            for a fixed per-instance heap budget instead, for many workers on one host.
         '''
 
         self._progress_callback = progress_callback

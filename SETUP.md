@@ -197,8 +197,20 @@ kill_all_now(processes)
 | `capture_output_dir` | Tee each instance's output to `<dir>/veneer_port_<port>.log`. |
 | `detached` | Host the instances from a separate Python process in a new console window (Windows only). Use it if you launch from a VS Code Jupyter notebook; see [Troubleshooting](#6-troubleshooting). |
 | `return_log_paths` | Pass `True` to get `(processes, ports, log_paths)`, or `False` for the plain `(processes, ports)`. Set it explicitly either way to silence a `DeprecationWarning`; the default will change to `True`. |
+| `readiness` | `'http'` (default): poll `GET /ready`, falling back to `GET /` on servers built before it existed. `'stdout'`: the legacy log-parsing-only behaviour. |
+| `startup_timeout` | Seconds to wait for every instance to become ready before raising `VeneerStartupTimeout` and killing them all (default `600.0`). `None` waits forever. |
+| `exit_on_stdin_eof` | Default `True`: instances die with this process (a held stdin pipe closes when it exits), via `VENEER_EXIT_ON_STDIN_EOF`. Older builds ignore the unknown variable. |
+| `gc` | See [Memory: GC mode and results retention](#memory-gc-mode-and-results-retention) below. |
 
 Run `help(veneer.manage.start)` for everything else (`return_io`, `progress_callback`, `custom_endpoints`, ...).
+
+### Memory: GC mode and results retention
+
+Two separate things grow an instance's memory footprint, and only one of them is `start`'s to control:
+
+**GC mode** (`gc` parameter, default `None`). Plain Server GC gives each `VeneerCmd` instance its own large set of heaps/threads, which is fast but memory-hungry (measured: ~8.2 GB RSS for one instance) and collapses once several instances share a host. `DOTNET_GCDynamicAdaptationMode=1` ("DATAS") trades some of that speed for a much smaller footprint (~1.6-2.0 GB). The default (`gc=None`) is RAM-aware, not fixed: it only switches an instance to DATAS when `n_instances > 1` **and** physical RAM / (`n_instances` + 1) falls below 16 GB; otherwise it leaves the `VeneerCmd` build's own default alone, since plain Server GC is measurably faster under concurrency when there's RAM to spare for it. A single instance is always left alone. Pass `gc='dynamic'` to force DATAS regardless of instance count or RAM, `gc=False` to pass no `DOTNET_GC*` variables at all, `gc='server'`/`'workstation'` to set `DOTNET_gcServer` explicitly, an int for an explicit `DOTNET_GCHeapCount`, or a dict of raw `DOTNET_*` variables. See `veneer.manage._gc_env_vars` for the exact mapping.
+
+**Results retention** is unrelated to GC mode: Source keeps every run's results in memory until told to drop them, so a long-lived instance that keeps running models grows regardless of GC mode (one instance measured 2 GB → 10 GB over 22 runs). Call `v.drop_all_runs()` (or `v.drop_run(run)` for a single one) between runs on any instance you intend to keep running rather than recycle.
 
 ### Running in parallel
 

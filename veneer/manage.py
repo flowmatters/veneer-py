@@ -542,26 +542,54 @@ def _normalise_cleanup(cleanup):
     )
 
 
-def _gc_env_vars(gc):
+# Below this much physical RAM per instance (total RAM / (n_instances + 1); the "+1" leaves
+# headroom for the host process and everything else sharing the machine), plain Server GC's
+# per-instance footprint (~8.2 GB RSS, measured) risks running the host out of memory once
+# several instances are packed onto it; DATAS's lower footprint (~1.6-2.0 GB) avoids that at
+# the cost of a slower run. 41's density sweep found plain Server GC fastest under
+# concurrency when there's RAM to spare for it, so the default policy below only pays that
+# cost when the RAM/instance arithmetic says it has to. 16 GB for now, pending confirmation
+# from the laptop-emulation test.
+_GC_RAM_HEADROOM_THRESHOLD_BYTES = 16 * 1024 ** 3
+
+
+def _default_gc_env_vars(n_instances):
+    """gc=None's policy: DATAS (DOTNET_GCDynamicAdaptationMode=1) only when starting more
+    than one instance AND physical RAM / (n_instances + 1) is below
+    _GC_RAM_HEADROOM_THRESHOLD_BYTES; otherwise nothing at all, leaving whatever the
+    VeneerCmd build itself defaults to. A single instance is always left alone: with no other
+    instances competing for memory on this host, there's nothing for DATAS to save."""
+    if n_instances > 1:
+        import psutil
+        physical_ram = psutil.virtual_memory().total
+        if physical_ram / (n_instances + 1) < _GC_RAM_HEADROOM_THRESHOLD_BYTES:
+            return {'DOTNET_GCDynamicAdaptationMode': '1'}
+    return {}
+
+
+def _gc_env_vars(gc, n_instances=1):
     """Builds the DOTNET_GC* environment variables for a given ``gc`` setting.
 
-    gc=None (the default): DOTNET_GCDynamicAdaptationMode=1 (DATAS -- .NET's dynamic
-    heap-count adaptation). Harmless on current VeneerCmd builds, where this is already
-    the runtime default; fixes older builds that still default to plain Server GC, which
-    measurably uses far more memory per instance for this workload with no speed benefit
-    (single-instance measurement: DATAS ~1.6-2.0 GB RSS and a faster run than Server GC's
-    ~8.2 GB). Applies the same regardless of how many instances are being started.
+    gc=None (the default): see _default_gc_env_vars -- DATAS only when memory is tight
+    enough across the instances being started to need it, otherwise nothing (the VeneerCmd
+    build's own default).
     gc=False: pass nothing at all (no DOTNET_GC* variables set; inherits whatever the
     environment or the VeneerCmd build's own runtimeconfig already decides).
     gc='server' / 'workstation': explicit DOTNET_gcServer=1 / 0.
-    gc='dynamic': DOTNET_GCDynamicAdaptationMode=1 (same as the default, named explicitly).
+    gc='dynamic': DOTNET_GCDynamicAdaptationMode=1, unconditionally -- an explicit override
+    that always asks for DATAS, regardless of n_instances or RAM (contrast with gc=None).
     gc=<int>: DOTNET_GCHeapCount=<int> (an explicit heap-count cap, e.g. for several
     instances sharing one host: cpu_count // n_instances).
     gc=<dict>: raw DOTNET_* variables, merged in as given (escape hatch for anything else).
+
+    Any value other than None is an explicit caller choice and always overrides the
+    RAM-based default policy.
     """
     if gc is False:
         return {}
-    if gc is None or gc == 'dynamic':
+    if gc is None:
+        return _default_gc_env_vars(n_instances)
+    if gc == 'dynamic':
         return {'DOTNET_GCDynamicAdaptationMode': '1'}
     if gc == 'server':
         return {'DOTNET_gcServer': '1'}
@@ -796,14 +824,23 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
                          process dies (its stdin pipe then closes). Servers built before this was
                          added (protocol 20261001) ignore the unknown environment variable.
 
-    - gc - Sets the started instances' .NET GC environment variables. None (default) applies
-          DOTNET_GCDynamicAdaptationMode=1 (DATAS), which fixes older VeneerCmd builds that
-          still default to plain Server GC (measurably far more memory per instance for this
-          workload, no speed benefit) and is a no-op on newer builds that already default to
-          it. False passes no DOTNET_GC* variables at all. 'server'/'workstation' set
-          DOTNET_gcServer explicitly; 'dynamic' is the default named explicitly; an int sets
-          DOTNET_GCHeapCount to that value; a dict passes its own DOTNET_* variables raw. See
-          _gc_env_vars() for the exact mapping.
+    - gc - Sets the started instances' .NET GC environment variables. None (default) is an
+          adaptive policy, not a fixed one: when starting more than one instance AND physical
+          RAM / (n_instances + 1) is below 16 GB (_GC_RAM_HEADROOM_THRESHOLD_BYTES), it applies
+          DOTNET_GCDynamicAdaptationMode=1 (DATAS) to keep several instances' combined memory
+          use from running the host out of RAM; otherwise (a single instance, or RAM to spare)
+          it passes nothing at all, leaving whatever the VeneerCmd build itself defaults to.
+          Server GC's per-instance footprint is far larger than DATAS's (measured: ~8.2 GB RSS
+          vs ~1.6-2.0 GB) but measurably faster under concurrency when there's RAM to spare for
+          it -- hence only reaching for DATAS when the arithmetic says it's needed. Results
+          retention on a long-lived instance is a separate, unrelated source of memory growth
+          (one instance measured 2 GB -> 10 GB over 22 runs) -- call Veneer.drop_all_runs()
+          between runs on instances that are kept running rather than recycled.
+          False passes no DOTNET_GC* variables at all, unconditionally. 'server'/'workstation'
+          set DOTNET_gcServer explicitly; 'dynamic' forces DATAS unconditionally (unlike the
+          None default, not scaled by n_instances/RAM); an int sets DOTNET_GCHeapCount to that
+          value; a dict passes its own DOTNET_* variables raw. Any of these explicit values
+          overrides the RAM-based default policy. See _gc_env_vars() for the exact mapping.
 
        returns processes, ports
                 — when return_log_paths=False (legacy default; emits DeprecationWarning).
@@ -966,11 +1003,11 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
                 logger.warning('Could not initialise log file %s', p, exc_info=True)
 
     popen_stdin = PIPE if exit_on_stdin_eof else None
-    # Built from scratch, not the exit_on_stdin_eof-only shortcut this replaced: gc applies
-    # regardless of exit_on_stdin_eof (its default policy sets DOTNET_GCDynamicAdaptationMode
-    # even when exit_on_stdin_eof=False), so popen_env must reflect both independently.
+    # Built from scratch, not the exit_on_stdin_eof-only shortcut this replaced: gc's own
+    # policy is independent of exit_on_stdin_eof (it can set DOTNET_GCDynamicAdaptationMode
+    # regardless of exit_on_stdin_eof's value), so popen_env must reflect both independently.
     env_overrides = {'VENEER_EXIT_ON_STDIN_EOF': '1'} if exit_on_stdin_eof else {}
-    env_overrides.update(_gc_env_vars(gc))
+    env_overrides.update(_gc_env_vars(gc, n_instances))
     popen_env = {**os.environ, **env_overrides} if env_overrides else None
     processes = [Popen(cmd,stdin=popen_stdin,stdout=PIPE,stderr=PIPE,bufsize=_POPEN_BUFSIZE, close_fds=ON_POSIX,
                        env=popen_env, **kwargs) for cmd in cmd_lines]

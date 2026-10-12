@@ -8,9 +8,10 @@ with. A separate, live check (once GET / reports its own GC mode -- not yet avai
 confirm an actually-started instance reports the mode it was asked for.
 """
 import queue
+import psutil
 import pytest
 import veneer.manage as manage
-from veneer.manage import _gc_env_vars
+from veneer.manage import _gc_env_vars, _GC_RAM_HEADROOM_THRESHOLD_BYTES
 
 
 class _EmptyQueue:
@@ -18,12 +19,49 @@ class _EmptyQueue:
         raise queue.Empty
 
 
-def test_default_is_dynamic_adaptation():
-    assert _gc_env_vars(None) == {'DOTNET_GCDynamicAdaptationMode': '1'}
+class _FakeVirtualMemory:
+    def __init__(self, total):
+        self.total = total
 
 
-def test_dynamic_named_explicitly_matches_the_default():
-    assert _gc_env_vars('dynamic') == _gc_env_vars(None)
+def test_default_single_instance_passes_nothing_regardless_of_ram(monkeypatch):
+    # n_instances=1 (the implicit default, and the explicit one): the RAM/(n+1) arithmetic
+    # never triggers for a single instance -- nothing else is competing for memory on this
+    # host, so there's nothing for DATAS to save.
+    monkeypatch.setattr(psutil, 'virtual_memory', lambda: _FakeVirtualMemory(total=1))
+    assert _gc_env_vars(None) == {}
+    assert _gc_env_vars(None, n_instances=1) == {}
+
+
+def test_default_multiple_instances_with_ample_ram_passes_nothing(monkeypatch):
+    # 1000 GB / (4 + 1) = 200 GB/instance, well above the threshold.
+    monkeypatch.setattr(
+        psutil, 'virtual_memory', lambda: _FakeVirtualMemory(total=1000 * 1024 ** 3))
+    assert _gc_env_vars(None, n_instances=4) == {}
+
+
+def test_default_multiple_instances_with_tight_ram_sets_dynamic_adaptation(monkeypatch):
+    # 32 GB / (4 + 1) = 6.4 GB/instance, below the 16 GB threshold.
+    monkeypatch.setattr(
+        psutil, 'virtual_memory', lambda: _FakeVirtualMemory(total=32 * 1024 ** 3))
+    assert _gc_env_vars(None, n_instances=4) == {'DOTNET_GCDynamicAdaptationMode': '1'}
+
+
+def test_default_threshold_is_a_strict_less_than(monkeypatch):
+    # Exactly at the threshold (ram/(n+1) == THRESHOLD) does not trigger DATAS; it must drop
+    # below it.
+    total = _GC_RAM_HEADROOM_THRESHOLD_BYTES * 5
+    monkeypatch.setattr(psutil, 'virtual_memory', lambda: _FakeVirtualMemory(total=total))
+    assert _gc_env_vars(None, n_instances=4) == {}
+
+
+def test_dynamic_forces_adaptation_unconditionally(monkeypatch):
+    # Unlike gc=None, gc='dynamic' is an explicit override: always DATAS, regardless of
+    # n_instances or how much RAM is available.
+    monkeypatch.setattr(
+        psutil, 'virtual_memory', lambda: _FakeVirtualMemory(total=10_000 * 1024 ** 3))
+    assert _gc_env_vars('dynamic') == {'DOTNET_GCDynamicAdaptationMode': '1'}
+    assert _gc_env_vars('dynamic', n_instances=8) == {'DOTNET_GCDynamicAdaptationMode': '1'}
 
 
 def test_false_passes_nothing():
@@ -111,7 +149,10 @@ def _patch_popen_and_readiness(monkeypatch):
     return captured_calls
 
 
-def test_start_in_process_popen_env_includes_the_default_gc_mode(monkeypatch, tmp_path):
+def test_start_in_process_popen_env_is_none_for_a_single_default_instance(monkeypatch, tmp_path):
+    # A single instance never triggers the default policy's DATAS branch: no DOTNET_GC*
+    # variables and no VENEER_EXIT_ON_STDIN_EOF (disabled here) means no overrides at all,
+    # so env stays None (inherit the parent's environment unchanged).
     captured_calls = _patch_popen_and_readiness(monkeypatch)
 
     project = tmp_path / "model.rsproj"
@@ -120,10 +161,26 @@ def test_start_in_process_popen_env_includes_the_default_gc_mode(monkeypatch, tm
                  exit_on_stdin_eof=False, return_log_paths=True)
 
     assert len(captured_calls) == 1
-    env = captured_calls[0]['env']
-    assert env['DOTNET_GCDynamicAdaptationMode'] == '1'
-    # exit_on_stdin_eof=False above: confirms gc's env additions don't depend on it.
-    assert 'VENEER_EXIT_ON_STDIN_EOF' not in env
+    assert captured_calls[0]['env'] is None
+
+
+def test_start_in_process_popen_env_includes_the_default_gc_mode_when_ram_is_tight(
+        monkeypatch, tmp_path):
+    captured_calls = _patch_popen_and_readiness(monkeypatch)
+    monkeypatch.setattr(
+        psutil, 'virtual_memory', lambda: _FakeVirtualMemory(total=32 * 1024 ** 3))
+
+    project = tmp_path / "model.rsproj"
+    project.write_text("not a real project")
+    manage.start(project_fn=str(project), n_instances=4, veneer_exe="VeneerCmd.exe",
+                 exit_on_stdin_eof=False, return_log_paths=True)
+
+    assert len(captured_calls) == 4
+    for kwargs in captured_calls:
+        env = kwargs['env']
+        assert env['DOTNET_GCDynamicAdaptationMode'] == '1'
+        # exit_on_stdin_eof=False above: confirms gc's env additions don't depend on it.
+        assert 'VENEER_EXIT_ON_STDIN_EOF' not in env
 
 
 def test_start_in_process_popen_env_is_none_when_gc_is_false_and_no_other_overrides(monkeypatch, tmp_path):
