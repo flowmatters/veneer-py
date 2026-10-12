@@ -160,7 +160,6 @@ def scenario_rebind(scenario):
             "'\" in this project')\n"
             'scenario = __scenarios[0].riverSystemScenario\n'
             'del __scenarios\n'
-            'del __s\n'
             % (literal, literal))
 
 
@@ -233,6 +232,10 @@ class VeneerIronPython(object):
 
         Calling for_scenario on an already-scoped instance REPLACES its
         scope with the new one -- scopes do not stack or combine.
+
+        for_scenario('1') means a scenario NAMED "1" -- a str is always a
+        name lookup, never an index -- unlike Veneer's SetScenario, which
+        parses "1" as an index. Pass the int 1 for an index.
 
         Cannot be reached through the cluster's AttributeChainProxy (ie
         `cluster.v.model.for_scenario(...)` does not work): only from
