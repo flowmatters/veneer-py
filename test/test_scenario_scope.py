@@ -131,3 +131,18 @@ def test_nothing_bypasses_run_script():
     assert hits, 'the sweep found nothing — it is not looking where it should'
     assert hits == [('server_side.py',
                      'return self._veneer.run_server_side_script(script, run_async)')]
+
+
+def test_each_deferred_fragment_carries_its_own_rebind():
+    # flush sends the joined fragments through _safe_run -> run_script, which
+    # adds the rebind once more: two fragments give THREE rebinds, all naming
+    # the same scenario, which is harmless (spec, veneer-py section).
+    v = FakeVeneer()
+    scoped = VeneerIronPython(v).for_scenario('Tributaries')
+    scoped.defer()
+    scoped.run_script('a = 1\n')
+    scoped.run_script('b = 2\n')
+    scoped.flush()
+    assert len(v.scripts) == 1
+    assert v.scripts[0].startswith(scenario_rebind('Tributaries'))
+    assert v.scripts[0].count(scenario_rebind('Tributaries')) == 3
