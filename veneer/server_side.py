@@ -118,6 +118,39 @@ def _transform_node_type_name(n):
     return n + 'NodeModel'
 
 
+def scenario_rebind(scenario):
+    '''
+    IronPython that points the script's `scenario` variable at another
+    scenario of the same project, looked up exactly as Veneer's
+    SourceService.SetScenario does in C#. Prepended to every script a
+    scoped VeneerIronPython sends (see for_scenario).
+
+    scenario: a scenario name (str) or a 0-based index (int).
+    '''
+    if isinstance(scenario, bool) or not isinstance(scenario, (int, str)):
+        raise TypeError('scenario must be a scenario name or a 0-based '
+                        'index, not %r' % (scenario,))
+    if isinstance(scenario, int):
+        if scenario < 0:
+            raise ValueError('scenario index must be 0 or more, not %d'
+                             % scenario)
+        return ('__scenarios = list(scenario.RiverSystemProject.GetRSScenarios())\n'
+                'if %d >= len(__scenarios): raise Exception('
+                "'Scenario index %d is out of range: the project has %%d "
+                "scenario(s)' %% len(__scenarios))\n"
+                'scenario = __scenarios[%d].riverSystemScenario\n'
+                % (scenario, scenario, scenario))
+    if not scenario.strip():
+        raise ValueError('scenario name must not be blank')
+    literal = 'u' + json.dumps(scenario)
+    return ('__scenarios = [s for s in scenario.RiverSystemProject.GetRSScenarios() '
+            'if s.ScenarioName == %s]\n'
+            "if not __scenarios: raise Exception('No scenario named ' + %s + "
+            "' in this project')\n"
+            'scenario = __scenarios[0].riverSystemScenario\n'
+            % (literal, literal))
+
+
 #@deprecate_async
 class VeneerIronPython(object):
     """
@@ -136,8 +169,11 @@ class VeneerIronPython(object):
     v.model.link?
     """
 
-    def __init__(self, veneer):
+    def __init__(self, veneer, scenario=None):
         self._veneer = veneer
+        self._scenario = scenario
+        self._scenario_prefix = ('' if scenario is None
+                                 else scenario_rebind(scenario))
         self.ui = VeneerSourceUIHelpers(self)
         self._generator = VeneerScriptGenerators(self)
         self.catchment = VeneerCatchmentActions(self)
@@ -170,6 +206,18 @@ class VeneerIronPython(object):
             return
         return self._safe_run(mega_script)
 
+    def for_scenario(self, scenario):
+        '''
+        These IronPython helpers, acting on `scenario` (a name or a 0-based
+        index) rather than on Veneer's active scenario.
+
+        Never changes the active scenario, so it works inside the Source GUI,
+        where Veneer cannot switch scenario. Covers IronPython only: REST
+        calls (run_model, time-series retrieval, input_sets, scenario_info)
+        still act on the active scenario.
+        '''
+        return VeneerIronPython(self._veneer, scenario=scenario)
+
     def _init_script(self, namespace=None):
         script = "# Generated Script\n"
         if not namespace is None:
@@ -197,6 +245,7 @@ class VeneerIronPython(object):
         if init:
             script = self._init_script() + '\n' + script
         script = self.clean_script(script)
+        script = self._scenario_prefix + script
         if self.deferring:
             self.deferred_scripts.append(script)
             return None
