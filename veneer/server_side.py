@@ -7,6 +7,7 @@ from .component import VeneerComponentModelActions
 import os
 import pandas as pd
 import json
+import numbers
 
 NODE_TYPES = {
     'inflow': 'RiverSystem.Nodes.Inflow.InjectedFlow',
@@ -125,9 +126,18 @@ def scenario_rebind(scenario):
     SourceService.SetScenario does in C#. Prepended to every script a
     scoped VeneerIronPython sends (see for_scenario).
 
-    scenario: a scenario name (str) or a 0-based index (int).
+    scenario: a scenario name (str) or a 0-based index (any integral type
+    other than bool, eg int or numpy.int64 -- normalised to int()).
+
+    If two scenarios share the same name, the FIRST match wins, exactly as
+    SetScenario's own `.First()` does.
     '''
-    if isinstance(scenario, bool) or not isinstance(scenario, (int, str)):
+    if isinstance(scenario, bool):
+        raise TypeError('scenario must be a scenario name or a 0-based '
+                        'index, not %r' % (scenario,))
+    if isinstance(scenario, numbers.Integral):
+        scenario = int(scenario)
+    elif not isinstance(scenario, str):
         raise TypeError('scenario must be a scenario name or a 0-based '
                         'index, not %r' % (scenario,))
     if isinstance(scenario, int):
@@ -139,15 +149,18 @@ def scenario_rebind(scenario):
                 "'Scenario index %d is out of range: the project has %%d "
                 "scenario(s)' %% len(__scenarios))\n"
                 'scenario = __scenarios[%d].riverSystemScenario\n'
+                'del __scenarios\n'
                 % (scenario, scenario, scenario))
     if not scenario.strip():
         raise ValueError('scenario name must not be blank')
     literal = 'u' + json.dumps(scenario)
-    return ('__scenarios = [s for s in scenario.RiverSystemProject.GetRSScenarios() '
-            'if s.ScenarioName == %s]\n'
-            "if not __scenarios: raise Exception('No scenario named ' + %s + "
-            "' in this project')\n"
+    return ('__scenarios = [__s for __s in scenario.RiverSystemProject.GetRSScenarios() '
+            'if __s.ScenarioName == %s]\n'
+            "if not __scenarios: raise Exception('No scenario named \"' + %s + "
+            "'\" in this project')\n"
             'scenario = __scenarios[0].riverSystemScenario\n'
+            'del __scenarios\n'
+            'del __s\n'
             % (literal, literal))
 
 
@@ -208,15 +221,37 @@ class VeneerIronPython(object):
 
     def for_scenario(self, scenario):
         '''
-        These IronPython helpers, acting on `scenario` (a name or a 0-based
-        index) rather than on Veneer's active scenario.
+        Returns a NEW VeneerIronPython instance whose IronPython helpers act
+        on `scenario` (a name or a 0-based index) rather than on Veneer's
+        active scenario; the new instance has its own, independent defer()
+        state.
 
         Never changes the active scenario, so it works inside the Source GUI,
         where Veneer cannot switch scenario. Covers IronPython only: REST
         calls (run_model, time-series retrieval, input_sets, scenario_info)
         still act on the active scenario.
+
+        Calling for_scenario on an already-scoped instance REPLACES its
+        scope with the new one -- scopes do not stack or combine.
+
+        Cannot be reached through the cluster's AttributeChainProxy (ie
+        `cluster.v.model.for_scenario(...)` does not work): only from
+        inside a job run via `cluster.wrap`, or on a direct Veneer client.
+
+        Because the rebind is prepended to every script, an IronPython
+        traceback's line numbers are shifted down by the rebind's own line
+        count relative to the script you wrote.
         '''
         return VeneerIronPython(self._veneer, scenario=scenario)
+
+    @property
+    def scoped_scenario(self):
+        '''
+        The scenario (name or 0-based index) this instance is scoped to via
+        for_scenario, or None if unscoped -- acting on Veneer's active
+        scenario.
+        '''
+        return self._scenario
 
     def _init_script(self, namespace=None):
         script = "# Generated Script\n"
@@ -330,7 +365,7 @@ class VeneerIronPython(object):
 
     def nav(self):
         from .navigate import Queryable
-        return Queryable(self._veneer)
+        return Queryable(self._veneer, ironpy=self)
 
     def find_model_type(self, model_type, must_be_model=True):
         '''
@@ -1044,7 +1079,8 @@ class VeneerNetworkElementActions(object):
         from .navigate import Queryable
         accessor = self._build_accessor(
             None, **kwargs).replace('.*', '.First().')
-        return Queryable(self._ironpy._veneer, path=accessor, namespace=self._ns)
+        return Queryable(self._ironpy._veneer, path=accessor, namespace=self._ns,
+                         ironpy=self._ironpy)
 
     def get_models(self, by_name=False, skip_nulls=True, **kwargs):
         '''
@@ -2149,6 +2185,13 @@ class VeneerFunctionActions():
         return self._ironpy.simplify_response(result['Response'])
 
     def create_piecewise_variable(self,variable_name,table=None):
+        if table is not None and self._ironpy.scoped_scenario is not None:
+            raise NotImplementedError(
+                'create_piecewise_variable(table=...) fills the table via '
+                'update_variable_piecewise, a REST call that always acts on '
+                "Veneer's ACTIVE scenario regardless of scope -- it cannot "
+                'be scoped to %r. Call without `table`, or set the lookup '
+                'table some other way.' % (self._ironpy.scoped_scenario,))
         x_name = 'Lookup'
         y_name = 'Result'
         if not variable_name.startswith('$'):

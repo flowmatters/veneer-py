@@ -151,7 +151,8 @@ class VeneerOperationsActions(object):
 
     def apply_overrides(self,overrides,time_period):
         '''
-        Apply a set of overrides to the current scenario:
+        Apply a set of overrides to this instance's scenario (the active one
+        unless scoped with for_scenario):
 
         Parameters:
         v: the Veneer client object pointing to an operations scenario
@@ -163,7 +164,8 @@ class VeneerOperationsActions(object):
         To explicitly remove an override for a location/variable/date, set the value to -9999 in the dataframe.
 
         Returns:
-        The result of the server-side script execution
+        The result of the server-side script execution, or None if this
+        instance is currently deferring (see defer()/flush()).
         '''
         getter_script = SECONDARY_NAME+FIND_OVERRIDE_TEMPLATE%time_period
         script = self._ironpy._init_script()
