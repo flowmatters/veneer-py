@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from veneer.navigate import Queryable
 from veneer.server_side import VeneerIronPython, scenario_rebind
 
 
@@ -26,6 +27,36 @@ class FakeVeneer:
 
     def select_scenario(self, scenario):
         self.selected.append(scenario)
+
+
+class FakeScenarioWrapper:
+    '''Mimics a Source RSScenario wrapper: the two properties the generated
+    rebind reads -- .ScenarioName and .riverSystemScenario.'''
+    def __init__(self, name):
+        self.ScenarioName = name
+        self.riverSystemScenario = object()  # a unique sentinel per wrapper
+
+
+class FakeRiverSystemProject:
+    def __init__(self, wrappers):
+        self._wrappers = wrappers
+
+    def GetRSScenarios(self):
+        return self._wrappers
+
+
+class FakeScenario:
+    '''Mimics the IronPython `scenario` variable just enough for
+    scenario_rebind's generated script to run under exec() on CPython 3 --
+    the same engine Source 6.x embeds (IronPython 3.4, not 2.7).'''
+    def __init__(self, wrappers):
+        self.RiverSystemProject = FakeRiverSystemProject(wrappers)
+
+
+def _exec_rebind(rebind_text, wrappers):
+    ns = {'scenario': FakeScenario(wrappers)}
+    exec(rebind_text, ns)
+    return ns
 
 
 def test_an_unscoped_script_is_sent_unchanged():
@@ -62,14 +93,54 @@ def test_a_scoped_script_by_index():
     assert 'out of range' in text
 
 
-def test_the_rebind_cleans_up_its_own_working_names():
-    # __scenarios (and, for the name lookup, __s -- which leaks out of a
-    # list comprehension under IronPython 2.7) must not survive the rebind.
+def test_the_rebind_cleans_up_its_own_working_name():
+    # __scenarios must not survive the rebind, on either engine.
     name_text = scenario_rebind('Tributaries')
     assert 'del __scenarios' in name_text
-    assert 'del __s' in name_text
     index_text = scenario_rebind(1)
     assert 'del __scenarios' in index_text
+
+
+# The rebind must run on both IronPython 2.7 (Source 5.x) and 3.4 (Source
+# 6.x). Under IronPython/CPython 2.7 a list-comprehension variable LEAKS
+# into the enclosing scope; under 3.x it does NOT (its own frame). A `del
+# __s` therefore raises NameError on 3.x -- exactly what Source 6.x's
+# embedded IronPython 3.4 runs. These exec the generated script for real,
+# under this (CPython 3) interpreter, against fakes standing in for the
+# `scenario` the real script would see.
+
+def test_exec_rebind_by_name_found():
+    wrappers = [FakeScenarioWrapper('Historic'), FakeScenarioWrapper('Tributaries')]
+    ns = _exec_rebind(scenario_rebind('Tributaries'), wrappers)
+    assert ns['scenario'] is wrappers[1].riverSystemScenario
+    assert '__scenarios' not in ns
+
+
+def test_exec_rebind_by_index_found():
+    wrappers = [FakeScenarioWrapper('Historic'), FakeScenarioWrapper('Tributaries')]
+    ns = _exec_rebind(scenario_rebind(1), wrappers)
+    assert ns['scenario'] is wrappers[1].riverSystemScenario
+    assert '__scenarios' not in ns
+
+
+def test_exec_rebind_by_name_missing_raises():
+    wrappers = [FakeScenarioWrapper('Historic')]
+    with pytest.raises(Exception) as exc_info:
+        _exec_rebind(scenario_rebind('Nope'), wrappers)
+    assert 'No scenario named "Nope"' in str(exc_info.value)
+
+
+def test_exec_rebind_by_index_out_of_range_raises():
+    wrappers = [FakeScenarioWrapper('Historic')]
+    with pytest.raises(Exception) as exc_info:
+        _exec_rebind(scenario_rebind(5), wrappers)
+    assert 'out of range' in str(exc_info.value)
+
+
+def test_exec_rebind_non_ascii_name_found():
+    wrappers = [FakeScenarioWrapper('Café')]
+    ns = _exec_rebind(scenario_rebind('Café'), wrappers)
+    assert ns['scenario'] is wrappers[0].riverSystemScenario
 
 
 def test_generated_rebind_is_valid_python():
@@ -94,7 +165,9 @@ def test_a_bad_scenario_value_is_refused_before_anything_is_sent(bad):
 
 
 def test_a_non_ascii_name_is_a_unicode_literal():
-    # IronPython 2.7: a plain "é" literal is NOT an escape; u"..." is.
+    # The rebind must run on both IronPython 2.7 (Source 5.x) and 3.4
+    # (Source 6.x): under 2.7 a plain "é" literal is NOT an escape, so a
+    # u"..." literal is used -- it is also valid, and portable, on 3.4.
     assert 'u"Caf\\u00e9"' in scenario_rebind('Café')
 
 
@@ -199,6 +272,54 @@ def test_veneer_model_access_outside_general_py_is_a_known_short_list():
         ('bulk.py', 'if not self._veneer.model.spatial.has_raster(r):'),
         ('bulk.py', "self._veneer.model.spatial.save_raster(r,self.make_dest(f'spatial/{r}','asc'),categories)"),
     ]
+
+
+def test_ironpy_veneer_rest_mixing_is_a_known_pinned_list():
+    # `_ironpy._veneer` reaches past the IronPython layer to the raw Veneer
+    # client -- legitimate for a REST call, which has no scope concept at
+    # all, but worth a deliberate look each time one appears, same shape as
+    # the two sweeps above. Pinned to what's actually here today:
+    # component.py's parse_veneer_date (REST, no scope to honour),
+    # nav_first's own Queryable constructor call (passes the SCOPED
+    # instance's veneer through correctly, alongside ironpy=self._ironpy),
+    # and the now-guarded update_variable_piecewise. A new helper mixing
+    # IronPython and REST fails this loudly instead of silently bypassing
+    # scope.
+    root = pathlib.Path(__file__).resolve().parent.parent / 'veneer'
+    hits = []
+    for path in sorted(root.rglob('*.py')):
+        for line in path.read_text(encoding='utf-8').splitlines():
+            if re.search(r'_ironpy\._veneer\b', line):
+                hits.append((path.name, line.strip()))
+    assert hits == [
+        ('component.py',
+         "index = [self._ironpy._veneer.parse_veneer_date(e['Date']) for e in list(res.values())[0]['Events']]"),
+        ('server_side.py',
+         'return Queryable(self._ironpy._veneer, path=accessor, namespace=self._ns,'),
+        ('server_side.py',
+         'self._ironpy._veneer.update_variable_piecewise(variable_name,table)'),
+    ]
+
+
+def test_queryable_without_ironpy_arg_evaluates_through_v_model():
+    # The documented top-level usage (`Queryable(v)`, no scoped instance in
+    # hand) must keep working: ironpy defaults to v.model.
+    class FakeModel:
+        def __init__(self):
+            self.calls = []
+
+        def get(self, path, namespace=None):
+            self.calls.append(path)
+            return 'the value'
+
+    class FakeVWithModel:
+        def __init__(self):
+            self.model = FakeModel()
+
+    v = FakeVWithModel()
+    q = Queryable(v)
+    assert q._eval_() == 'the value'
+    assert v.model.calls == ['scenario']
 
 
 def test_nav_is_scoped():
