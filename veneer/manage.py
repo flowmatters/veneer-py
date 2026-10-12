@@ -542,6 +542,40 @@ def _normalise_cleanup(cleanup):
     )
 
 
+def _gc_env_vars(gc):
+    """Builds the DOTNET_GC* environment variables for a given ``gc`` setting.
+
+    gc=None (the default): DOTNET_GCDynamicAdaptationMode=1 (DATAS -- .NET's dynamic
+    heap-count adaptation). Harmless on current VeneerCmd builds, where this is already
+    the runtime default; fixes older builds that still default to plain Server GC, which
+    measurably uses far more memory per instance for this workload with no speed benefit
+    (single-instance measurement: DATAS ~1.6-2.0 GB RSS and a faster run than Server GC's
+    ~8.2 GB). Applies the same regardless of how many instances are being started.
+    gc=False: pass nothing at all (no DOTNET_GC* variables set; inherits whatever the
+    environment or the VeneerCmd build's own runtimeconfig already decides).
+    gc='server' / 'workstation': explicit DOTNET_gcServer=1 / 0.
+    gc='dynamic': DOTNET_GCDynamicAdaptationMode=1 (same as the default, named explicitly).
+    gc=<int>: DOTNET_GCHeapCount=<int> (an explicit heap-count cap, e.g. for several
+    instances sharing one host: cpu_count // n_instances).
+    gc=<dict>: raw DOTNET_* variables, merged in as given (escape hatch for anything else).
+    """
+    if gc is False:
+        return {}
+    if gc is None or gc == 'dynamic':
+        return {'DOTNET_GCDynamicAdaptationMode': '1'}
+    if gc == 'server':
+        return {'DOTNET_gcServer': '1'}
+    if gc == 'workstation':
+        return {'DOTNET_gcServer': '0'}
+    if isinstance(gc, bool):
+        raise ValueError("gc=True is not a valid setting; use None for the default policy")
+    if isinstance(gc, int):
+        return {'DOTNET_GCHeapCount': str(gc)}
+    if isinstance(gc, dict):
+        return dict(gc)
+    raise ValueError("Unrecognised gc setting: %r" % (gc,))
+
+
 class IsolatedSource(object):
     """Run a single Veneer instance against an isolated, throwaway copy of a
     Source project.
@@ -578,7 +612,7 @@ class IsolatedSource(object):
                  additional_plugins=None, custom_endpoints=None, model=None,
                  debug=False, cleanup='always', capture_output=True,
                  trust_env=None, proxies=None,
-                 readiness='http', startup_timeout=600.0, exit_on_stdin_eof=True):
+                 readiness='http', startup_timeout=600.0, exit_on_stdin_eof=True, gc=None):
         self._cleanup = _normalise_cleanup(cleanup)
         self._shutdown = False
         self.directory = None
@@ -616,6 +650,7 @@ class IsolatedSource(object):
                 readiness=readiness,
                 startup_timeout=startup_timeout,
                 exit_on_stdin_eof=exit_on_stdin_eof,
+                gc=gc,
             )
             self.process = processes[0]
             self.port = ports[0]
@@ -677,7 +712,7 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
           progress_callback=None,capture_output_dir=None,
           detached=False,detached_timeout=120.0,leave_open=False,
           return_log_paths=_RETURN_LOG_PATHS_UNSET,
-          readiness='http',startup_timeout=600.0,exit_on_stdin_eof=True):
+          readiness='http',startup_timeout=600.0,exit_on_stdin_eof=True,gc=None):
     """
     Start one or more copies of the Veneer command line progeram with a given project file
 
@@ -761,6 +796,15 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
                          process dies (its stdin pipe then closes). Servers built before this was
                          added (protocol 20261001) ignore the unknown environment variable.
 
+    - gc - Sets the started instances' .NET GC environment variables. None (default) applies
+          DOTNET_GCDynamicAdaptationMode=1 (DATAS), which fixes older VeneerCmd builds that
+          still default to plain Server GC (measurably far more memory per instance for this
+          workload, no speed benefit) and is a no-op on newer builds that already default to
+          it. False passes no DOTNET_GC* variables at all. 'server'/'workstation' set
+          DOTNET_gcServer explicitly; 'dynamic' is the default named explicitly; an int sets
+          DOTNET_GCHeapCount to that value; a dict passes its own DOTNET_* variables raw. See
+          _gc_env_vars() for the exact mapping.
+
        returns processes, ports
                 — when return_log_paths=False (legacy default; emits DeprecationWarning).
        returns processes, ports, log_paths
@@ -817,6 +861,7 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
                 readiness=readiness,
                 startup_timeout=startup_timeout,
                 exit_on_stdin_eof=exit_on_stdin_eof,
+                gc=gc,
             ),
             detached_timeout=detached_timeout,
             leave_open=leave_open,
@@ -921,7 +966,12 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
                 logger.warning('Could not initialise log file %s', p, exc_info=True)
 
     popen_stdin = PIPE if exit_on_stdin_eof else None
-    popen_env = {**os.environ, 'VENEER_EXIT_ON_STDIN_EOF': '1'} if exit_on_stdin_eof else None
+    # Built from scratch, not the exit_on_stdin_eof-only shortcut this replaced: gc applies
+    # regardless of exit_on_stdin_eof (its default policy sets DOTNET_GCDynamicAdaptationMode
+    # even when exit_on_stdin_eof=False), so popen_env must reflect both independently.
+    env_overrides = {'VENEER_EXIT_ON_STDIN_EOF': '1'} if exit_on_stdin_eof else {}
+    env_overrides.update(_gc_env_vars(gc))
+    popen_env = {**os.environ, **env_overrides} if env_overrides else None
     processes = [Popen(cmd,stdin=popen_stdin,stdout=PIPE,stderr=PIPE,bufsize=_POPEN_BUFSIZE, close_fds=ON_POSIX,
                        env=popen_env, **kwargs) for cmd in cmd_lines]
     _emit_progress('veneer-start', 0, n_instances, f'Starting {n_instances} Veneer instances')

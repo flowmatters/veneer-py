@@ -335,7 +335,7 @@ class VeneerCluster(object):
           copy=False,tempdir_prefix='source-cluster-',copy_extras=None,existing='raise',
           existing_cluster=None,cleanup_on_failure=True,progress_callback=None,
           trust_env=None,proxies=None,localhost_only=True,
-          readiness='http',startup_timeout=600.0,exit_on_stdin_eof=True):
+          readiness='http',startup_timeout=600.0,exit_on_stdin_eof=True,gc=None):
         '''
         Create a cluster of Veneer instances, each running in a separate process
 
@@ -394,8 +394,11 @@ class VeneerCluster(object):
             accepts connections from the local machine. This avoids the Windows
             Firewall "allow incoming connections?" prompt on first run. Set to
             False when the scheduler needs to be reachable from other hosts.
-        readiness, startup_timeout, exit_on_stdin_eof:
-            Passed straight through to manage.start(); see its docstring.
+        readiness, startup_timeout, exit_on_stdin_eof, gc:
+            Passed straight through to manage.start(); see its docstring. gc's default
+            policy (DOTNET_GCDynamicAdaptationMode=1) applies to every worker in the
+            cluster, not scaled by n_workers -- pass an explicit int (a heap-count cap)
+            if a fixed per-instance heap budget is wanted instead for many workers on one host.
         '''
 
         self._progress_callback = progress_callback
@@ -496,6 +499,7 @@ class VeneerCluster(object):
                 readiness=readiness,
                 startup_timeout=startup_timeout,
                 exit_on_stdin_eof=exit_on_stdin_eof,
+                gc=gc,
             )
             self.veneer_ports = veneer_ports
             self.veneer_processes = veneer_processes
