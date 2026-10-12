@@ -94,3 +94,40 @@ def test_an_indented_script_is_cleaned_before_the_rebind_is_added():
     ironpy = VeneerIronPython(v)
     ironpy.for_scenario(0).run_script(script)
     assert v.scripts[0] == scenario_rebind(0) + ironpy.clean_script(script)
+
+
+import pathlib
+import re
+
+import pandas as pd
+
+
+def test_a_scoped_apply_overrides_is_scoped():
+    v = FakeVeneer()
+    df = pd.DataFrame({('StorageA', 'Release', '-'): [1.0]},
+                      index=pd.DatetimeIndex(['2026-10-13']))
+    VeneerIronPython(v).for_scenario('Tributaries').operations.apply_overrides(
+        df, 'Forecast')
+    assert v.scripts[0].startswith(scenario_rebind('Tributaries'))
+
+
+def test_an_unscoped_apply_overrides_sends_the_same_script_as_before():
+    v = FakeVeneer()
+    df = pd.DataFrame({('StorageA', 'Release', '-'): [1.0]},
+                      index=pd.DatetimeIndex(['2026-10-13']))
+    VeneerIronPython(v).operations.apply_overrides(df, 'Forecast')
+    assert v.scripts[0].startswith('# Generated Script')
+
+
+def test_nothing_bypasses_run_script():
+    # The ONE allowed call to run_server_side_script is run_script's own.
+    root = pathlib.Path(__file__).resolve().parent.parent / 'veneer'
+    hits = []
+    for path in sorted(root.rglob('*.py')):
+        for n, line in enumerate(path.read_text(encoding='utf-8').splitlines(), 1):
+            if re.search(r'\brun_server_side_script\(', line) \
+                    and 'def run_server_side_script' not in line:
+                hits.append((path.name, line.strip()))
+    assert hits, 'the sweep found nothing — it is not looking where it should'
+    assert hits == [('server_side.py',
+                     'return self._veneer.run_server_side_script(script, run_async)')]

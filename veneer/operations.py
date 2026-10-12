@@ -191,7 +191,7 @@ class VeneerOperationsActions(object):
                 script += f"dt = System.DateTime({ix.year},{ix.month},{ix.day})\n"
                 script += f"ts[dt] = {val}\n"
 
-        return self._ironpy._veneer.run_server_side_script(script)
+        return self._ironpy.run_script(script)
 
     def clear_overrides(self,time_period,start=None,end=None):
         '''
