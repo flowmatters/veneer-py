@@ -31,6 +31,34 @@ def test_timeout_error_carries_captured_output():
     assert 'line two' in str(err)
 
 
+def test_popen_with_stdin_pipe_raises_no_buffering_warning():
+    """start() opens stdin/stdout/stderr as PIPE for every instance (stdin is used for
+    the exit-on-stdin-eof die-with-parent behaviour). bufsize=1 (line buffering) is
+    only meaningful for text-mode streams; on these binary pipes Python raises
+    RuntimeWarning and substitutes the default buffer size anyway, three times per
+    instance. _POPEN_BUFSIZE is what start() actually passes to Popen; prove it here
+    with a real (trivial, short-lived) subprocess rather than mocking Popen, since the
+    warning is raised deep inside Popen's own pipe setup, not something callable code
+    triggers directly."""
+    import subprocess
+    import sys
+    import warnings
+    from veneer.manage import _POPEN_BUFSIZE
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        with subprocess.Popen(
+            [sys.executable, '-c', 'pass'],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            bufsize=_POPEN_BUFSIZE,
+        ) as proc:
+            proc.wait(timeout=10)
+
+    buffering_warnings = [w for w in caught if issubclass(w.category, RuntimeWarning)
+                          and 'buffering' in str(w.message)]
+    assert buffering_warnings == []
+
+
 def test_probe_rejects_a_foreign_instance_on_the_port(monkeypatch):
     import veneer.manage as m
 

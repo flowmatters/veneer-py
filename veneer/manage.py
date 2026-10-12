@@ -21,6 +21,13 @@ logger = logging.getLogger(__name__)
 # Non blocking IO solution from http://stackoverflow.com/a/4896288
 ON_POSIX = 'posix' in sys.builtin_module_names
 
+# bufsize=1 (line buffering) only applies to text-mode streams; on binary pipes (no
+# encoding/text=True here, since stdout/stderr are read as bytes) Python raises
+# RuntimeWarning and silently substitutes the default buffer size anyway. 0
+# (unbuffered) is honoured for binary pipes without a warning, and is fine here since
+# every reader already consumes these pipes with its own readline()/read() loop.
+_POPEN_BUFSIZE = 0
+
 VENEER_EXE_FN='FlowMatters.Source.VeneerCmd.exe'
 MANY_VENEERS='D:\\src\\projects\\Veneer\\Compiled'
 VENEER_EXE='D:\\src\\projects\\Veneer\\Output\\FlowMatters.Source.VeneerCmd.exe'
@@ -915,7 +922,7 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
 
     popen_stdin = PIPE if exit_on_stdin_eof else None
     popen_env = {**os.environ, 'VENEER_EXIT_ON_STDIN_EOF': '1'} if exit_on_stdin_eof else None
-    processes = [Popen(cmd,stdin=popen_stdin,stdout=PIPE,stderr=PIPE,bufsize=1, close_fds=ON_POSIX,
+    processes = [Popen(cmd,stdin=popen_stdin,stdout=PIPE,stderr=PIPE,bufsize=_POPEN_BUFSIZE, close_fds=ON_POSIX,
                        env=popen_env, **kwargs) for cmd in cmd_lines]
     _emit_progress('veneer-start', 0, n_instances, f'Starting {n_instances} Veneer instances')
     std_out_queues,std_out_threads = configure_non_blocking_io(processes,'stdout', tee_paths=log_paths)
