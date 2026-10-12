@@ -21,6 +21,15 @@ def test_old_server_without_ready_falls_back_to_root_scenario():
     assert interpret_readiness(404, None, root_status=200, root_body={'Scenario': None}) is False
 
 
+def test_method_not_allowed_also_falls_back_to_root_scenario():
+    # Found live against a real production 6.1 VeneerCmd: its CoreWCF routing answers
+    # GET /ready with 405 Method Not Allowed, not the 404 Program.cs's lack of a /ready
+    # route was assumed (by reading the source alone) to produce. Any status that isn't a
+    # modern server's own 200/503 must still fall back, not just 404.
+    assert interpret_readiness(405, None, root_status=200, root_body={'Scenario': 'Main'}) is True
+    assert interpret_readiness(405, None, root_status=200, root_body={'Scenario': None}) is False
+
+
 def test_connection_refused_is_not_ready():
     assert interpret_readiness(None, None) is False
 
@@ -76,3 +85,28 @@ def test_probe_rejects_a_foreign_instance_on_the_port(monkeypatch):
     monkeypatch.setattr('requests.get', fake_get)
     assert m._probe_ready(9876, expected_pid=123) is False
     assert calls == ['http://localhost:9876/']   # stopped at the PID check, never asked /ready
+
+
+def test_probe_falls_back_to_root_when_ready_answers_405(monkeypatch):
+    import veneer.manage as m
+
+    class FakeResponse:
+        def __init__(self, status_code, body, ok=True):
+            self.status_code = status_code
+            self.ok = ok
+            self.headers = {'content-type': 'application/json'}
+            self._body = body
+
+        def json(self):
+            return self._body
+
+    responses = {
+        'http://localhost:9876/ready': FakeResponse(405, None),
+        'http://localhost:9876/': FakeResponse(200, {'Scenario': 'Main'}),
+    }
+
+    def fake_get(url, timeout):
+        return responses[url]
+
+    monkeypatch.setattr('requests.get', fake_get)
+    assert m._probe_ready(9876) is True

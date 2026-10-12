@@ -58,13 +58,20 @@ class VeneerStartupTimeout(RuntimeError):
 def interpret_readiness(ready_status, ready_body, root_status=None, root_body=None):
     """Decide readiness from the probe responses. Pure, so it can be tested without a server.
 
-    - GET /ready -> 200 means ready (protocol >= 20261001, once the Veneer side lands).
-    - GET /ready -> 404 means an older server; ready iff GET / reports a Scenario.
-    - Anything else (503, connection error as None) means not yet.
+    - GET /ready -> 200 means ready (protocol >= 20261001).
+    - GET /ready -> 503 means a server that implements the endpoint says not ready yet; no
+      fallback needed, it's an authoritative answer.
+    - Anything else -- 404 (plain missing-route), 405 (confirmed live against a real
+      production 6.1 build: CoreWCF's routing rejects GET /ready with Method Not Allowed
+      rather than 404 when the route isn't registered, not the 404 originally assumed here
+      from reading Program.cs alone) or a connection error (ready_status=None) -- means
+      /ready itself told us nothing usable: fall back to whether GET / reports a Scenario.
     """
     if ready_status == 200:
         return True
-    if ready_status == 404 and root_status == 200:
+    if ready_status == 503:
+        return False
+    if root_status == 200:
         return bool((root_body or {}).get('Scenario'))
     return False
 
@@ -84,10 +91,11 @@ def _probe_ready(port, expected_pid=None, host='localhost', timeout=2.0):
                 return False
         r = requests.get(f'{base}/ready', timeout=timeout)
         body = r.json() if r.headers.get('content-type', '').startswith('application/json') else None
-        if r.status_code != 404:
+        if r.status_code in (200, 503):
             return interpret_readiness(r.status_code, body)
         root = requests.get(f'{base}/', timeout=timeout)
-        return interpret_readiness(404, None, root.status_code, root.json() if root.ok else None)
+        return interpret_readiness(r.status_code, body, root.status_code,
+                                   root.json() if root.ok else None)
     except (requests.RequestException, ValueError):
         return False
 
