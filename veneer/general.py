@@ -160,11 +160,15 @@ class Veneer(object):
         url: Path to required resource, relative to the root of the Veneer service.
         allow_status: Optional list of HTTP status codes that should return None instead of raising an exception.
         '''
-        query_url = self.prefix + url + self.data_ext
+        # self.url() already applies self.prefix once; don't pre-apply it here too. Harmless
+        # with the common prefix='' (''+anything==anything), but doubled the prefix for any
+        # caller using a non-empty one (e.g. a per-instance proxy prefix), producing a path
+        # like /sessions/X/instances/Y/sessions/X/instances/Y/ready.
+        query_url = url + self.data_ext
         if PRINT_URLS:
             print("*** %s - %s ***" % (url, query_url))
         if self.protocol == 'file':
-            text = open(query_url).read()
+            text = open(self.prefix + query_url).read()
         else:
             resp = self._session.get(self.url(query_url))
             if allow_status and resp.status_code in allow_status:
