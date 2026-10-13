@@ -6,6 +6,9 @@ in-process path) and _start_detached (the detached path) the same way
 test_start_return_shape.py already does, and assert on what each would have been called
 with. A separate, live check (once GET / reports its own GC mode -- not yet available) will
 confirm an actually-started instance reports the mode it was asked for.
+
+_logical_cpu_count is monkeypatched throughout so the default policy's CPU check is
+deterministic regardless of the real test host's core count.
 """
 import queue
 import psutil
@@ -25,8 +28,9 @@ class _FakeVirtualMemory:
 
 
 def test_default_single_instance_with_tight_ram_sets_workstation(monkeypatch):
-    # 1 byte / (1 + 1) is nowhere near 16 GB -- workstation GC, same arithmetic as any
-    # other instance count.
+    # n_instances=1 always satisfies the CPU check (1 * heaps <= heaps, for any heaps), so
+    # this is a pure RAM-dimension test -- 1 byte / (1 + 1) is nowhere near 16 GB.
+    monkeypatch.setattr(manage, '_logical_cpu_count', lambda: 16)
     monkeypatch.setattr(psutil, 'virtual_memory', lambda: _FakeVirtualMemory(total=1))
     assert _gc_env_vars(None) == {'DOTNET_gcServer': '0'}
     assert _gc_env_vars(None, n_instances=1) == {'DOTNET_gcServer': '0'}
@@ -34,38 +38,69 @@ def test_default_single_instance_with_tight_ram_sets_workstation(monkeypatch):
 
 def test_default_single_instance_with_ample_ram_sets_server(monkeypatch):
     # A 32 GB host, one instance: 32 GB / (1 + 1) = 16 GB/instance -- at the threshold,
-    # server GC.
+    # and the CPU check always holds for a single instance -- server GC.
+    monkeypatch.setattr(manage, '_logical_cpu_count', lambda: 16)
     monkeypatch.setattr(
         psutil, 'virtual_memory', lambda: _FakeVirtualMemory(total=32 * 1024 ** 3))
     assert _gc_env_vars(None, n_instances=1) == {'DOTNET_gcServer': '1'}
 
 
-def test_default_multiple_instances_with_ample_ram_sets_server(monkeypatch):
-    # 1000 GB / (4 + 1) = 200 GB/instance, well above the threshold.
+def test_default_single_instance_on_a_single_core_host_with_ample_ram_sets_server(monkeypatch):
+    # The CPU check (1 * heaps <= heaps) holds no matter what heaps actually is, including
+    # a single-core host -- confirms it never blocks a single instance.
+    monkeypatch.setattr(manage, '_logical_cpu_count', lambda: 1)
     monkeypatch.setattr(
-        psutil, 'virtual_memory', lambda: _FakeVirtualMemory(total=1000 * 1024 ** 3))
-    assert _gc_env_vars(None, n_instances=4) == {'DOTNET_gcServer': '1'}
+        psutil, 'virtual_memory', lambda: _FakeVirtualMemory(total=32 * 1024 ** 3))
+    assert _gc_env_vars(None, n_instances=1) == {'DOTNET_gcServer': '1'}
 
 
 def test_default_multiple_instances_with_tight_ram_sets_workstation(monkeypatch):
-    # 32 GB / (4 + 1) = 6.4 GB/instance, below the 16 GB threshold.
+    # 32 GB / (4 + 1) = 6.4 GB/instance, below the 16 GB threshold -- workstation on the
+    # RAM check alone (the CPU check also fails here, but this isolates the RAM dimension
+    # by using a generous heap count that would pass the CPU check on its own).
+    monkeypatch.setattr(manage, '_logical_cpu_count', lambda: 1000)
     monkeypatch.setattr(
         psutil, 'virtual_memory', lambda: _FakeVirtualMemory(total=32 * 1024 ** 3))
     assert _gc_env_vars(None, n_instances=4) == {'DOTNET_gcServer': '0'}
 
 
+def test_default_multiple_instances_with_ample_ram_now_sets_workstation_due_to_cpu(monkeypatch):
+    # The 2026-10-13 Fedora finding: Server GC gives each instance one heap per logical
+    # CPU, so n_instances=4 against a real 112-core host already means 4 * 112 = 448 heaps
+    # for 112 CPUs -- the CPU check fails on its own, before RAM even enters it. 1000 GB
+    # RAM / 5 = 200 GB/instance would have picked server GC under the old RAM-only rule.
+    monkeypatch.setattr(manage, '_logical_cpu_count', lambda: 112)
+    monkeypatch.setattr(
+        psutil, 'virtual_memory', lambda: _FakeVirtualMemory(total=1000 * 1024 ** 3))
+    assert _gc_env_vars(None, n_instances=4) == {'DOTNET_gcServer': '0'}
+
+
+def test_default_two_instances_always_fails_the_cpu_check_regardless_of_heap_count(monkeypatch):
+    # n_instances * heaps <= heaps can only hold for n_instances <= 1 when heaps is a
+    # positive number -- true for any heap count, not just a particular host's. Pin that
+    # algebraic fact directly, with ample RAM so only the CPU check can be responsible.
+    for heaps in (1, 2, 8, 16, 112):
+        monkeypatch.setattr(manage, '_logical_cpu_count', lambda heaps=heaps: heaps)
+        monkeypatch.setattr(
+            psutil, 'virtual_memory', lambda: _FakeVirtualMemory(total=1000 * 1024 ** 3))
+        assert _gc_env_vars(None, n_instances=2) == {'DOTNET_gcServer': '0'}, heaps
+
+
 def test_default_threshold_is_inclusive_for_server(monkeypatch):
     # Exactly at the threshold (ram/(n+1) == THRESHOLD) sets server GC -- "at least 16 GB"
-    # includes the boundary itself.
-    total = _GC_RAM_HEADROOM_THRESHOLD_BYTES * 5
+    # includes the boundary itself. Only n_instances=1 can ever reach server GC under the
+    # new rule, so that's what this now exercises (the old version used n_instances=4,
+    # which the CPU check alone now always sends to workstation).
+    monkeypatch.setattr(manage, '_logical_cpu_count', lambda: 16)
+    total = _GC_RAM_HEADROOM_THRESHOLD_BYTES * 2
     monkeypatch.setattr(psutil, 'virtual_memory', lambda: _FakeVirtualMemory(total=total))
-    assert _gc_env_vars(None, n_instances=4) == {'DOTNET_gcServer': '1'}
+    assert _gc_env_vars(None, n_instances=1) == {'DOTNET_gcServer': '1'}
 
 
 def test_dynamic_forces_server_and_adaptation_unconditionally(monkeypatch):
     # Unlike gc=None, gc='dynamic' is an explicit override: always server GC + DATAS,
-    # regardless of n_instances or how much RAM is available. DATAS needs server GC
-    # underneath it to do anything, so this sets both.
+    # regardless of n_instances, RAM, or the CPU/heap check.
+    monkeypatch.setattr(manage, '_logical_cpu_count', lambda: 4)
     monkeypatch.setattr(
         psutil, 'virtual_memory', lambda: _FakeVirtualMemory(total=1))
     assert _gc_env_vars('dynamic') == {
@@ -90,7 +125,8 @@ def test_workstation():
 
 def test_int_sets_server_and_heap_count():
     # An explicit heap-count cap implies server GC (DOTNET_GCHeapCount only means anything
-    # under it).
+    # under it) -- bypasses the CPU check entirely, the escape hatch for capped server GC
+    # with several instances.
     assert _gc_env_vars(4) == {'DOTNET_gcServer': '1', 'DOTNET_GCHeapCount': '4'}
 
 
@@ -168,6 +204,7 @@ def test_start_in_process_popen_env_sets_workstation_for_a_single_instance_with_
     # gc=None now always sets DOTNET_gcServer explicitly, one instance included -- env is
     # never None under the default policy any more.
     captured_calls = _patch_popen_and_readiness(monkeypatch)
+    monkeypatch.setattr(manage, '_logical_cpu_count', lambda: 16)
     monkeypatch.setattr(psutil, 'virtual_memory', lambda: _FakeVirtualMemory(total=1))
 
     project = tmp_path / "model.rsproj"
@@ -182,6 +219,7 @@ def test_start_in_process_popen_env_sets_workstation_for_a_single_instance_with_
 def test_start_in_process_popen_env_sets_server_for_a_single_instance_with_ample_ram(
         monkeypatch, tmp_path):
     captured_calls = _patch_popen_and_readiness(monkeypatch)
+    monkeypatch.setattr(manage, '_logical_cpu_count', lambda: 16)
     monkeypatch.setattr(
         psutil, 'virtual_memory', lambda: _FakeVirtualMemory(total=64 * 1024 ** 3))
 
@@ -197,6 +235,7 @@ def test_start_in_process_popen_env_sets_server_for_a_single_instance_with_ample
 def test_start_in_process_popen_env_sets_workstation_when_ram_is_tight(
         monkeypatch, tmp_path):
     captured_calls = _patch_popen_and_readiness(monkeypatch)
+    monkeypatch.setattr(manage, '_logical_cpu_count', lambda: 1000)
     monkeypatch.setattr(
         psutil, 'virtual_memory', lambda: _FakeVirtualMemory(total=32 * 1024 ** 3))
 
@@ -213,9 +252,14 @@ def test_start_in_process_popen_env_sets_workstation_when_ram_is_tight(
         assert 'VENEER_EXIT_ON_STDIN_EOF' not in env
 
 
-def test_start_in_process_popen_env_sets_server_when_ram_is_ample(
+def test_start_in_process_popen_env_sets_workstation_despite_ample_ram_multiple_instances(
         monkeypatch, tmp_path):
+    # Real start() path, post-finding: 4 instances against a real multi-core host's own
+    # logical-CPU count already fails the CPU check (oversubscription), regardless of how
+    # much RAM is available -- the case that would have picked server GC under the old
+    # RAM-only rule.
     captured_calls = _patch_popen_and_readiness(monkeypatch)
+    monkeypatch.setattr(manage, '_logical_cpu_count', lambda: 112)
     monkeypatch.setattr(
         psutil, 'virtual_memory', lambda: _FakeVirtualMemory(total=1000 * 1024 ** 3))
 
@@ -226,7 +270,7 @@ def test_start_in_process_popen_env_sets_server_when_ram_is_ample(
 
     assert len(captured_calls) == 4
     for kwargs in captured_calls:
-        assert kwargs['env']['DOTNET_gcServer'] == '1'
+        assert kwargs['env']['DOTNET_gcServer'] == '0'
 
 
 def test_start_in_process_popen_env_is_none_when_gc_is_false_and_no_other_overrides(monkeypatch, tmp_path):

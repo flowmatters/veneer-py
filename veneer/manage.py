@@ -554,24 +554,52 @@ def _normalise_cleanup(cleanup):
 # headroom for the host process and everything else sharing the machine). Server GC gives
 # each instance its own large set of heaps/threads -- fast, but memory-hungry (~8.2 GB RSS,
 # measured) and the wrong call once several instances have to share a host's RAM; workstation
-# GC is far leaner but slower. Today's data: workstation is the leanest choice; server is
-# faster for a single instance or a few when RAM is plentiful, and still wins around ~16
-# instances on a big host. 16 GB/instance is the dividing line for now.
+# GC is far leaner but slower. 16 GB/instance is the dividing line for now.
 _GC_RAM_HEADROOM_THRESHOLD_BYTES = 16 * 1024 ** 3
 
 
+def _logical_cpu_count():
+    """The number of CPUs this process can actually use right now -- os.sched_getaffinity(0)
+    (Linux only) where available, since it respects a taskset/cgroup restriction a plain
+    os.cpu_count() can't see; falls back to os.cpu_count() everywhere else (e.g. Windows).
+    Used both as the per-instance heap count (.NET Server GC gives each instance one heap
+    per logical CPU by default) and as the CPU budget those heaps are checked against."""
+    try:
+        return len(os.sched_getaffinity(0))
+    except AttributeError:
+        return os.cpu_count()
+
+
 def _default_gc_env_vars(n_instances):
-    """gc=None's policy: DOTNET_gcServer=1 (server GC) when physical RAM / (n_instances + 1)
-    is at least _GC_RAM_HEADROOM_THRESHOLD_BYTES; DOTNET_gcServer=0 (workstation GC)
-    otherwise. Always set explicitly, in both directions, rather than left to whatever the
-    VeneerCmd build itself defaults to -- that default has moved (server GC for Veneer
-    builds between 2026-08-12 and a later revert, workstation before and after), so explicit
-    beats inherited: behaviour here doesn't depend on which build happens to be running.
-    The same arithmetic applies to a single instance too: on a 32 GB host, n_instances=1
-    gives 16 GB/instance, i.e. server GC."""
+    """gc=None's policy: DOTNET_gcServer=1 (server GC) only when BOTH hold --
+      - n_instances * heaps <= logical CPUs (heaps = _logical_cpu_count()), and
+      - physical RAM / (n_instances + 1) >= _GC_RAM_HEADROOM_THRESHOLD_BYTES --
+    DOTNET_gcServer=0 (workstation GC) otherwise. Always set explicitly, in both directions,
+    rather than left to whatever the VeneerCmd build itself defaults to -- that default has
+    moved before (server GC for Veneer builds between 2026-08-12 and a later revert,
+    workstation before and after), so explicit beats inherited.
+
+    The CPU check is new (2026-10-13): Server GC gives each instance its own heap per
+    logical CPU by default, so n_instances >= 2 already oversubscribes the host's cores
+    before RAM even enters it -- found the hard way on a 112-core Fedora host, where
+    n_instances=1 means 112 heaps competing for 112 cores (fine) but n_instances>=2 means
+    well over 112 heaps doing the same (not fine): Server GC's own threads livelocked,
+    burning all their CPU contending with each other rather than running the model.
+    Workstation GC had no hangs at the same N, ran about 2x the throughput and used about
+    half the memory -- the same oversubscription mechanism as the earlier WSL2 N=50 stall.
+
+    Written as the general n_instances * heaps <= logical CPUs formula, not a hard-coded
+    n_instances == 1 special case, in case a future caller ever wants heaps to mean
+    something other than the full logical-CPU count -- but under this default policy heaps
+    IS that same count, so the formula only ever holds for n_instances == 1 in practice:
+    the default policy now sets server GC only for a single instance, and only when RAM is
+    plentiful too; n_instances >= 2 always gets workstation GC, regardless of RAM."""
     import psutil
     physical_ram = psutil.virtual_memory().total
-    if physical_ram / (n_instances + 1) >= _GC_RAM_HEADROOM_THRESHOLD_BYTES:
+    heaps = _logical_cpu_count()
+    cpu_fits = n_instances * heaps <= heaps
+    ram_fits = physical_ram / (n_instances + 1) >= _GC_RAM_HEADROOM_THRESHOLD_BYTES
+    if cpu_fits and ram_fits:
         return {'DOTNET_gcServer': '1'}
     return {'DOTNET_gcServer': '0'}
 
@@ -601,30 +629,35 @@ def _existing_gc_env_vars():
     return found
 
 
-def _format_gc_decision_line(gc, n_instances, gc_vars, physical_ram_bytes, existing_gc_env):
+def _format_gc_decision_line(gc, n_instances, gc_vars, physical_ram_bytes, existing_gc_env,
+                             logical_cpus):
     """Pure (no I/O): builds the one-line GC decision message start() logs via
     logger.info on every call -- see _log_gc_decision for where the real inputs come
     from. gc_vars is _gc_env_vars(gc, n_instances)'s own return value: this function
     does not re-derive the decision, only describes it.
 
-    RAM/instance and the threshold are always shown, even on an explicit gc= branch
-    where they played no part in the decision (gc=None, the default, is the only branch
-    where they do) -- the "(gc=..., default/explicit)" tag is what disambiguates that,
-    not their absence.
+    Both the CPU check (n_instances * logical_cpus heaps against logical_cpus CPUs) and
+    the RAM/instance check against the threshold are always shown, even on an explicit
+    gc= branch where neither played any part in the decision (gc=None, the default, is
+    the only branch where they do) -- the "(gc=..., default/explicit)" tag is what
+    disambiguates that, not their absence.
     """
     threshold_gb = _GC_RAM_HEADROOM_THRESHOLD_BYTES / 1024 ** 3
     ram_gb = physical_ram_bytes / 1024 ** 3
     ram_per_instance_gb = physical_ram_bytes / (n_instances + 1) / 1024 ** 3
-    cmp = '<' if ram_per_instance_gb < threshold_gb else '≥'
+    ram_cmp = '<' if ram_per_instance_gb < threshold_gb else '≥'
+    cpu_cmp = '≤' if n_instances * logical_cpus <= logical_cpus else '>'
     is_default = gc is None
     policy = 'default' if is_default else 'explicit'
     n_word = 'instance' if n_instances == 1 else 'instances'
+    heap_word = 'heap' if logical_cpus == 1 else 'heaps'
 
     outcome = ', '.join(f'{k}={v}' for k, v in gc_vars.items()) if gc_vars else 'none'
 
     line = (
-        f"GC policy (gc={gc!r}, {policy}): {n_instances} {n_word}, {ram_gb:.1f} GB RAM "
-        f"→ {ram_per_instance_gb:.1f} GB/instance {cmp} {threshold_gb:.0f} GB "
+        f"GC policy (gc={gc!r}, {policy}): {n_instances} {n_word} × {logical_cpus} "
+        f"{heap_word} {cpu_cmp} {logical_cpus} CPUs, {ram_gb:.1f} GB RAM "
+        f"→ {ram_per_instance_gb:.1f} GB/instance {ram_cmp} {threshold_gb:.0f} GB "
         f"→ {outcome}"
     )
     if existing_gc_env:
@@ -649,16 +682,18 @@ def _log_gc_decision(gc, n_instances, gc_vars):
     """
     import psutil
     physical_ram_bytes = psutil.virtual_memory().total
+    logical_cpus = _logical_cpu_count()
     existing_gc_env = _existing_gc_env_vars()
     logger.info(_format_gc_decision_line(gc, n_instances, gc_vars, physical_ram_bytes,
-                                         existing_gc_env))
+                                         existing_gc_env, logical_cpus))
 
 
 def _gc_env_vars(gc, n_instances=1):
     """Builds the DOTNET_GC* environment variables for a given ``gc`` setting.
 
     gc=None (the default): see _default_gc_env_vars -- DOTNET_gcServer=1 (server) or
-    DOTNET_gcServer=0 (workstation), explicitly, by the RAM/instance arithmetic.
+    DOTNET_gcServer=0 (workstation), explicitly, by the RAM/instance AND CPU/heap
+    arithmetic (both must favour server GC; either alone can force workstation GC).
     gc=False: pass nothing at all (no DOTNET_GC* variables set; the VeneerCmd build's own
     default applies, whichever that currently is).
     gc='server': DOTNET_gcServer=1. gc='workstation': DOTNET_gcServer=0.
@@ -912,13 +947,19 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
                          added (protocol 20261001) ignore the unknown environment variable.
 
     - gc - Sets the started instances' .NET GC environment variables. None (default) sets
-          DOTNET_gcServer explicitly, in both directions, by physical RAM / (n_instances + 1)
-          against 16 GB (_GC_RAM_HEADROOM_THRESHOLD_BYTES): DOTNET_gcServer=1 (server GC) at
-          or above it, DOTNET_gcServer=0 (workstation GC) below it -- set explicitly either
-          way rather than left to the VeneerCmd build's own default, which has moved before
-          and could again. Today's data: workstation is the leanest choice; server is faster
-          for a single instance or a few when RAM is plentiful, and still wins around ~16
-          instances on a big host -- which is what the 16 GB/instance line approximates.
+          DOTNET_gcServer explicitly, in both directions, by TWO checks that must both favour
+          server GC: physical RAM / (n_instances + 1) at or above 16 GB
+          (_GC_RAM_HEADROOM_THRESHOLD_BYTES), AND n_instances * heaps at or below the host's
+          logical CPU count (heaps = one per logical CPU, Server GC's own default) -- set
+          explicitly either way rather than left to the VeneerCmd build's own default, which
+          has moved before and could again. The CPU check means n_instances >= 2 already
+          oversubscribes the host's cores on its own (a 112-core host running 2+ instances
+          means well over 112 heaps competing for 112 cores) -- found to livelock Server GC's
+          own threads on a 112-core Fedora host, not just slow it down; Workstation GC had no
+          hangs at the same N, about 2x the throughput and about half the memory. In practice
+          this means the default policy only ever picks server GC for a single instance, and
+          only when RAM is plentiful too -- n_instances >= 2 always gets workstation GC now,
+          regardless of RAM.
           Results retention on a long-lived instance is a separate, unrelated source of
           memory growth (one instance measured 2 GB -> 10 GB over 22 runs) -- call
           Veneer.drop_all_runs() between runs on instances that are kept running rather than
@@ -928,12 +969,14 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
           DOTNET_gcServer=1/0 explicitly. 'dynamic' sets DOTNET_gcServer=1 AND
           DOTNET_GCDynamicAdaptationMode=1 (DATAS, lower memory than plain server GC at some
           speed cost -- it needs server GC underneath it to do anything, so this sets both).
-          An int sets DOTNET_gcServer=1 and DOTNET_GCHeapCount to that value. A dict passes
+          An int sets DOTNET_gcServer=1 and DOTNET_GCHeapCount to that value -- the escape
+          hatch for anyone who wants capped server GC with several instances, bypassing the
+          CPU check entirely (it's an explicit choice, not the default policy). A dict passes
           its own DOTNET_* variables raw. Any of these explicit values overrides the
-          RAM-based default policy. See _gc_env_vars() for the exact mapping.
+          RAM-and-CPU-based default policy. See _gc_env_vars() for the exact mapping.
           Every call logs its GC decision as one logger.info line (the gc argument and
-          whether the default policy applied, the RAM arithmetic, the outcome, and any
-          pre-existing DOTNET_GC*/DOTNET_gcServer variable it replaces), even when nothing
+          whether the default policy applied, the RAM and CPU/heap arithmetic, the outcome,
+          and any pre-existing DOTNET_GC*/DOTNET_gcServer variable it replaces), even when nothing
           is applied -- see _format_gc_decision_line() for the exact message.
 
        returns processes, ports
