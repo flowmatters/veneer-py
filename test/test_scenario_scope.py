@@ -67,23 +67,23 @@ def test_an_unscoped_script_is_sent_unchanged():
 
 def test_a_scoped_script_starts_with_the_rebind_by_name():
     v = FakeVeneer()
-    VeneerIronPython(v).for_scenario('Tributaries').run_script('result = 1\n')
-    assert v.scripts[0].startswith(scenario_rebind('Tributaries'))
+    VeneerIronPython(v).for_scenario('ScenarioB').run_script('result = 1\n')
+    assert v.scripts[0].startswith(scenario_rebind('ScenarioB'))
     assert v.scripts[0].endswith('result = 1\n')
 
 
 def test_the_name_lookup_mirrors_SetScenario():
-    text = scenario_rebind('Tributaries')
+    text = scenario_rebind('ScenarioB')
     assert 'scenario.RiverSystemProject.GetRSScenarios()' in text
-    assert '__s.ScenarioName == u"Tributaries"' in text
+    assert '__s.ScenarioName == u"ScenarioB"' in text
     assert '.riverSystemScenario' in text
     assert 'No scenario named "' in text
     assert '" in this project' in text
 
 
 def test_the_not_found_message_quotes_the_name():
-    text = scenario_rebind('Tributaries')
-    assert '''raise Exception('No scenario named "' + u"Tributaries" + '" in this project')''' in text
+    text = scenario_rebind('ScenarioB')
+    assert '''raise Exception('No scenario named "' + u"ScenarioB" + '" in this project')''' in text
 
 
 def test_a_scoped_script_by_index():
@@ -95,7 +95,7 @@ def test_a_scoped_script_by_index():
 
 def test_the_rebind_cleans_up_its_own_working_name():
     # __scenarios must not survive the rebind, on either engine.
-    name_text = scenario_rebind('Tributaries')
+    name_text = scenario_rebind('ScenarioB')
     assert 'del __scenarios' in name_text
     index_text = scenario_rebind(1)
     assert 'del __scenarios' in index_text
@@ -110,14 +110,14 @@ def test_the_rebind_cleans_up_its_own_working_name():
 # `scenario` the real script would see.
 
 def test_exec_rebind_by_name_found():
-    wrappers = [FakeScenarioWrapper('Historic'), FakeScenarioWrapper('Tributaries')]
-    ns = _exec_rebind(scenario_rebind('Tributaries'), wrappers)
+    wrappers = [FakeScenarioWrapper('Historic'), FakeScenarioWrapper('ScenarioB')]
+    ns = _exec_rebind(scenario_rebind('ScenarioB'), wrappers)
     assert ns['scenario'] is wrappers[1].riverSystemScenario
     assert '__scenarios' not in ns
 
 
 def test_exec_rebind_by_index_found():
-    wrappers = [FakeScenarioWrapper('Historic'), FakeScenarioWrapper('Tributaries')]
+    wrappers = [FakeScenarioWrapper('Historic'), FakeScenarioWrapper('ScenarioB')]
     ns = _exec_rebind(scenario_rebind(1), wrappers)
     assert ns['scenario'] is wrappers[1].riverSystemScenario
     assert '__scenarios' not in ns
@@ -147,7 +147,7 @@ def test_generated_rebind_is_valid_python():
     # The generated IronPython must stay syntactically valid: compile()
     # parses it without executing, so undefined names like `scenario` are
     # fine, but a quoting mistake would show up as a SyntaxError here.
-    compile(scenario_rebind('Tributaries'), '<scenario_rebind:name>', 'exec')
+    compile(scenario_rebind('ScenarioB'), '<scenario_rebind:name>', 'exec')
     compile(scenario_rebind('Café'), '<scenario_rebind:unicode-name>', 'exec')
     compile(scenario_rebind(1), '<scenario_rebind:index>', 'exec')
 
@@ -179,7 +179,7 @@ def test_an_integral_index_other_than_int_is_accepted_and_normalised():
 
 def test_scoping_never_selects_a_scenario():
     v = FakeVeneer()
-    scoped = VeneerIronPython(v).for_scenario('Tributaries')
+    scoped = VeneerIronPython(v).for_scenario('ScenarioB')
     scoped.run_script('result = 1\n')
     scoped.get('scenario.Name')
     assert v.selected == []
@@ -189,13 +189,13 @@ def test_helpers_reached_through_a_scoped_model_are_scoped():
     # Every helper object (operations, simulation, node, link, ...) is built
     # with the instance itself, so the scope reaches all of them.
     v = FakeVeneer()
-    scoped = VeneerIronPython(v).for_scenario('Tributaries')
+    scoped = VeneerIronPython(v).for_scenario('ScenarioB')
     scoped.get('scenario.Name')
     scoped.simulation.select_input_set('Default Input Set')
     scoped.operations.clear_overrides('Forecast')
     assert len(v.scripts) == 3
     for script in v.scripts:
-        assert script.startswith(scenario_rebind('Tributaries'))
+        assert script.startswith(scenario_rebind('ScenarioB'))
 
 
 def test_an_indented_script_is_cleaned_before_the_rebind_is_added():
@@ -214,17 +214,17 @@ def test_an_indented_script_is_cleaned_before_the_rebind_is_added():
 def test_scoped_scenario_is_exposed():
     v = FakeVeneer()
     assert VeneerIronPython(v).scoped_scenario is None
-    scoped = VeneerIronPython(v).for_scenario('Tributaries')
-    assert scoped.scoped_scenario == 'Tributaries'
+    scoped = VeneerIronPython(v).for_scenario('ScenarioB')
+    assert scoped.scoped_scenario == 'ScenarioB'
 
 
 def test_a_scoped_apply_overrides_is_scoped():
     v = FakeVeneer()
     df = pd.DataFrame({('StorageA', 'Release', '-'): [1.0]},
                       index=pd.DatetimeIndex(['2026-10-13']))
-    VeneerIronPython(v).for_scenario('Tributaries').operations.apply_overrides(
+    VeneerIronPython(v).for_scenario('ScenarioB').operations.apply_overrides(
         df, 'Forecast')
-    assert v.scripts[0].startswith(scenario_rebind('Tributaries'))
+    assert v.scripts[0].startswith(scenario_rebind('ScenarioB'))
 
 
 def test_an_unscoped_apply_overrides_script_is_unprefixed():
@@ -327,18 +327,18 @@ def test_nav_is_scoped():
     # unscoped model (general.py's self.model), regardless of which
     # instance built it -- a silent scope bypass.
     v = FakeVeneer()
-    scoped = VeneerIronPython(v).for_scenario('Tributaries')
+    scoped = VeneerIronPython(v).for_scenario('ScenarioB')
     scoped.nav()._eval_()
     assert v.scripts
-    assert v.scripts[-1].startswith(scenario_rebind('Tributaries'))
+    assert v.scripts[-1].startswith(scenario_rebind('ScenarioB'))
 
 
 def test_nav_first_is_scoped():
     v = FakeVeneer()
-    scoped = VeneerIronPython(v).for_scenario('Tributaries')
+    scoped = VeneerIronPython(v).for_scenario('ScenarioB')
     scoped.node.nav_first(nodes='StorageA')._eval_()
     assert v.scripts
-    assert v.scripts[-1].startswith(scenario_rebind('Tributaries'))
+    assert v.scripts[-1].startswith(scenario_rebind('ScenarioB'))
 
 
 def test_create_piecewise_variable_with_table_refuses_on_a_scoped_instance():
@@ -346,7 +346,7 @@ def test_create_piecewise_variable_with_table_refuses_on_a_scoped_instance():
     # Veneer's ACTIVE scenario, so it cannot honour a scope. Must refuse
     # before doing anything -- no script sent at all.
     v = FakeVeneer()
-    scoped = VeneerIronPython(v).for_scenario('Tributaries')
+    scoped = VeneerIronPython(v).for_scenario('ScenarioB')
     table = pd.DataFrame({'Lookup': [1.0], 'Result': [2.0]})
     with pytest.raises(NotImplementedError):
         scoped.functions.create_piecewise_variable('x', table=table)
@@ -355,10 +355,10 @@ def test_create_piecewise_variable_with_table_refuses_on_a_scoped_instance():
 
 def test_create_piecewise_variable_without_table_is_fine_on_a_scoped_instance():
     v = FakeVeneer()
-    scoped = VeneerIronPython(v).for_scenario('Tributaries')
+    scoped = VeneerIronPython(v).for_scenario('ScenarioB')
     scoped.functions.create_piecewise_variable('x')
     assert v.scripts
-    assert v.scripts[0].startswith(scenario_rebind('Tributaries'))
+    assert v.scripts[0].startswith(scenario_rebind('ScenarioB'))
 
 
 def test_each_deferred_fragment_carries_its_own_rebind():
@@ -366,11 +366,11 @@ def test_each_deferred_fragment_carries_its_own_rebind():
     # adds the rebind once more: two fragments give THREE rebinds, all naming
     # the same scenario, which is harmless (spec, veneer-py section).
     v = FakeVeneer()
-    scoped = VeneerIronPython(v).for_scenario('Tributaries')
+    scoped = VeneerIronPython(v).for_scenario('ScenarioB')
     scoped.defer()
     scoped.run_script('a = 1\n')
     scoped.run_script('b = 2\n')
     scoped.flush()
     assert len(v.scripts) == 1
-    assert v.scripts[0].startswith(scenario_rebind('Tributaries'))
-    assert v.scripts[0].count(scenario_rebind('Tributaries')) == 3
+    assert v.scripts[0].startswith(scenario_rebind('ScenarioB'))
+    assert v.scripts[0].count(scenario_rebind('ScenarioB')) == 3
