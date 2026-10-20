@@ -29,6 +29,100 @@ def log(text):
     sys.stdout.flush()
 
 
+MAX_ERROR_LOG_LINES = 50
+MAX_ERROR_BODY_CHARS = 4000
+
+class VeneerHTTPError(requests.HTTPError):
+    '''
+    An HTTP error response from Veneer, carrying the details from the response body.
+
+    Veneer reports failures (eg a failed run) with a JSON fault body containing a message,
+    the server-side stack trace and, for runs, the Source log captured during the run.
+    These details are included in the exception text and are also available as attributes:
+
+    status_code: HTTP status code
+    url: URL requested
+    message: Message from the fault, if any
+    stack_trace: Server-side stack trace, if any
+    log: List of Source log messages captured during a failed run, if any
+    fault: The parsed JSON fault (dict), or None if the body wasn't JSON
+    body: The raw response body text
+
+    Subclasses requests.HTTPError, so existing `except requests.HTTPError` handlers still apply.
+    '''
+    def __init__(self, status_code, url, body, reason=None, method=None, response=None):
+        self.status_code = status_code
+        self.url = url
+        self.body = body or ''
+        self.reason = reason
+        self.method = method
+        self.fault = None
+        try:
+            parsed = json.loads(self.body) if self.body.strip() else None
+            if isinstance(parsed, dict):
+                self.fault = parsed
+        except ValueError:
+            pass
+        fault = self.fault or {}
+        self.message = fault.get('Message')
+        self.stack_trace = fault.get('StackTrace')
+        self.log = fault.get('Log') or []
+        super(VeneerHTTPError, self).__init__(self._describe(), response=response)
+
+    def _describe(self):
+        kind = 'Client' if 400 <= self.status_code < 500 else 'Server'
+        headline = '%d %s Error' % (self.status_code, kind)
+        if self.reason:
+            headline += ': %s' % self.reason
+        if self.url:
+            headline += ' for %s%s' % ((self.method + ' ') if self.method else '', self.url)
+        lines = [headline]
+
+        if self.fault is None:
+            if self.body.strip():
+                body = self.body
+                if len(body) > MAX_ERROR_BODY_CHARS:
+                    body = body[:MAX_ERROR_BODY_CHARS] + '... [truncated]'
+                lines += ['Response body:', body]
+            return '\n'.join(lines)
+
+        lines += _describe_fault(self.fault)
+        if self.log:
+            log = self.log
+            lines.append('Run log:')
+            if len(log) > MAX_ERROR_LOG_LINES:
+                lines.append('  ... [%d earlier lines omitted; see .log]' % (len(log) - MAX_ERROR_LOG_LINES))
+                log = log[-MAX_ERROR_LOG_LINES:]
+            lines += ['  %s' % l for l in log]
+        return '\n'.join(lines)
+
+def _describe_fault(fault, inner=False):
+    lines = []
+    exc_type = fault.get('ExceptionType')
+    message = fault.get('Message')
+    if exc_type or message:
+        prefix = 'Caused by: ' if inner else ''
+        lines.append(prefix + ': '.join([s for s in [exc_type, message] if s]))
+    if fault.get('PythonStackTrace'):
+        lines += ['Python stack trace:', fault['PythonStackTrace']]
+    if fault.get('StackTrace'):
+        lines += ['Server stack trace:', fault['StackTrace']]
+    if isinstance(fault.get('InnerException'), dict):
+        lines += _describe_fault(fault['InnerException'], inner=True)
+    if not lines and not inner:
+        lines = ['Response body:', json.dumps(fault)]
+    return lines
+
+def _raise_for_status(resp):
+    '''
+    Like requests' Response.raise_for_status, but raises VeneerHTTPError with the response body details.
+    '''
+    if resp.status_code < 400:
+        return
+    request = getattr(resp, 'request', None)
+    raise VeneerHTTPError(resp.status_code, resp.url, resp.text, reason=resp.reason,
+                          method=getattr(request, 'method', None), response=resp)
+
 def _veneer_url_safe_id_string(s):
     return s.replace('#', '').replace('/', '%2F').replace(':', '')
 
@@ -173,7 +267,7 @@ class Veneer(object):
             resp = self._session.get(self.url(query_url))
             if allow_status and resp.status_code in allow_status:
                 return None
-            resp.raise_for_status()
+            _raise_for_status(resp)
             text = resp.text
 
         text = self._replace_inf(text)
@@ -210,7 +304,7 @@ class Veneer(object):
                 url += '?' + '&'.join([f'{key}={val}' for key,val in kwargs.items()])
 
             resp = self._session.get(self.url(url),headers={"Accept": "text/csv"})
-            resp.raise_for_status()
+            _raise_for_status(resp)
             text = resp.text
 
         result = read_veneer_csv(text)
@@ -225,7 +319,7 @@ class Veneer(object):
         url = self.url(resource+self.img_ext)
         if url.startswith('http://') or url.startswith('https://'):
             response = self._session.get(url)
-            response.raise_for_status()
+            _raise_for_status(response)
             image = Image.open(io.BytesIO(response.content))
             return image
         return Image.open(url)
@@ -264,7 +358,7 @@ class Veneer(object):
             return conn
 
         resp = self._session.request(method, self.url(url), data=payload, headers=headers)
-        resp.raise_for_status()
+        _raise_for_status(resp)
         code = resp.status_code
         content = resp.text
         if code == 302:
@@ -439,7 +533,7 @@ class Veneer(object):
             json=params,
             headers={'Content-type': 'application/json', 'Accept': 'application/json'},
             allow_redirects=False)
-        resp.raise_for_status()
+        _raise_for_status(resp)
         code = resp.status_code
         content = resp.text
 
@@ -449,7 +543,7 @@ class Veneer(object):
         resp = conn.getresponse()
         code = resp.getcode()
         content = resp.read().decode('utf-8')
-        return self.process_run_response(code, content)
+        return self.process_run_response(code, content, resp.headers)
 
     def run_status(self):
         '''
@@ -463,14 +557,13 @@ class Veneer(object):
         '''
         return self.post_json('/runs/cancel')
 
-    def process_run_response(self,code, content,headers):
+    def process_run_response(self,code, content,headers=None):
         if code == 302:
-            return code, headers.get('Location')
+            return code, (headers or {}).get('Location')
         elif code == 200:
             return code, None
-        elif code == 500:
-            error = json.loads(content)
-            raise Exception('\n'.join([error['Message'], error['StackTrace']]))
+        elif code >= 400:
+            raise VeneerHTTPError(code, self.url('/runs'), content, method='POST')
         else:
             return code, content
 
@@ -482,7 +575,7 @@ class Veneer(object):
         '''
         assert self.live_source
         resp = self._session.delete(self.url('/runs/%s' % str(run)))
-        resp.raise_for_status()
+        _raise_for_status(resp)
         code = resp.status_code
         content = resp.text
         return code
@@ -802,7 +895,7 @@ class Veneer(object):
         '''
         assert self.live_source
         resp = self._session.delete(self.url('/dataSources/%s' % str(quote(group))))
-        resp.raise_for_status()
+        _raise_for_status(resp)
         code = resp.status_code
         content = resp.text
         return code
