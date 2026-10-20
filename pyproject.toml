@@ -9,7 +9,14 @@ keywords = ["hydrology", "ewater", "veneer", "scripting", "http", "rest"]
 license = {text = "ISC License"}
 dynamic = ["version"]
 readme = {file = "README.md", content-type = "text/markdown"}
-# dependencies = ["numpy", "pandas"]
+# Core: needed by `import veneer` (requests, numpy, pandas) and by veneer.manage, which
+# starts and stops Veneer command line servers (psutil). Lower bounds only.
+dependencies = [
+    "requests>=2.20",
+    "numpy>=1.20",
+    "pandas>=1.3",
+    "psutil>=5.7",
+]
 authors = [
     {name = "Joel Rahman", email = "joel@flowmatters.com.au"}
 ]
@@ -29,6 +36,20 @@ classifiers = [
 Homepage = "https://github.com/flowmatters/veneer-py"
 
 [project.optional-dependencies]
+# Optional features. Each is imported lazily, or only by the module named, so a plain
+# `pip install veneer-py` still imports and starts Veneer without them.
+# geo: the network's and feature lists' as_dataframe() return a GeoDataFrame when
+#      geopandas is installed (they fall back to a pandas DataFrame without it).
+geo = ["geopandas"]
+# plot: network_plot() (matplotlib) and Veneer.retrieve_image() (pillow).
+plot = ["matplotlib", "pillow"]
+# cluster: veneer.cluster (VeneerCluster) imports dask.distributed at module level.
+cluster = ["dask[distributed]"]
+# windows: reading Source's file version for overwrite_plugins=True (pywin32's win32api).
+windows = ["pywin32; sys_platform == 'win32'"]
+all = ["veneer-py[geo,plot,cluster,windows]"]
+# Slack notifications from veneer.bulk need nb-slack, which isn't on PyPI; install it
+# separately: pip install https://github.com/flowmatters/nb-slack/archive/master.zip
 test = ["nose"]
 
 [tool.setuptools.packages.find]
