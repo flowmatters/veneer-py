@@ -330,12 +330,106 @@ def test_kill_all_now_waits_a_bounded_time(caplog):
 def test_kill_all_now_still_kills_the_rest_when_one_kill_fails():
     class Unkillable(FakeProc):
         def kill(self):
-            raise RuntimeError('access denied')
+            raise psutil.AccessDenied(self.pid)
 
     bad, good = Unkillable(), FakeProc()
-    with pytest.raises(RuntimeError, match='access denied'):
+    with pytest.raises(psutil.AccessDenied):
         manage.kill_all_now([bad, good])
     assert good.killed
+
+
+def test_kill_all_now_still_kills_the_rest_after_a_bad_pid():
+    good = FakeProc()
+    with pytest.raises(ValueError):            # psutil rejects a negative PID
+        manage.kill_all_now([-1, good])
+    assert good.killed
+
+
+def test_kill_all_now_sends_every_kill_before_a_keyboard_interrupt_propagates():
+    class Interrupted(FakeProc):
+        def kill(self):
+            raise KeyboardInterrupt()
+
+    first, second = Interrupted(), FakeProc()
+    with pytest.raises(KeyboardInterrupt):
+        manage.kill_all_now([first, second])
+    assert second.killed
+
+
+def test_kill_all_now_keeps_the_first_error_over_a_later_wait_error():
+    class Unkillable(FakeProc):
+        def kill(self):
+            raise psutil.AccessDenied(self.pid)
+
+    class NoTimeoutWait(FakeProc):
+        def wait(self):                       # an old-style wait() with no timeout
+            return self.returncode
+
+    with pytest.raises(psutil.AccessDenied):
+        manage.kill_all_now([Unkillable(), NoTimeoutWait()])
+
+
+def test_kill_all_now_with_timeout_none_waits_without_a_limit():
+    waited = []
+
+    class Recording(FakeProc):
+        def wait(self, timeout='unset'):
+            waited.append(timeout)
+            return self.returncode
+
+    proc = Recording()
+    manage.kill_all_now([proc], timeout=None)
+    assert proc.killed and waited == [None]
+
+
+def test_kill_all_now_skips_a_pid_that_has_already_gone():
+    proc = _REAL_POPEN([sys.executable, '-c', 'pass'])
+    proc.wait(timeout=30)
+    manage.kill_all_now([proc.pid])           # must not raise
+
+
+def test_keyboard_interrupt_while_killing_keeps_the_original_exception(
+        fake_popen, monkeypatch):
+    """The cleanup must not replace the exception start() is propagating, must still kill
+    the instances it can, and leaves the at-exit kill registered for the one it could not."""
+    started, outputs = fake_popen
+    outputs.extend([dict(), dict()])
+    monkeypatch.setattr(manage, '_probe_ready', lambda *a, **k: False)
+    orig = RuntimeError('orig')
+
+    def interrupted_kill():
+        raise KeyboardInterrupt()
+
+    def failing_sleep(seconds):
+        started[0].kill = interrupted_kill
+        raise orig
+    monkeypatch.setattr(manage, 'sleep', failing_sleep)
+    registered = []
+    monkeypatch.setattr(manage, 'kill_all_on_exit', lambda procs: registered.append(list(procs)))
+
+    # Not pytest.raises: if the KeyboardInterrupt escaped it would end the whole test run
+    # rather than fail this test.
+    raised = None
+    try:
+        _start(n_instances=2)
+    except BaseException as e:
+        raised = e
+
+    assert raised is orig
+    assert started[1].killed
+    assert registered == [started]
+
+
+def test_successful_start_registers_the_at_exit_kill_once(fake_popen, monkeypatch):
+    started, outputs = fake_popen
+    outputs.append(dict(stdout=ANNOUNCE))
+    monkeypatch.setattr(manage, '_probe_ready', lambda *a, **k: True)
+    registered = []
+    monkeypatch.setattr(manage, 'kill_all_on_exit', lambda procs: registered.append(list(procs)))
+
+    _start()
+
+    assert registered == [started]
 
 
 # --- real process trees (a stand-in script, not VeneerCmd) -----------------------------
@@ -373,10 +467,20 @@ def _alive(pid):
 
 @pytest.fixture
 def reap():
-    """Collects psutil.Process objects and kills any still running after the test, so a
-    failing test (e.g. under mutation) leaves nothing behind."""
+    """Collects psutil.Process objects, or pid files a stand-in writes its child's PID to,
+    and kills whatever is still running after the test, so a failing test (e.g. under
+    mutation) leaves nothing behind."""
+    items = []
+    yield items
     procs = []
-    yield procs
+    for item in items:
+        if isinstance(item, psutil.Process):
+            procs.append(item)
+            continue
+        try:
+            procs.append(psutil.Process(int(item.read_text())))
+        except (OSError, ValueError, psutil.Error):
+            pass
     for p in procs:
         try:
             if p.is_running():
@@ -385,12 +489,13 @@ def reap():
             pass
 
 
-def _spawn_tree(tmp_path, name):
-    """Start the stand-in script directly; return (parent psutil.Process, child pid)."""
+def _spawn_tree(tmp_path, name, *extra_args):
+    """Start the stand-in script directly; return (parent psutil.Process, child pid).
+    extra_args are appended to its command line (it ignores them)."""
     script = tmp_path / f'{name}.py'
     script.write_text(FAKE_VENEER_WITH_CHILD)
     pid_file = tmp_path / f'{name}.pid'
-    proc = _REAL_POPEN([sys.executable, str(script), str(pid_file)],
+    proc = _REAL_POPEN([sys.executable, str(script), str(pid_file), *map(str, extra_args)],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     deadline = time.monotonic() + 20
     while not (pid_file.exists() and pid_file.read_text()):
@@ -405,6 +510,7 @@ def test_start_kills_the_whole_process_tree_when_startup_raises(
     script = tmp_path / 'fake_veneer_cmd.py'
     script.write_text(FAKE_VENEER_WITH_CHILD)
     pid_file = tmp_path / 'child.pid'
+    reap.append(pid_file)
     veneer_exe = subprocess.list2cmdline([sys.executable, str(script), str(pid_file)])
 
     started = []
@@ -419,7 +525,6 @@ def test_start_kills_the_whole_process_tree_when_startup_raises(
     monkeypatch.setattr(manage, '_detect_problematic_launcher', lambda: None)
 
     def probe(*a, **k):
-        reap.append(psutil.Process(int(pid_file.read_text())))
         raise RuntimeError('probe exploded')
     monkeypatch.setattr(manage, '_probe_ready', probe)
 
@@ -429,7 +534,7 @@ def test_start_kills_the_whole_process_tree_when_startup_raises(
 
     child_pid = int(pid_file.read_text())
     assert started[0].poll() is not None, 'the stand-in VeneerCmd is still running'
-    assert _wait_gone([child_pid]) == [], 'the stand-in VeneerCmd\'s own child is still running'
+    assert _wait_gone([child_pid]) == [], "the stand-in VeneerCmd's own child is still running"
 
 
 @windows_only
@@ -446,11 +551,11 @@ def test_kill_all_now_kills_the_whole_process_tree(tmp_path, reap):
 
 def _detached_setup(monkeypatch, on_wait):
     """Run _start_detached without opening a terminal: the 'start ... cmd /k' Popen is
-    recorded, and wait_for_status is replaced by on_wait(handshake_path)."""
+    recorded, and wait_for_status is replaced by on_wait(handshake_path, config_path)."""
     spawned = []
     monkeypatch.setattr(subprocess, 'Popen', lambda cmd, **k: spawned.append(cmd))
     monkeypatch.setattr(detached_handshake, 'wait_for_status',
-                        lambda path, accept, timeout: on_wait(path))
+                        lambda path, accept, timeout: on_wait(path, path.parent / 'config.json'))
     return spawned
 
 
@@ -461,14 +566,21 @@ def _starting(path, launcher_pid):
     })
 
 
+def _spawn_launcher(tmp_path, reap, config_path, name='launcher'):
+    """A stand-in launcher: started after the launch began, naming its config file."""
+    launcher, child = _spawn_tree(tmp_path, name, config_path)
+    reap.extend([launcher, psutil.Process(child)])
+    return launcher, child
+
+
 @windows_only
 @pytest.mark.parametrize('error', [TimeoutError('handshake timed out'), KeyboardInterrupt()])
 def test_detached_wait_failing_kills_the_launcher_tree(tmp_path, monkeypatch, reap, error):
-    launcher, launcher_child = _spawn_tree(tmp_path, 'launcher')
-    reap.extend([launcher, psutil.Process(launcher_child)])
+    found = {}
 
-    def on_wait(path):
-        _starting(path, launcher.pid)
+    def on_wait(path, config_path):
+        found['tree'] = _spawn_launcher(tmp_path, reap, config_path)
+        _starting(path, found['tree'][0].pid)
         raise error
     spawned = _detached_setup(monkeypatch, on_wait)
 
@@ -476,18 +588,65 @@ def test_detached_wait_failing_kills_the_launcher_tree(tmp_path, monkeypatch, re
         _start(detached=True, detached_timeout=1.0)
 
     assert len(spawned) == 1
-    assert _wait_gone([launcher.pid, launcher_child]) == []
+    assert _wait_gone([found['tree'][0].pid, found['tree'][1]]) == []
+
+
+@windows_only
+def test_detached_launcher_that_has_not_written_its_pid_is_still_killed(
+        tmp_path, monkeypatch, reap):
+    found = {}
+
+    def on_wait(path, config_path):
+        found['tree'] = _spawn_launcher(tmp_path, reap, config_path)
+        _starting(path, None)                  # Ctrl-C before the launcher reported in
+        raise KeyboardInterrupt()
+    _detached_setup(monkeypatch, on_wait)
+
+    with pytest.raises(KeyboardInterrupt):
+        _start(detached=True)
+
+    assert _wait_gone([found['tree'][0].pid, found['tree'][1]]) == []
+
+
+@windows_only
+def test_detached_cleanup_never_kills_a_reused_pid(tmp_path, monkeypatch, reap):
+    """A launcher PID (or an instance PID) in the handshake can, by the time the parent
+    gives up, belong to an unrelated process. Only processes created since the launch
+    began, and for the launcher only one naming this launch's config file, are killed."""
+    older, older_child = _spawn_tree(tmp_path, 'older')       # predates the launch
+    reap.extend([older, psutil.Process(older_child)])
+    found = {}
+
+    def on_wait(path, config_path):
+        # Started after the launch began, but not this launch's launcher.
+        found['newer'] = _spawn_tree(tmp_path, 'newer')
+        reap.extend([found['newer'][0], psutil.Process(found['newer'][1])])
+        detached_handshake.write_handshake(path, {
+            'status': detached_handshake.HandshakeStatus.STARTING,
+            'launcher_pid': found['newer'][0].pid, 'veneer_pids': [older.pid],
+            'actual_ports': [], 'error': None,
+        })
+        raise TimeoutError('handshake timed out')
+    _detached_setup(monkeypatch, on_wait)
+
+    with pytest.raises(TimeoutError):
+        _start(detached=True, detached_timeout=1.0)
+
+    newer, newer_child = found['newer']
+    for pid in (older.pid, older_child, newer.pid, newer_child):
+        assert _alive(pid), f'{pid} was killed'
 
 
 @windows_only
 def test_detached_failure_after_ready_kills_the_instances_and_launcher(
         tmp_path, monkeypatch, reap):
-    launcher, launcher_child = _spawn_tree(tmp_path, 'launcher')
-    instance, instance_child = _spawn_tree(tmp_path, 'instance')
-    reap.extend([launcher, psutil.Process(launcher_child),
-                 instance, psutil.Process(instance_child)])
+    found = {}
 
-    def on_wait(path):
+    def on_wait(path, config_path):
+        launcher, launcher_child = _spawn_launcher(tmp_path, reap, config_path)
+        instance, instance_child = _spawn_tree(tmp_path, 'instance')
+        reap.extend([instance, psutil.Process(instance_child)])
+        found['pids'] = [launcher.pid, launcher_child, instance.pid, instance_child]
         payload = {
             'status': detached_handshake.HandshakeStatus.READY,
             'launcher_pid': launcher.pid, 'veneer_pids': [instance.pid],
@@ -506,7 +665,7 @@ def test_detached_failure_after_ready_kills_the_instances_and_launcher(
         _start(detached=True)
 
     assert excinfo.value is boom
-    assert _wait_gone([launcher.pid, launcher_child, instance.pid, instance_child]) == []
+    assert _wait_gone(found['pids']) == []
 
 
 @windows_only
@@ -514,13 +673,13 @@ def test_detached_launcher_reporting_failure_is_left_to_exit_by_itself(
         tmp_path, monkeypatch, reap):
     """A FAILED handshake means the launcher's own start() raised (and cleaned up its own
     instances); the launcher then prints the traceback into its window and exits."""
-    launcher, launcher_child = _spawn_tree(tmp_path, 'launcher')
-    reap.extend([launcher, psutil.Process(launcher_child)])
+    found = {}
 
-    def on_wait(path):
+    def on_wait(path, config_path):
+        found['tree'] = _spawn_launcher(tmp_path, reap, config_path)
         payload = {
             'status': detached_handshake.HandshakeStatus.FAILED,
-            'launcher_pid': launcher.pid, 'veneer_pids': [], 'actual_ports': [],
+            'launcher_pid': found['tree'][0].pid, 'veneer_pids': [], 'actual_ports': [],
             'error': 'Exception: One or more instances of Veneer failed to start.',
         }
         detached_handshake.write_handshake(path, payload)
@@ -530,4 +689,4 @@ def test_detached_launcher_reporting_failure_is_left_to_exit_by_itself(
     with pytest.raises(RuntimeError, match='Detached Veneer launcher failed'):
         _start(detached=True)
 
-    assert launcher.is_running()
+    assert found['tree'][0].is_running()

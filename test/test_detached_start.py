@@ -93,3 +93,24 @@ def test_run_kills_the_instances_when_reporting_them_fails(tmp_path: Path, monke
 
     assert excinfo.value is boom
     assert [getattr(p, "killed", False) for p in procs] == [True, True]
+
+
+def test_run_writes_failed_when_start_is_interrupted(tmp_path: Path):
+    """A Ctrl-C in the launcher's window during startup must still report FAILED, or the
+    parent waits out its whole detached_timeout."""
+    import pytest
+
+    handshake = tmp_path / "handshake.json"
+    config = LauncherConfig(handshake_path=str(handshake), start_kwargs={"n_instances": 1})
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps(config.to_dict()))
+
+    def interrupted_start(**_):
+        raise KeyboardInterrupt()
+
+    with pytest.raises(KeyboardInterrupt):
+        run(config_path, _start_fn=interrupted_start, _block_fn=lambda: None)
+
+    payload = read_handshake(handshake)
+    assert payload["status"] == HandshakeStatus.FAILED
+    assert "KeyboardInterrupt" in payload["error"]

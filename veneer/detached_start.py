@@ -75,9 +75,11 @@ def run(config_path, _start_fn=None, _block_fn=None):
         },
     )
 
+    # BaseException, not Exception: a Ctrl-C in the launcher's window must still tell the
+    # parent, which would otherwise wait out its whole detached_timeout.
     try:
         processes, actual_ports = _start_fn(**config.start_kwargs)
-    except Exception as exc:
+    except BaseException as exc:
         write_handshake(
             config.handshake_path,
             {

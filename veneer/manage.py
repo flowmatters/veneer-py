@@ -153,8 +153,10 @@ def _decode_line(line):
     return line.decode('utf-8', errors='replace')
 
 def _kill_tree_nowait(p):
-    """Kill p and, on Windows, every process it started (VeneerCmd can start its own
-    children), children first. Returns the descendants killed, so the caller can wait for
+    """Kill p and, on Windows, every process below it, children first: with
+    start_new_session=True on Windows, start()'s Popen is a cmd.exe wrapper around
+    VeneerCmd, and a detached launcher (python -m veneer.detached_start) is the parent of
+    the instances it started. Returns the descendants found, so the caller can wait for
     them. Never raises for a process that has already exited.
 
     Descendants are looked up only for real processes (Popen or psutil.Process) that are
@@ -166,12 +168,15 @@ def _kill_tree_nowait(p):
             if running:
                 descendants = Process(p.pid).children(recursive=True)
         except psutil.Error:
+            logger.debug('Could not list the processes below %s', p.pid, exc_info=True)
             descendants = []
     for d in descendants:
         try:
             d.kill()
-        except psutil.Error:
+        except psutil.NoSuchProcess:
             pass
+        except psutil.Error:
+            logger.debug('Could not kill %s (below %s)', d.pid, p.pid, exc_info=True)
     try:
         p.kill()
     except (psutil.NoSuchProcess, ProcessLookupError):
@@ -185,57 +190,69 @@ def _kill_tree_nowait(p):
 
 def kill_all_now(processes, timeout=_KILL_WAIT_SECS):
     """Kill each process (a Popen, psutil.Process or PID) and, on Windows, its process
-    tree, then wait up to `timeout` seconds in total for them to exit. A process that is
-    still running after that is logged, not waited on forever."""
+    tree, then wait up to `timeout` seconds in total for them to exit.
+
+    With the default timeout this returns, logging a warning, if a process has still not
+    exited by then: it no longer guarantees that every process has exited. timeout=None
+    waits as long as it takes, as kill_all_now did before it had a timeout.
+
+    Every kill is sent before anything is waited on, and an error (even a
+    KeyboardInterrupt) killing one process does not spare the rest: the first error is
+    raised once every kill has been sent and waited on. A KeyboardInterrupt while waiting
+    stops the wait and propagates at once; every kill has been sent by then."""
     if isinstance(processes, (int, _RealPopen, Process)):
         processes = [processes]
-    procs = []
-    for p in processes:
-        if isinstance(p, int):
-            try:
-                p = Process(p)
-            except psutil.NoSuchProcess:
-                continue
-        procs.append(p)
 
-    # One process refusing to die must not spare the rest: try them all, then raise the
-    # first error.
     killed = []
     first_error = None
-    for p in procs:
+    for p in processes:
         try:
+            if isinstance(p, int):
+                try:
+                    p = Process(p)
+                except psutil.NoSuchProcess:
+                    continue
             killed.append((p, _kill_tree_nowait(p)))
-        except Exception as e:
-            first_error = first_error or e
+        except BaseException as e:
+            if first_error is None:
+                first_error = e
 
-    # timeout=None waits as long as it takes (the behaviour before the timeout existed).
     deadline = None if timeout is None else _now() + timeout
     def remaining():
         return None if deadline is None else max(0.0, deadline - _now())
 
     for p, descendants in killed:
         try:
-            p.wait(timeout=remaining())
-        except (TimeoutExpired, psutil.TimeoutExpired):
-            logger.warning('Process %s did not exit within %.0f s of being killed',
-                           getattr(p, 'pid', p), timeout)
-        except (psutil.NoSuchProcess, ChildProcessError):
-            pass
-        if descendants:
-            _, alive = psutil.wait_procs(descendants, timeout=remaining())
-            for d in alive:
-                logger.warning('Process %s (started by %s) did not exit within %.0f s of being killed',
-                               d.pid, getattr(p, 'pid', p), timeout)
+            try:
+                p.wait(timeout=remaining())
+            except (TimeoutExpired, psutil.TimeoutExpired):
+                logger.warning('Process %s did not exit within %g s of being killed',
+                               getattr(p, 'pid', p), timeout)
+            except (psutil.NoSuchProcess, ChildProcessError):
+                pass
+            if descendants:
+                _, alive = psutil.wait_procs(descendants, timeout=remaining())
+                for d in alive:
+                    logger.warning('Process %s (below %s) did not exit within %g s of being killed',
+                                   d.pid, getattr(p, 'pid', p), timeout)
+        except Exception as e:
+            if first_error is None:
+                first_error = e
     if first_error is not None:
         raise first_error
 
 def _kill_started(processes):
-    """Kill every process start() has started so far, without ever raising: it runs while
-    another exception is propagating, and that exception is the one the caller must see."""
+    """Kill every process start() has started so far. Called while another exception is
+    propagating, which is the one the caller must see, so this does not raise: anything
+    kill_all_now raises, KeyboardInterrupt included, is logged instead. Returns True if
+    every kill went through, False if not (the caller then leaves an at-exit kill
+    registered as a fallback)."""
     try:
         kill_all_now(processes)
-    except Exception:
+        return True
+    except BaseException:
         logger.warning('Could not kill every Veneer instance started', exc_info=True)
+        return False
 
 def kill_every_running_instance_of_veneer_cmd_line():
     import psutil
@@ -1434,7 +1451,16 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
                 captured_stdout, captured_stderr,
             ))
     except BaseException:
-        _kill_started(processes)
+        # The original exception always propagates, even past a second Ctrl-C during the
+        # cleanup: every kill is sent before kill_all_now waits, so a second Ctrl-C only
+        # cuts that wait short. If any kill failed, the at-exit kill stays registered as a
+        # fallback.
+        if not _kill_started(processes):
+            try:
+                kill_all_on_exit(processes)
+            except Exception:
+                logger.warning('Could not register an at-exit kill for the Veneer instances',
+                               exc_info=True)
         raise
 
     kill_all_on_exit(processes)
@@ -1448,23 +1474,52 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
         return processes, actual_ports, log_paths
     return processes, actual_ports
 
-def _kill_detached_launch(handshake_path):
-    """Kill whatever a detached launch had started, as far as its last handshake tells:
-    every Veneer instance it reported, and the launcher with its process tree. Never
-    raises: an exception is already propagating."""
+def _detached_launch_processes(handshake_path, config_path, started_after):
+    """The still-running processes a detached launch started, identified so that a PID
+    since reused by an unrelated process is never among them:
+
+    - the launcher: any process created since the launch began whose command line names
+      this launch's own config file, apart from the cmd.exe window hosting it. Found by
+      searching rather than from the handshake's launcher_pid, so a launcher that has not
+      yet written its PID is found too, and a stale launcher_pid is never trusted alone.
+    - each Veneer instance the handshake reports, if created since the launch began.
+    """
     from .detached_handshake import read_handshake
+    config = str(config_path)
+    found = {}
+    for proc in psutil.process_iter(['cmdline', 'create_time', 'name']):
+        info = proc.info
+        if (info.get('create_time') or 0) < started_after:
+            continue
+        if (info.get('name') or '').lower() == 'cmd.exe':
+            continue
+        if any(config in part for part in (info.get('cmdline') or [])):
+            found[proc.pid] = proc
+
+    payload = read_handshake(handshake_path) or {}
+    for pid in payload.get("veneer_pids") or []:
+        if not isinstance(pid, int) or pid in found:
+            continue
+        try:
+            proc = Process(pid)
+            if proc.create_time() >= started_after:
+                found[pid] = proc
+        except psutil.Error:
+            pass
+    return list(found.values())
+
+
+def _kill_detached_launch(handshake_path, config_path, started_after):
+    """Kill whatever a detached launch started (see _detached_launch_processes), each with
+    its process tree. Never raises: an exception is already propagating."""
     try:
-        payload = read_handshake(handshake_path) or {}
+        processes = _detached_launch_processes(handshake_path, config_path, started_after)
     except Exception:
-        logger.warning('Could not read the detached launcher handshake at %s', handshake_path,
-                       exc_info=True)
+        logger.warning('Could not find the processes the detached launch at %s started',
+                       config_path, exc_info=True)
         return
-    pids = list(payload.get("veneer_pids") or [])
-    if payload.get("launcher_pid"):
-        pids.append(payload["launcher_pid"])
-    pids = [pid for pid in pids if isinstance(pid, int)]
-    if pids:
-        _kill_started(pids)
+    if processes:
+        _kill_started(processes)
 
 
 def _start_detached(start_kwargs, detached_timeout, leave_open):
@@ -1521,7 +1576,10 @@ def _start_detached(start_kwargs, detached_timeout, leave_open):
     # From here on, anything that escapes -- the handshake timing out, a KeyboardInterrupt
     # while waiting, or an error once it is ready -- first kills the launcher's process tree
     # (the launcher and every Veneer instance it started) and any instance it reported, then
-    # propagates unchanged.
+    # propagates unchanged. Only processes created after launch_began are candidates, so a
+    # reused PID is never killed. A launcher that has not started at all yet (still inside
+    # cmd.exe's "start") cannot be found, and is not killed.
+    launch_began = _now()
     subprocess.Popen(cmd, shell=True)
     launcher_reported_failure = False
     try:
@@ -1562,7 +1620,7 @@ def _start_detached(start_kwargs, detached_timeout, leave_open):
             kill_all_on_exit([launcher_proc])
     except BaseException:
         if not launcher_reported_failure:
-            _kill_detached_launch(handshake_path)
+            _kill_detached_launch(handshake_path, config_path, launch_began)
         raise
 
     # Note: capture_output_dir is not supported for the detached path (Veneer
