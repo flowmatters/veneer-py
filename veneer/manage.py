@@ -45,6 +45,17 @@ _KESTREL_BOUND_RE = re.compile(r'Now listening on:\s*http://[^:/\s]+:(\d+)')
 _VENEER_BOUND_RE = re.compile(r'Started Source RESTful Service on (?:http )?port[ :]\s*(\d+)')
 
 
+def _is_startup_failure(line):
+    """True for a VeneerCmd output line after which the instance will never serve.
+
+    Veneer logs 'COULD NOT START VENEER' (or '... ON PORT N') when its web host fails to
+    open, but VeneerCmd keeps running, so the line itself is the only signal. Veneer's log
+    lines carry a '[time]' prefix, so that one is matched anywhere in the line.
+    """
+    return (line.startswith('Cannot find project') or line.startswith('Unhandled exception')
+            or 'COULD NOT START VENEER' in line)
+
+
 class VeneerStartupTimeout(RuntimeError):
     """An instance announced a port but never answered GET /ready within the timeout."""
 
@@ -1201,7 +1212,7 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
                         captured_stderr[i].append(line)
                         if not quiet:
                             print('ERROR[%d] %s'%(i,line))
-                        if line.startswith('Cannot find project') or line.startswith('Unhandled exception'):
+                        if _is_startup_failure(line):
                             failed[i] = True
 
             if ready[i]:
@@ -1229,7 +1240,7 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
                     if 'Server started. Ctrl-C to exit' in line:
                         if server_started_at[i] is None:
                             server_started_at[i] = _now()
-                    elif line.startswith('Cannot find project') or line.startswith('Unhandled exception'):
+                    elif _is_startup_failure(line):
                         end = True
                         failed[i] = True
                         if not quiet:
