@@ -67,3 +67,29 @@ def test_run_writes_failed_when_start_raises(tmp_path: Path):
     payload = read_handshake(handshake)
     assert payload["status"] == HandshakeStatus.FAILED
     assert "boom" in payload["error"]
+
+
+def test_run_kills_the_instances_when_reporting_them_fails(tmp_path: Path, monkeypatch):
+    import pytest
+    import veneer.detached_start as detached_start
+
+    handshake = tmp_path / "handshake.json"
+    config = LauncherConfig(handshake_path=str(handshake), start_kwargs={"n_instances": 2})
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps(config.to_dict()))
+    procs = [_FakeProc(111), _FakeProc(222)]
+    real_write = detached_start.write_handshake
+    boom = OSError("disk full")
+
+    def failing_ready_write(path, payload):
+        if payload["status"] == HandshakeStatus.READY:
+            raise boom
+        real_write(path, payload)
+    monkeypatch.setattr(detached_start, "write_handshake", failing_ready_write)
+
+    with pytest.raises(OSError) as excinfo:
+        run(config_path, _start_fn=lambda **_: (procs, [9990, 9991]),
+            _block_fn=lambda: None)
+
+    assert excinfo.value is boom
+    assert [getattr(p, "killed", False) for p in procs] == [True, True]

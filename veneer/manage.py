@@ -1,4 +1,5 @@
-from subprocess import Popen, PIPE
+from subprocess import Popen, PIPE, TimeoutExpired
+import psutil
 from psutil import Process
 from queue import Queue, Empty  # python 3.x
 from threading  import Thread
@@ -27,6 +28,13 @@ ON_POSIX = 'posix' in sys.builtin_module_names
 # (unbuffered) is honoured for binary pipes without a warning, and is fine here since
 # every reader already consumes these pipes with its own readline()/read() loop.
 _POPEN_BUFSIZE = 0
+
+# The real Popen class, for isinstance checks: tests replace the module-level Popen with a
+# factory function.
+_RealPopen = Popen
+
+# How long kill_all_now() waits for killed processes to exit before giving up on them.
+_KILL_WAIT_SECS = 10.0
 
 VENEER_EXE_FN='FlowMatters.Source.VeneerCmd.exe'
 MANY_VENEERS='D:\\src\\projects\\Veneer\\Compiled'
@@ -139,14 +147,95 @@ def kill_all_on_exit(processes):
             p.kill()
     atexit.register(end_processes)
 
-def kill_all_now(processes):
-    if isinstance(processes, (int, Popen, Process)):
-        processes = [processes]
-    processes = [p if isinstance(p, (Popen, Process)) else Process(p) for p in processes]
-    for p in processes:
+def _decode_line(line):
+    """Decode one line of VeneerCmd output. Lenient: a console line in another code page,
+    or a non-ASCII path echoed back, must not fail startup."""
+    return line.decode('utf-8', errors='replace')
+
+def _kill_tree_nowait(p):
+    """Kill p and, on Windows, every process it started (VeneerCmd can start its own
+    children), children first. Returns the descendants killed, so the caller can wait for
+    them. Never raises for a process that has already exited.
+
+    Descendants are looked up only for real processes (Popen or psutil.Process) that are
+    still running: anything else just gets p.kill()."""
+    descendants = []
+    if sys.platform == 'win32' and isinstance(p, (_RealPopen, Process)):
+        try:
+            running = p.poll() is None if isinstance(p, _RealPopen) else p.is_running()
+            if running:
+                descendants = Process(p.pid).children(recursive=True)
+        except psutil.Error:
+            descendants = []
+    for d in descendants:
+        try:
+            d.kill()
+        except psutil.Error:
+            pass
+    try:
         p.kill()
+    except (psutil.NoSuchProcess, ProcessLookupError):
+        pass
+    except OSError:
+        # Windows refuses to terminate a process that has just exited; only re-raise if
+        # it is in fact still running.
+        if isinstance(p, _RealPopen) and p.poll() is None:
+            raise
+    return descendants
+
+def kill_all_now(processes, timeout=_KILL_WAIT_SECS):
+    """Kill each process (a Popen, psutil.Process or PID) and, on Windows, its process
+    tree, then wait up to `timeout` seconds in total for them to exit. A process that is
+    still running after that is logged, not waited on forever."""
+    if isinstance(processes, (int, _RealPopen, Process)):
+        processes = [processes]
+    procs = []
     for p in processes:
-        p.wait()
+        if isinstance(p, int):
+            try:
+                p = Process(p)
+            except psutil.NoSuchProcess:
+                continue
+        procs.append(p)
+
+    # One process refusing to die must not spare the rest: try them all, then raise the
+    # first error.
+    killed = []
+    first_error = None
+    for p in procs:
+        try:
+            killed.append((p, _kill_tree_nowait(p)))
+        except Exception as e:
+            first_error = first_error or e
+
+    # timeout=None waits as long as it takes (the behaviour before the timeout existed).
+    deadline = None if timeout is None else _now() + timeout
+    def remaining():
+        return None if deadline is None else max(0.0, deadline - _now())
+
+    for p, descendants in killed:
+        try:
+            p.wait(timeout=remaining())
+        except (TimeoutExpired, psutil.TimeoutExpired):
+            logger.warning('Process %s did not exit within %.0f s of being killed',
+                           getattr(p, 'pid', p), timeout)
+        except (psutil.NoSuchProcess, ChildProcessError):
+            pass
+        if descendants:
+            _, alive = psutil.wait_procs(descendants, timeout=remaining())
+            for d in alive:
+                logger.warning('Process %s (started by %s) did not exit within %.0f s of being killed',
+                               d.pid, getattr(p, 'pid', p), timeout)
+    if first_error is not None:
+        raise first_error
+
+def _kill_started(processes):
+    """Kill every process start() has started so far, without ever raising: it runs while
+    another exception is propagating, and that exception is the one the caller must see."""
+    try:
+        kill_all_now(processes)
+    except Exception:
+        logger.warning('Could not kill every Veneer instance started', exc_info=True)
 
 def kill_every_running_instance_of_veneer_cmd_line():
     import psutil
@@ -490,6 +579,15 @@ def _format_startup_failure(n_instances, failed, ports, cmd_lines, processes,
     the actual underlying error (e.g. missing rsproj, port already in use,
     missing plugin) rather than a generic 'failed to start'."""
     msg_lines = ['One or more instances of Veneer failed to start.']
+    # An instance that exited without printing anything leaves its exit code as the only
+    # clue, so lift that into the headline rather than leave it buried below.
+    silent_exits = ['instance %d exited with code %s' % (i, processes[i].poll())
+                    for i in range(n_instances)
+                    if failed[i] and processes[i].poll() is not None
+                    and not captured_stdout[i] and not captured_stderr[i]]
+    if silent_exits:
+        msg_lines[0] = ('One or more instances of Veneer failed to start: %s, '
+                        'with no output.' % '; '.join(silent_exits))
     for i in range(n_instances):
         if not failed[i]:
             continue
@@ -951,6 +1049,9 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
     - startup_timeout - Maximum seconds to wait for all instances to become ready before raising
                        VeneerStartupTimeout and killing every instance (default 600.0). None
                        disables the timeout (the legacy behaviour: wait forever).
+                       Whatever start() raises -- this timeout, a startup failure, any other
+                       error or a KeyboardInterrupt -- it first kills every instance it has
+                       started (on Windows, with its process tree).
 
     - exit_on_stdin_eof - If True (default), hold a pipe to each child's stdin and set
                          VENEER_EXIT_ON_STDIN_EOF=1 in its environment, so instances stop when this
@@ -1159,173 +1260,182 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
     _log_gc_decision(gc, n_instances, gc_vars)
     env_overrides.update(gc_vars)
     popen_env = {**os.environ, **env_overrides} if env_overrides else None
-    processes = [Popen(cmd,stdin=popen_stdin,stdout=PIPE,stderr=PIPE,bufsize=_POPEN_BUFSIZE, close_fds=ON_POSIX,
-                       env=popen_env, **kwargs) for cmd in cmd_lines]
-    _emit_progress('veneer-start', 0, n_instances, f'Starting {n_instances} Veneer instances')
-    std_out_queues,std_out_threads = configure_non_blocking_io(processes,'stdout', tee_paths=log_paths)
-    std_err_queues,std_err_threads = configure_non_blocking_io(processes,'stderr', tee_paths=log_paths)
+    # Everything from the first Popen on runs inside this try: whatever escapes -- a failed
+    # Popen for a later instance, an error from the readiness probe or from parsing output,
+    # the startup timeout, a reported startup failure, or a KeyboardInterrupt -- first kills
+    # every instance started so far (and, on Windows, its process tree), then propagates
+    # unchanged. Nothing is killed on success.
+    processes = []
+    try:
+        for cmd in cmd_lines:
+            processes.append(Popen(cmd,stdin=popen_stdin,stdout=PIPE,stderr=PIPE,bufsize=_POPEN_BUFSIZE,
+                                   close_fds=ON_POSIX, env=popen_env, **kwargs))
+        _emit_progress('veneer-start', 0, n_instances, f'Starting {n_instances} Veneer instances')
+        std_out_queues,std_out_threads = configure_non_blocking_io(processes,'stdout', tee_paths=log_paths)
+        std_err_queues,std_err_threads = configure_non_blocking_io(processes,'stderr', tee_paths=log_paths)
 
-    ready = [False for p in range(n_instances)]
-    failed = [False for p in range(n_instances)]
-    # Buffer all stdout/stderr per instance during startup so that, if any instance fails, we
-    # can include the actual error output in the exception we raise. Without this, callers
-    # (including non-interactive ones whose stdout is captured/redirected) only see the
-    # generic "failed to start" message and lose the specific reason — e.g. that the rsproj
-    # file does not exist.
-    captured_stdout = [[] for _ in range(n_instances)]
-    captured_stderr = [[] for _ in range(n_instances)]
-    # True once Kestrel has reported the actual bound port for instance i. Prefer this over any
-    # earlier hint from Veneer's own "Started Source RESTful Service" line (which can reflect the
-    # requested port before a port-in-use increment on Source 6+).
-    port_authoritative = [False for p in range(n_instances)]
-    # Timestamp of "Server started. Ctrl-C to exit" for instance i. Used to fall back to the
-    # Veneer-announced port if Kestrel's authoritative message never arrives (legacy Source).
-    server_started_at = [None for p in range(n_instances)]
-    # Timestamp of the most recent Veneer port announcement. Some Source builds emit no Kestrel
-    # "Now listening on:" line on stdout and no "Server started. Ctrl-C to exit" line either,
-    # leaving the Veneer announcement as the only stdout signal. After a grace period with no
-    # further announcements (re-announcements supersede earlier ones), accept the latest
-    # Veneer-announced port as ready.
-    veneer_announced_at = [None for p in range(n_instances)]
-    LEGACY_GRACE_SECS = 5.0
+        ready = [False for p in range(n_instances)]
+        failed = [False for p in range(n_instances)]
+        # Buffer all stdout/stderr per instance during startup so that, if any instance fails, we
+        # can include the actual error output in the exception we raise. Without this, callers
+        # (including non-interactive ones whose stdout is captured/redirected) only see the
+        # generic "failed to start" message and lose the specific reason — e.g. that the rsproj
+        # file does not exist.
+        captured_stdout = [[] for _ in range(n_instances)]
+        captured_stderr = [[] for _ in range(n_instances)]
+        # True once Kestrel has reported the actual bound port for instance i. Prefer this over any
+        # earlier hint from Veneer's own "Started Source RESTful Service" line (which can reflect the
+        # requested port before a port-in-use increment on Source 6+).
+        port_authoritative = [False for p in range(n_instances)]
+        # Timestamp of "Server started. Ctrl-C to exit" for instance i. Used to fall back to the
+        # Veneer-announced port if Kestrel's authoritative message never arrives (legacy Source).
+        server_started_at = [None for p in range(n_instances)]
+        # Timestamp of the most recent Veneer port announcement. Some Source builds emit no Kestrel
+        # "Now listening on:" line on stdout and no "Server started. Ctrl-C to exit" line either,
+        # leaving the Veneer announcement as the only stdout signal. After a grace period with no
+        # further announcements (re-announcements supersede earlier ones), accept the latest
+        # Veneer-announced port as ready.
+        veneer_announced_at = [None for p in range(n_instances)]
+        LEGACY_GRACE_SECS = 5.0
 
-    all_ready = False
-    any_failed = False
-    actual_ports = ports[:]
-    started_at = _now()
-    last_probe_at = [0.0] * n_instances
-    while not (all_ready or any_failed):
-        for i in range(n_instances):
-            process_exited = processes[i].poll() is not None
-            if process_exited:
-                failed[i]=True
+        all_ready = False
+        any_failed = False
+        actual_ports = ports[:]
+        started_at = _now()
+        last_probe_at = [0.0] * n_instances
+        while not (all_ready or any_failed):
+            for i in range(n_instances):
+                process_exited = processes[i].poll() is not None
+                if process_exited:
+                    failed[i]=True
 
-            end=False
-            while not end:
-                try:
-                    line = std_err_queues[i].get_nowait().decode('utf-8')
-                except Empty:
-                    end = True
-                    pass
-                else:
+                end=False
+                while not end:
+                    try:
+                        line = _decode_line(std_err_queues[i].get_nowait())
+                    except Empty:
+                        end = True
+                        pass
+                    else:
+                        if not ignore_log(line):
+                            captured_stderr[i].append(line)
+                            if not quiet:
+                                print('ERROR[%d] %s'%(i,line))
+                            if _is_startup_failure(line):
+                                failed[i] = True
+
+                if ready[i]:
+                    continue
+
+                end = False
+                while not end:
+                    try:
+                        line = _decode_line(std_out_queues[i].get_nowait())
+                    except Empty:
+                        end = True
+                        sleep(0.05)
+                    else:
+                        captured_stdout[i].append(line)
+                        kestrel_match = _KESTREL_BOUND_RE.search(line)
+                        if kestrel_match:
+                            actual_ports[i] = int(kestrel_match.group(1))
+                            port_authoritative[i] = True
+                        else:
+                            veneer_match = _VENEER_BOUND_RE.search(line)
+                            if veneer_match and not port_authoritative[i]:
+                                actual_ports[i] = int(veneer_match.group(1))
+                                veneer_announced_at[i] = _now()
+
+                        if 'Server started. Ctrl-C to exit' in line:
+                            if server_started_at[i] is None:
+                                server_started_at[i] = _now()
+                        elif _is_startup_failure(line):
+                            end = True
+                            failed[i] = True
+                            if not quiet:
+                                print('Server %d on port %d failed to start: %s'%(i,ports[i],line.rstrip('\r\n')))
+                            sys.stdout.flush()
+                        if debug and not line.startswith('Unable to delete'):
+                            if not quiet:
+                                print("[%d] %s"%(i,line))
+                            sys.stdout.flush()
+
+                # Decide readiness per instance after each drain pass.
+                # - Kestrel message seen: authoritative port, ready immediately.
+                # - Legacy Source (no Kestrel output): after "Server started" plus a short grace,
+                #   accept the Veneer-announced port. Without any port signal, fall back to the
+                #   requested port — the legacy behaviour prior to this change.
+                # - Source builds that emit neither "Now listening on:" nor "Server started":
+                #   after a grace with no further Veneer port announcements, treat the latest
+                #   announced port as ready.
+                if not ready[i] and not failed[i]:
+                    if readiness == 'http':
+                        # Probe once the server has announced its port, or after it has been alive
+                        # for ten seconds (covers -v Warning, which suppresses the announcement).
+                        # The PID check inside _probe_ready stops a foreign instance on that port
+                        # counting.
+                        announced = port_authoritative[i] or veneer_announced_at[i] is not None
+                        alive_long_enough = (_now() - started_at) > 10.0
+                        due = (_now() - last_probe_at[i]) >= 0.5     # one probe per half second per instance
+                        decided = False
+                        if (announced or alive_long_enough) and due:
+                            last_probe_at[i] = _now()
+                            # With start_new_session=True on Windows the child is launched through
+                            # cmd.exe (shell=True), so processes[i].pid is not VeneerCmd's; skip the
+                            # guard.
+                            expected = None if kwargs.get('shell') else processes[i].pid
+                            decided = _probe_ready(actual_ports[i], expected_pid=expected)
+                    else:
+                        legacy_timeout = (server_started_at[i] is not None
+                                          and (_now() - server_started_at[i]) >= LEGACY_GRACE_SECS)
+                        veneer_settled = (veneer_announced_at[i] is not None
+                                          and (_now() - veneer_announced_at[i]) >= LEGACY_GRACE_SECS)
+                        decided = port_authoritative[i] or legacy_timeout or veneer_settled
+                    if decided:
+                        ready[i] = True
+                        ready_count = sum(ready)
+                        _emit_progress('veneer-start', ready_count, n_instances,
+                                       f'Starting Veneer instances ({ready_count}/{n_instances} ready)')
+                        if not quiet:
+                            print('Server %d on port %d is ready'%(i,actual_ports[i]))
+                        sys.stdout.flush()
+            all_ready = len([r for r in ready if not r])==0
+            any_failed = len([f for f in failed if f])>0
+            if startup_timeout is not None and not all_ready and not any_failed and (_now() - started_at) > startup_timeout:
+                # The except below kills every instance.
+                raise VeneerStartupTimeout(startup_timeout, [l for lines in captured_stdout for l in lines])
+
+        if any_failed:
+            # Give the reader threads a moment to drain any remaining buffered output from
+            # processes that have just exited, then pull whatever is left in the queues. This
+            # ensures the actual error message (e.g. the line naming the missing rsproj) makes
+            # it into the exception even if it arrived after we first noticed the process had
+            # exited.
+            sleep(0.5)
+            for i in range(n_instances):
+                while True:
+                    try:
+                        line = _decode_line(std_err_queues[i].get_nowait())
+                    except Empty:
+                        break
                     if not ignore_log(line):
                         captured_stderr[i].append(line)
-                        if not quiet:
-                            print('ERROR[%d] %s'%(i,line))
-                        if _is_startup_failure(line):
-                            failed[i] = True
-
-            if ready[i]:
-                continue
-
-            end = False
-            while not end:
-                try:
-                    line = std_out_queues[i].get_nowait().decode('utf-8')
-                except Empty:
-                    end = True
-                    sleep(0.05)
-                else:
+                while True:
+                    try:
+                        line = _decode_line(std_out_queues[i].get_nowait())
+                    except Empty:
+                        break
                     captured_stdout[i].append(line)
-                    kestrel_match = _KESTREL_BOUND_RE.search(line)
-                    if kestrel_match:
-                        actual_ports[i] = int(kestrel_match.group(1))
-                        port_authoritative[i] = True
-                    else:
-                        veneer_match = _VENEER_BOUND_RE.search(line)
-                        if veneer_match and not port_authoritative[i]:
-                            actual_ports[i] = int(veneer_match.group(1))
-                            veneer_announced_at[i] = _now()
 
-                    if 'Server started. Ctrl-C to exit' in line:
-                        if server_started_at[i] is None:
-                            server_started_at[i] = _now()
-                    elif _is_startup_failure(line):
-                        end = True
-                        failed[i] = True
-                        if not quiet:
-                            print('Server %d on port %d failed to start: %s'%(i,ports[i],line.rstrip('\r\n')))
-                        sys.stdout.flush()
-                    if debug and not line.startswith('Unable to delete'):
-                        if not quiet:
-                            print("[%d] %s"%(i,line))
-                        sys.stdout.flush()
-
-            # Decide readiness per instance after each drain pass.
-            # - Kestrel message seen: authoritative port, ready immediately.
-            # - Legacy Source (no Kestrel output): after "Server started" plus a short grace,
-            #   accept the Veneer-announced port. Without any port signal, fall back to the
-            #   requested port — the legacy behaviour prior to this change.
-            # - Source builds that emit neither "Now listening on:" nor "Server started":
-            #   after a grace with no further Veneer port announcements, treat the latest
-            #   announced port as ready.
-            if not ready[i] and not failed[i]:
-                if readiness == 'http':
-                    # Probe once the server has announced its port, or after it has been alive
-                    # for ten seconds (covers -v Warning, which suppresses the announcement).
-                    # The PID check inside _probe_ready stops a foreign instance on that port
-                    # counting.
-                    announced = port_authoritative[i] or veneer_announced_at[i] is not None
-                    alive_long_enough = (_now() - started_at) > 10.0
-                    due = (_now() - last_probe_at[i]) >= 0.5     # one probe per half second per instance
-                    decided = False
-                    if (announced or alive_long_enough) and due:
-                        last_probe_at[i] = _now()
-                        # With start_new_session=True on Windows the child is launched through
-                        # cmd.exe (shell=True), so processes[i].pid is not VeneerCmd's; skip the
-                        # guard.
-                        expected = None if kwargs.get('shell') else processes[i].pid
-                        decided = _probe_ready(actual_ports[i], expected_pid=expected)
-                else:
-                    legacy_timeout = (server_started_at[i] is not None
-                                      and (_now() - server_started_at[i]) >= LEGACY_GRACE_SECS)
-                    veneer_settled = (veneer_announced_at[i] is not None
-                                      and (_now() - veneer_announced_at[i]) >= LEGACY_GRACE_SECS)
-                    decided = port_authoritative[i] or legacy_timeout or veneer_settled
-                if decided:
-                    ready[i] = True
-                    ready_count = sum(ready)
-                    _emit_progress('veneer-start', ready_count, n_instances,
-                                   f'Starting Veneer instances ({ready_count}/{n_instances} ready)')
-                    if not quiet:
-                        print('Server %d on port %d is ready'%(i,actual_ports[i]))
-                    sys.stdout.flush()
-        all_ready = len([r for r in ready if not r])==0
-        any_failed = len([f for f in failed if f])>0
-        if startup_timeout is not None and not all_ready and not any_failed and (_now() - started_at) > startup_timeout:
-            kill_all_now(processes)
-            raise VeneerStartupTimeout(startup_timeout, [l for lines in captured_stdout for l in lines])
-
-    if any_failed:
-        # Give the reader threads a moment to drain any remaining buffered output from
-        # processes that have just exited, then pull whatever is left in the queues. This
-        # ensures the actual error message (e.g. the line naming the missing rsproj) makes
-        # it into the exception even if it arrived after we first noticed the process had
-        # exited.
-        sleep(0.5)
-        for i in range(n_instances):
-            while True:
-                try:
-                    line = std_err_queues[i].get_nowait().decode('utf-8')
-                except Empty:
-                    break
-                if not ignore_log(line):
-                    captured_stderr[i].append(line)
-            while True:
-                try:
-                    line = std_out_queues[i].get_nowait().decode('utf-8')
-                except Empty:
-                    break
-                captured_stdout[i].append(line)
-
-        for p in processes:
-            if p.poll() is None:
-                p.kill()
-
-        raise Exception(_format_startup_failure(
-            n_instances, failed, ports, cmd_lines, processes,
-            captured_stdout, captured_stderr,
-        ))
+            # Formatted before the except below kills every instance, so the exit codes it
+            # reports are the ones start() saw, not the kill's own.
+            raise Exception(_format_startup_failure(
+                n_instances, failed, ports, cmd_lines, processes,
+                captured_stdout, captured_stderr,
+            ))
+    except BaseException:
+        _kill_started(processes)
+        raise
 
     kill_all_on_exit(processes)
 
@@ -1337,6 +1447,25 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
     if return_log_paths:
         return processes, actual_ports, log_paths
     return processes, actual_ports
+
+def _kill_detached_launch(handshake_path):
+    """Kill whatever a detached launch had started, as far as its last handshake tells:
+    every Veneer instance it reported, and the launcher with its process tree. Never
+    raises: an exception is already propagating."""
+    from .detached_handshake import read_handshake
+    try:
+        payload = read_handshake(handshake_path) or {}
+    except Exception:
+        logger.warning('Could not read the detached launcher handshake at %s', handshake_path,
+                       exc_info=True)
+        return
+    pids = list(payload.get("veneer_pids") or [])
+    if payload.get("launcher_pid"):
+        pids.append(payload["launcher_pid"])
+    pids = [pid for pid in pids if isinstance(pid, int)]
+    if pids:
+        _kill_started(pids)
+
 
 def _start_detached(start_kwargs, detached_timeout, leave_open):
     """Spawn ``veneer.detached_start`` in a new terminal window, wait for it
@@ -1389,39 +1518,52 @@ def _start_detached(start_kwargs, detached_timeout, leave_open):
         [sys.executable, "-m", "veneer.detached_start", str(config_path)]
     )
     cmd = f'start "{title}" cmd /k {inner}'
+    # From here on, anything that escapes -- the handshake timing out, a KeyboardInterrupt
+    # while waiting, or an error once it is ready -- first kills the launcher's process tree
+    # (the launcher and every Veneer instance it started) and any instance it reported, then
+    # propagates unchanged.
     subprocess.Popen(cmd, shell=True)
-
+    launcher_reported_failure = False
     try:
-        payload = wait_for_status(
-            handshake_path,
-            {HandshakeStatus.READY, HandshakeStatus.FAILED},
-            timeout=detached_timeout,
-        )
-    except TimeoutError:
-        raise TimeoutError(
-            f"Detached Veneer launcher did not become ready within "
-            f"{detached_timeout}s. Config at {config_path}, handshake at "
-            f"{handshake_path}."
-        )
+        try:
+            payload = wait_for_status(
+                handshake_path,
+                {HandshakeStatus.READY, HandshakeStatus.FAILED},
+                timeout=detached_timeout,
+            )
+        except TimeoutError:
+            raise TimeoutError(
+                f"Detached Veneer launcher did not become ready within "
+                f"{detached_timeout}s. Config at {config_path}, handshake at "
+                f"{handshake_path}."
+            )
 
-    if payload["status"] == HandshakeStatus.FAILED:
-        raise RuntimeError(
-            f"Detached Veneer launcher failed: {payload.get('error')}"
-        )
+        if payload["status"] == HandshakeStatus.FAILED:
+            # The launcher's own start() raised, and so has already killed the instances
+            # it started; the launcher is now exiting by itself, printing why into its
+            # window. Leave it to do that.
+            launcher_reported_failure = True
+            raise RuntimeError(
+                f"Detached Veneer launcher failed: {payload.get('error')}"
+            )
 
-    processes = [_PsProcess(pid) for pid in payload["veneer_pids"]]
-    actual_ports = payload["actual_ports"]
+        processes = [_PsProcess(pid) for pid in payload["veneer_pids"]]
+        actual_ports = payload["actual_ports"]
 
-    # Fix 3: Reconstruct a Process for the launcher PID so we can kill it when leave_open=False.
-    launcher_proc = _PsProcess(payload["launcher_pid"]) if payload.get("launcher_pid") else None
+        # Fix 3: Reconstruct a Process for the launcher PID so we can kill it when leave_open=False.
+        launcher_proc = _PsProcess(payload["launcher_pid"]) if payload.get("launcher_pid") else None
 
-    # Fix 2: Always register Veneer children for atexit teardown regardless of leave_open.
-    kill_all_on_exit(processes)
+        # Fix 2: Always register Veneer children for atexit teardown regardless of leave_open.
+        kill_all_on_exit(processes)
 
-    # Fix 3: Kill the launcher terminal only when leave_open=False (registered separately so
-    # callers that call kill_all_now(processes) directly don't accidentally hit the launcher).
-    if not leave_open and launcher_proc is not None:
-        kill_all_on_exit([launcher_proc])
+        # Fix 3: Kill the launcher terminal only when leave_open=False (registered separately so
+        # callers that call kill_all_now(processes) directly don't accidentally hit the launcher).
+        if not leave_open and launcher_proc is not None:
+            kill_all_on_exit([launcher_proc])
+    except BaseException:
+        if not launcher_reported_failure:
+            _kill_detached_launch(handshake_path)
+        raise
 
     # Note: capture_output_dir is not supported for the detached path (Veneer
     # instances run in a separate terminal process whose IO cannot be redirected
@@ -1433,7 +1575,7 @@ def print_from_all(queues,prefix=''):
         end=False
         while not end:
             try:
-                line = queues[i].get_nowait().decode('utf-8')
+                line = _decode_line(queues[i].get_nowait())
             except Empty:
                 end = True
                 pass

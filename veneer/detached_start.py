@@ -90,24 +90,26 @@ def run(config_path, _start_fn=None, _block_fn=None):
         )
         raise
 
-    veneer_pids = [getattr(p, "pid", None) for p in processes]
-    write_handshake(
-        config.handshake_path,
-        {
-            "status": HandshakeStatus.READY,
-            "launcher_pid": os.getpid(),
-            "veneer_pids": veneer_pids,
-            "actual_ports": list(actual_ports),
-            "error": None,
-        },
-    )
-
-    print(
-        f"Veneer ready. PIDs={veneer_pids}, ports={list(actual_ports)}",
-        flush=True,
-    )
-
+    # Everything after start() returns is inside the try, so the instances are killed even
+    # if reporting them fails.
     try:
+        veneer_pids = [getattr(p, "pid", None) for p in processes]
+        write_handshake(
+            config.handshake_path,
+            {
+                "status": HandshakeStatus.READY,
+                "launcher_pid": os.getpid(),
+                "veneer_pids": veneer_pids,
+                "actual_ports": list(actual_ports),
+                "error": None,
+            },
+        )
+
+        print(
+            f"Veneer ready. PIDs={veneer_pids}, ports={list(actual_ports)}",
+            flush=True,
+        )
+
         _block_fn()
     finally:
         for p in processes:
