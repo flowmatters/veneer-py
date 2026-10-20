@@ -45,6 +45,7 @@ def test_run_writes_ready_then_blocks_then_tears_down(tmp_path: Path):
     payload = read_handshake(handshake)
     assert payload["status"] == HandshakeStatus.READY
     assert payload["veneer_pids"] == [111, 222]
+    assert len(payload["veneer_create_times"]) == 2   # None where unreadable
     assert payload["actual_ports"] == [9990, 9991]
     assert payload["launcher_pid"] == os.getpid()
 

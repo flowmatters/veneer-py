@@ -39,6 +39,15 @@ class LauncherConfig:
         }
 
 
+def _create_time(pid):
+    """The process's create_time, or None if it cannot be read."""
+    try:
+        import psutil
+        return psutil.Process(pid).create_time()
+    except Exception:
+        return None
+
+
 def _default_block():
     """Block until SIGINT. Prints a hint so the interactive user knows how
     to shut the launcher down."""
@@ -102,6 +111,8 @@ def run(config_path, _start_fn=None, _block_fn=None):
                 "status": HandshakeStatus.READY,
                 "launcher_pid": os.getpid(),
                 "veneer_pids": veneer_pids,
+                # Lets the parent tell these processes from any later one reusing a PID.
+                "veneer_create_times": [_create_time(pid) for pid in veneer_pids],
                 "actual_ports": list(actual_ports),
                 "error": None,
             },

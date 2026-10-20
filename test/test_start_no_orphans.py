@@ -58,6 +58,26 @@ class FakeProc:
         return self.returncode
 
 
+@pytest.fixture(autouse=True)
+def at_exit(monkeypatch):
+    """Record what veneer.manage registers to run at interpreter exit, instead of letting it
+    run then against this file's fakes and stand-ins. Yields [(fn, args), ...]."""
+    registered = []
+
+    class _Recorder:
+        @staticmethod
+        def register(fn, *args, **kwargs):
+            registered.append((fn, args))
+            return fn
+
+    monkeypatch.setattr(manage, 'atexit', _Recorder)
+    yield registered
+    # Still remove the detached launches' temporary directories, as exit would have.
+    for fn, args in registered:
+        if getattr(fn, '__name__', '') == '_cleanup_work_dir':
+            fn(*args)
+
+
 @pytest.fixture
 def fake_popen(monkeypatch):
     """Replace Popen in veneer.manage. Returns (started, outputs): set outputs to a list
@@ -389,9 +409,9 @@ def test_kill_all_now_skips_a_pid_that_has_already_gone():
 
 
 def test_keyboard_interrupt_while_killing_keeps_the_original_exception(
-        fake_popen, monkeypatch):
+        fake_popen, monkeypatch, at_exit):
     """The cleanup must not replace the exception start() is propagating, must still kill
-    the instances it can, and leaves the at-exit kill registered for the one it could not."""
+    the instances it can, and leaves an at-exit kill registered for the one it could not."""
     started, outputs = fake_popen
     outputs.extend([dict(), dict()])
     monkeypatch.setattr(manage, '_probe_ready', lambda *a, **k: False)
@@ -404,8 +424,6 @@ def test_keyboard_interrupt_while_killing_keeps_the_original_exception(
         started[0].kill = interrupted_kill
         raise orig
     monkeypatch.setattr(manage, 'sleep', failing_sleep)
-    registered = []
-    monkeypatch.setattr(manage, 'kill_all_on_exit', lambda procs: registered.append(list(procs)))
 
     # Not pytest.raises: if the KeyboardInterrupt escaped it would end the whole test run
     # rather than fail this test.
@@ -417,7 +435,35 @@ def test_keyboard_interrupt_while_killing_keeps_the_original_exception(
 
     assert raised is orig
     assert started[1].killed
-    assert registered == [started]
+    assert [fn for fn, args in at_exit] == [manage._kill_started]
+    assert list(at_exit[0][1][0]) == started
+
+
+def test_failure_path_at_exit_fallback_kills_past_one_failing_kill(
+        fake_popen, monkeypatch, at_exit):
+    """The fallback start() registers on its failure path must try every instance (unlike
+    kill_all_on_exit's bare loop, which stops at the first failure)."""
+    started, outputs = fake_popen
+    outputs.extend([dict(), dict()])
+    monkeypatch.setattr(manage, '_probe_ready', lambda *a, **k: False)
+
+    def refused_kill():
+        raise psutil.AccessDenied(started[0].pid)
+
+    def failing_sleep(seconds):
+        started[0].kill = refused_kill
+        raise RuntimeError('orig')
+    monkeypatch.setattr(manage, 'sleep', failing_sleep)
+
+    with pytest.raises(RuntimeError, match='orig'):
+        _start(n_instances=2)
+
+    assert len(at_exit) == 1
+    fallback, args = at_exit[0]
+    started[1].killed = False
+    started[1].returncode = None
+    fallback(*args)                              # what interpreter exit would run; never raises
+    assert started[1].killed
 
 
 def test_successful_start_registers_the_at_exit_kill_once(fake_popen, monkeypatch):
@@ -624,6 +670,8 @@ def test_detached_cleanup_never_kills_a_reused_pid(tmp_path, monkeypatch, reap):
         detached_handshake.write_handshake(path, {
             'status': detached_handshake.HandshakeStatus.STARTING,
             'launcher_pid': found['newer'][0].pid, 'veneer_pids': [older.pid],
+            # What the launcher recorded for the process that held this PID then.
+            'veneer_create_times': [older.create_time() - 100],
             'actual_ports': [], 'error': None,
         })
         raise TimeoutError('handshake timed out')
@@ -635,6 +683,113 @@ def test_detached_cleanup_never_kills_a_reused_pid(tmp_path, monkeypatch, reap):
     newer, newer_child = found['newer']
     for pid in (older.pid, older_child, newer.pid, newer_child):
         assert _alive(pid), f'{pid} was killed'
+
+
+@windows_only
+@pytest.mark.parametrize('recorded', ['mismatched', 'missing'])
+def test_detached_cleanup_skips_an_instance_pid_it_cannot_verify(
+        tmp_path, monkeypatch, reap, recorded):
+    """An instance PID reused by a process created since the launch began is not this
+    launch's instance unless its create_time matches the one the launcher recorded; a
+    handshake from an older launcher records none, so its PIDs cannot be verified."""
+    found = {}
+
+    def on_wait(path, config_path):
+        found['other'] = _spawn_tree(tmp_path, 'other')
+        reap.extend([found['other'][0], psutil.Process(found['other'][1])])
+        payload = {
+            'status': detached_handshake.HandshakeStatus.STARTING,
+            'launcher_pid': None, 'veneer_pids': [found['other'][0].pid],
+            'actual_ports': [], 'error': None,
+        }
+        if recorded == 'mismatched':
+            payload['veneer_create_times'] = [found['other'][0].create_time() - 5]
+        detached_handshake.write_handshake(path, payload)
+        raise TimeoutError('handshake timed out')
+    _detached_setup(monkeypatch, on_wait)
+
+    with pytest.raises(TimeoutError):
+        _start(detached=True, detached_timeout=1.0)
+
+    assert _alive(found['other'][0].pid)
+
+
+@windows_only
+def test_detached_cleanup_still_kills_the_launcher_when_the_handshake_is_unreadable(
+        tmp_path, monkeypatch, reap):
+    """Windows can refuse to open the handshake while the launcher is replacing it."""
+    found = {}
+
+    def on_wait(path, config_path):
+        found['tree'] = _spawn_launcher(tmp_path, reap, config_path)
+        _starting(path, found['tree'][0].pid)
+        raise TimeoutError('handshake timed out')
+    _detached_setup(monkeypatch, on_wait)
+
+    def locked(path):
+        raise PermissionError(13, 'The process cannot access the file', str(path))
+    monkeypatch.setattr(detached_handshake, 'read_handshake', locked)
+
+    with pytest.raises(TimeoutError):
+        _start(detached=True, detached_timeout=1.0)
+
+    assert _wait_gone([found['tree'][0].pid, found['tree'][1]]) == []
+
+
+@windows_only
+def test_detached_interrupt_during_the_search_keeps_the_original_exception(
+        tmp_path, monkeypatch, at_exit):
+    """A second Ctrl-C while cleanup searches the process table must not replace the
+    exception being propagated, and leaves the cleanup registered to run again at exit."""
+    orig = RuntimeError('wait failed')     # (a TimeoutError would be re-wrapped)
+
+    def on_wait(path, config_path):
+        raise orig
+    _detached_setup(monkeypatch, on_wait)
+
+    def interrupted_iter(*a, **k):
+        raise KeyboardInterrupt()
+    monkeypatch.setattr(manage.psutil, 'process_iter', interrupted_iter)
+
+    raised = None
+    try:                                         # not pytest.raises; see above
+        _start(detached=True, detached_timeout=1.0)
+    except BaseException as e:
+        raised = e
+
+    assert raised is orig
+    assert [fn for fn, args in at_exit if fn is manage._kill_detached_launch]
+
+
+@windows_only
+def test_detached_cleanup_cancels_a_launcher_that_has_not_started(
+        tmp_path, monkeypatch, at_exit):
+    """Cleanup renames the config away first, so a launcher that only starts afterwards
+    fails reading it before it starts any Veneer."""
+    import veneer.detached_start as detached_start
+    seen = {}
+
+    def on_wait(path, config_path):
+        seen['config'] = config_path
+        raise TimeoutError('handshake timed out')
+    _detached_setup(monkeypatch, on_wait)
+    def no_processes(attrs=None, *a, **k):
+        seen['attrs'] = attrs
+        return iter([])
+    monkeypatch.setattr(manage.psutil, 'process_iter', no_processes)
+
+    with pytest.raises(TimeoutError):
+        _start(detached=True, detached_timeout=1.0)
+
+    # create_time is slow to read for every process; only matching ones are asked.
+    assert 'create_time' not in seen['attrs']
+    config_path = seen['config']
+    assert not config_path.exists()
+    started = []
+    with pytest.raises(FileNotFoundError):
+        detached_start.run(config_path, _start_fn=lambda **k: started.append(k),
+                           _block_fn=lambda: None)
+    assert started == []
 
 
 @windows_only
@@ -650,6 +805,7 @@ def test_detached_failure_after_ready_kills_the_instances_and_launcher(
         payload = {
             'status': detached_handshake.HandshakeStatus.READY,
             'launcher_pid': launcher.pid, 'veneer_pids': [instance.pid],
+            'veneer_create_times': [instance.create_time()],
             'actual_ports': [9990], 'error': None,
         }
         detached_handshake.write_handshake(path, payload)

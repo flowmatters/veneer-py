@@ -142,6 +142,8 @@ def ignore_log(line:str):
     return False
 
 def kill_all_on_exit(processes):
+    # Known follow-up: a bare p.kill() loop, so the first failure stops it and process
+    # trees are not killed. start()'s failure path registers _kill_started instead.
     def end_processes():
         for p in processes:
             p.kill()
@@ -1453,11 +1455,11 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
     except BaseException:
         # The original exception always propagates, even past a second Ctrl-C during the
         # cleanup: every kill is sent before kill_all_now waits, so a second Ctrl-C only
-        # cuts that wait short. If any kill failed, the at-exit kill stays registered as a
-        # fallback.
+        # cuts that wait short. If any kill failed, _kill_started is registered to run again
+        # at exit, as a fallback (it tries every process, with its tree).
         if not _kill_started(processes):
             try:
-                kill_all_on_exit(processes)
+                atexit.register(_kill_started, processes)
             except Exception:
                 logger.warning('Could not register an at-exit kill for the Veneer instances',
                                exc_info=True)
@@ -1474,52 +1476,94 @@ def start(project_fn=None,n_instances=1,ports=9876,debug=False,remote=False,
         return processes, actual_ports, log_paths
     return processes, actual_ports
 
-def _detached_launch_processes(handshake_path, config_path, started_after):
-    """The still-running processes a detached launch started, identified so that a PID
-    since reused by an unrelated process is never among them:
+# How far a reported instance's create_time may differ from the one the launcher recorded.
+_CREATE_TIME_TOLERANCE_SECS = 1.0
 
-    - the launcher: any process created since the launch began whose command line names
-      this launch's own config file, apart from the cmd.exe window hosting it. Found by
-      searching rather than from the handshake's launcher_pid, so a launcher that has not
-      yet written its PID is found too, and a stale launcher_pid is never trusted alone.
-    - each Veneer instance the handshake reports, if created since the launch began.
+
+def _detached_launch_processes(handshake_path, config_path, started_after):
+    """The still-running processes a detached launch started:
+
+    - the launcher: any process whose command line names this launch's own config file
+      (a fresh temporary path), apart from the cmd.exe window hosting it, and which was
+      created since the launch began. Found by searching rather than from the handshake's
+      launcher_pid, so a launcher that has not yet written its PID is found too, and a
+      stale launcher_pid is never trusted.
+    - each Veneer instance the handshake reports, only if its create_time matches the one
+      the launcher recorded next to its PID (within _CREATE_TIME_TOLERANCE_SECS), so a PID
+      since reused by another process is skipped. A handshake without create times (from
+      an older launcher) cannot be verified, so its instances are skipped too; they are
+      still killed as part of the launcher's process tree.
+
+    If the handshake cannot be read (Windows can refuse while the launcher is replacing
+    it), the launcher found by the search is still returned.
     """
     from .detached_handshake import read_handshake
     config = str(config_path)
     found = {}
-    for proc in psutil.process_iter(['cmdline', 'create_time', 'name']):
+    # create_time is by far the slowest attribute to fetch for every process, so it is
+    # read only for the few whose command line matches.
+    for proc in psutil.process_iter(['cmdline', 'name']):
         info = proc.info
-        if (info.get('create_time') or 0) < started_after:
-            continue
         if (info.get('name') or '').lower() == 'cmd.exe':
             continue
-        if any(config in part for part in (info.get('cmdline') or [])):
-            found[proc.pid] = proc
-
-    payload = read_handshake(handshake_path) or {}
-    for pid in payload.get("veneer_pids") or []:
-        if not isinstance(pid, int) or pid in found:
+        if not any(config in part for part in (info.get('cmdline') or [])):
             continue
         try:
-            proc = Process(pid)
             if proc.create_time() >= started_after:
-                found[pid] = proc
+                found[proc.pid] = proc
         except psutil.Error:
             pass
+
+    try:
+        payload = read_handshake(handshake_path) or {}
+        pids = payload.get("veneer_pids") or []
+        create_times = payload.get("veneer_create_times") or []
+        for i, pid in enumerate(pids):
+            expected = create_times[i] if i < len(create_times) else None
+            if not isinstance(pid, int) or pid in found or not isinstance(expected, (int, float)):
+                continue
+            try:
+                proc = Process(pid)
+                if abs(proc.create_time() - expected) <= _CREATE_TIME_TOLERANCE_SECS:
+                    found[pid] = proc
+            except psutil.Error:
+                pass
+    except Exception:
+        logger.warning('Could not read the detached launcher handshake at %s; killing only '
+                       'the launcher found by its command line', handshake_path, exc_info=True)
     return list(found.values())
 
 
-def _kill_detached_launch(handshake_path, config_path, started_after):
-    """Kill whatever a detached launch started (see _detached_launch_processes), each with
-    its process tree. Never raises: an exception is already propagating."""
+def _cancel_detached_launch(config_path):
+    """Rename the launch's config file away, so a launcher that has not started yet fails
+    reading it before it starts anything. Best effort: Windows refuses while the file is
+    open, and a launcher already running no longer needs it."""
+    try:
+        os.replace(config_path, Path(config_path).with_name('config.cancelled.json'))
+    except OSError:
+        pass
+
+
+def _kill_detached_launch(handshake_path, config_path, started_after, _at_exit=False):
+    """Cancel a detached launch and kill whatever it started (see
+    _detached_launch_processes), each with its process tree. Never raises, KeyboardInterrupt
+    included: an exception is already propagating. If the search or any kill fails, this
+    registers itself to run again at exit, as start() does."""
+    _cancel_detached_launch(config_path)
     try:
         processes = _detached_launch_processes(handshake_path, config_path, started_after)
-    except Exception:
-        logger.warning('Could not find the processes the detached launch at %s started',
+        all_killed = _kill_started(processes) if processes else True
+    except BaseException:
+        logger.warning('Could not find or kill the processes the detached launch at %s started',
                        config_path, exc_info=True)
-        return
-    if processes:
-        _kill_started(processes)
+        all_killed = False
+    if not all_killed and not _at_exit:
+        try:
+            atexit.register(_kill_detached_launch, handshake_path, config_path, started_after,
+                            True)
+        except Exception:
+            logger.warning('Could not register an at-exit kill for the detached launch',
+                           exc_info=True)
 
 
 def _start_detached(start_kwargs, detached_timeout, leave_open):
@@ -1576,9 +1620,9 @@ def _start_detached(start_kwargs, detached_timeout, leave_open):
     # From here on, anything that escapes -- the handshake timing out, a KeyboardInterrupt
     # while waiting, or an error once it is ready -- first kills the launcher's process tree
     # (the launcher and every Veneer instance it started) and any instance it reported, then
-    # propagates unchanged. Only processes created after launch_began are candidates, so a
-    # reused PID is never killed. A launcher that has not started at all yet (still inside
-    # cmd.exe's "start") cannot be found, and is not killed.
+    # propagates unchanged. The cleanup first renames the config file away, so a launcher
+    # that has not started yet (still inside cmd.exe's "start") fails before starting
+    # anything; see _detached_launch_processes for how a reused PID is told apart.
     launch_began = _now()
     subprocess.Popen(cmd, shell=True)
     launcher_reported_failure = False
@@ -1592,8 +1636,8 @@ def _start_detached(start_kwargs, detached_timeout, leave_open):
         except TimeoutError:
             raise TimeoutError(
                 f"Detached Veneer launcher did not become ready within "
-                f"{detached_timeout}s. Config at {config_path}, handshake at "
-                f"{handshake_path}."
+                f"{detached_timeout}s. Its config and handshake files are in "
+                f"{work_dir}."
             )
 
         if payload["status"] == HandshakeStatus.FAILED:
