@@ -9,6 +9,9 @@ keywords = ["hydrology", "ewater", "veneer", "scripting", "http", "rest"]
 license = {text = "ISC License"}
 dynamic = ["version"]
 readme = {file = "README.md", content-type = "text/markdown"}
+# 3.8: veneer.manage uses the walrus operator. veneer.cluster (the cluster extra) needs
+# 3.10: its dataclass annotations use `int | None` at runtime.
+requires-python = ">=3.8"
 # Core: needed by `import veneer` (requests, numpy, pandas) and by veneer.manage, which
 # starts and stops Veneer command line servers (psutil). Lower bounds only.
 dependencies = [
@@ -50,7 +53,7 @@ windows = ["pywin32; sys_platform == 'win32'"]
 all = ["veneer-py[geo,plot,cluster,windows]"]
 # Slack notifications from veneer.bulk need nb-slack, which isn't on PyPI; install it
 # separately: pip install https://github.com/flowmatters/nb-slack/archive/master.zip
-test = ["nose"]
+test = ["pytest"]
 
 [tool.setuptools.packages.find]
 
