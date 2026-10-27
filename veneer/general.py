@@ -904,11 +904,14 @@ class Veneer(object):
             re-derives units from the CSV column headers, so header-embedded units take
             effect on every load and override units applied via this parameter. When the
             file's headers carry no units, units applied via this parameter persist
-            across reloads on Source 5.30, but on Source 6.10 the reload fails ("Loaded
-            units are not commensurate with the previously defined units") and the run
-            does not complete. Embed units in the column headers instead (eg
-            "Flow (ML/d)") for reloaded file-based data sources: that works on both,
-            and the file remains self-describing.
+            across reloads (verified on Source 5.30, 5.60 and 6.10) - unless a
+            column's bare header parses as a Source unit (eg 'A', amperes). That
+            column reloads with the header's units, which clash with the applied ones:
+            the reload fails ("Loaded units are not commensurate with the previously
+            defined units") and the run does not complete. Embedding units in the
+            column headers (eg "Flow (ML/d)") works whatever the columns are called,
+            so it is the robust choice for reloaded file-based data sources, and the
+            file remains self-describing.
         '''
         from_file = data is None
         if data_source_name is None:
