@@ -829,7 +829,9 @@ class VeneerIronPython(object):
         each run and re-derives units from the CSV column headers: header-embedded
         units (eg "Flow (ML/d)") take effect on every load and override units set here.
         When the file's headers carry no units, units set here persist across reloads
-        (verified on Source 5.30).
+        on Source 5.30, but on Source 6.10 the reload fails ("Loaded units are not
+        commensurate with the previously defined units") and the run does not
+        complete. Embed units in the headers of a reloaded file instead.
         '''
         script = self._init_script()
         script += "clr.AddReference('TIME')\n"
