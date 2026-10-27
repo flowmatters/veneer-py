@@ -125,6 +125,45 @@ def _unicode_literal(s):
     return 'u' + json.dumps(s)
 
 
+# How long a script waits for Source's interface to make a change on its own thread.
+UI_THREAD_TIMEOUT_SECONDS = 300
+
+# IronPython defining _ui_form() and _on_ui_thread(work), for scripts that add or
+# remove data groups. With its interface open, Source builds tree nodes for the
+# data groups it shows as they are added, and (on Source 6.10 at least) fails with
+# "The calling thread must be STA" when that happens off its UI thread - which is
+# where Veneer runs scripts. _on_ui_thread(work) runs work() on Source's UI thread
+# when there is one, and directly otherwise (a command line has no interface).
+UI_THREAD_HELPERS = '''
+def _ui_form():
+    try:
+        clr.AddReference('RiverSystem.Forms')
+        from RiverSystem.Forms import MainForm
+        return MainForm.Instance
+    except Exception:
+        return None
+
+def _on_ui_thread(work):
+    form = _ui_form()
+    if form is None or not form.InvokeRequired:
+        work()
+        return
+    failure = []
+    def run():
+        try:
+            work()
+        except Exception as e:
+            failure.append(e)
+    handle = form.BeginInvoke(System.Action(run))
+    if not handle.AsyncWaitHandle.WaitOne(System.TimeSpan.FromSeconds(%d)):
+        raise Exception(u"Source's interface did not respond within %d seconds. "
+                        u"The change may still be made once it does.")
+    form.EndInvoke(handle)
+    if failure:
+        raise failure[0]
+''' % (UI_THREAD_TIMEOUT_SECONDS, UI_THREAD_TIMEOUT_SECONDS)
+
+
 def scenario_rebind(scenario):
     '''
     IronPython that points the script's `scenario` variable at another
@@ -891,9 +930,13 @@ class VeneerIronPython(object):
         when a data source is created under an existing name: its assignments move to
         the column of the same name in the new one, and it is removed.
 
+        The changes are made on Source's UI thread when it has its interface open
+        (see UI_THREAD_HELPERS).
+
         Returns (name given, [columns whose assignments had no column to move to]).
         '''
         script = self._init_script()
+        script += UI_THREAD_HELPERS
         script += 'filename = u{0}\n'.format(json.dumps(filename))
         script += 'requested = u{0}\n'.format(json.dumps(data_source_name))
         script += 'try:\n'
@@ -913,25 +956,94 @@ class VeneerIronPython(object):
         script += "    raise Exception(u'No data source was created from ' + filename)\n"
         script += '# Veneer adds the new one after any earlier ones\n'
         script += 'grp = from_file[-1]\n'
-        script += 'replaced = [g for g in dm.DataGroups if g.Name == target and not g is grp]\n'
         script += 'dropped = []\n'
-        script += 'for old in replaced:\n'
-        script += '    for detail in old.DataDetails:\n'
-        script += '        dest = [d for d in grp.DataDetails if d.Name == detail.Name]\n'
-        script += '        usages = list(detail.Usages)\n'
-        script += '        if dest:\n'
-        script += '            for usage in usages:\n'
-        script += '                dest[0].Usages.Add(usage)\n'
-        script += '        elif usages:\n'
-        script += '            dropped.append(detail.Name)\n'
-        script += '        detail.Usages.Clear()\n'
-        script += '    dm.RemoveGroup(old)\n'
-        script += 'grp.Name = target\n'
-        script += 'if replaced:\n'
-        script += '    dm.Refresh()\n'
+        script += 'def work():\n'
+        script += '    replaced = [g for g in dm.DataGroups\n'
+        script += '                if g.Name == target and not g is grp]\n'
+        script += '    for old in replaced:\n'
+        script += '        for detail in old.DataDetails:\n'
+        script += '            dest = [d for d in grp.DataDetails if d.Name == detail.Name]\n'
+        script += '            usages = list(detail.Usages)\n'
+        script += '            if dest:\n'
+        script += '                for usage in usages:\n'
+        script += '                    dest[0].Usages.Add(usage)\n'
+        script += '            elif usages:\n'
+        script += '                dropped.append(detail.Name)\n'
+        script += '            detail.Usages.Clear()\n'
+        script += '        dm.RemoveGroup(old)\n'
+        script += '    grp.Name = target\n'
+        script += '    if replaced:\n'
+        script += '        dm.Refresh()\n'
+        script += '_on_ui_thread(work)\n'
         script += 'result = [target] + dropped\n'
         response = self.simplify_response(self._safe_run(script)['Response'])
         return response[0], response[1:]
+
+    def _create_data_source_on_ui_thread(self, data_group):
+        '''
+        Do what POST /dataSources does with `data_group`, on Source's UI thread.
+
+        For a Veneer that changes data groups off Source's UI thread, which Source's
+        interface refuses (see v.create_data_source). Uses Veneer's own exchange
+        classes, so the file is loaded, or the CSV parsed, as Veneer would.
+
+        First removes the empty data group the failed POST left behind: one with no
+        columns, named as posted or as Source's interface renames that (with Veneer's
+        'TMP___' prefix, when it was replacing a data source of that name). A data
+        source with columns is never removed here.
+
+        data_group: the body POSTed to /dataSources: Name and a single item.
+
+        Returns True once the data source is created, or False - having changed
+        nothing - if Source has no interface open, so its UI thread is not the cause.
+        '''
+        name = data_group['Name']
+        [item] = data_group['Items']
+        script = self._init_script()
+        script += UI_THREAD_HELPERS
+        script += 'from FlowMatters.Source.Veneer.ExchangeObjects.DataSources import ' \
+                  'SimpleDataGroupItem, SimpleDataItem\n'
+        script += 'from System import Array, String\n'
+        script += 'item = SimpleDataItem()\n'
+        script += 'item.Name = %s\n' % _unicode_literal(item['Name'])
+        script += 'item.InputSets = Array[String]([%s])\n' % ', '.join(
+            _unicode_literal(s) for s in item['InputSets'])
+        if item.get('DetailsAsCSV') is not None:
+            script += 'item.DetailsAsCSV = %s\n' % _unicode_literal(item['DetailsAsCSV'])
+        script += 'item.UnitsForNewTS = %s\n' % _unicode_literal(item.get('UnitsForNewTS') or '')
+        script += 'item.ReloadOnRun = %s\n' % bool(item.get('ReloadOnRun'))
+        script += 'group = SimpleDataGroupItem()\n'
+        script += 'group.Name = %s\n' % _unicode_literal(name)
+        script += 'group.Items = Array[SimpleDataItem]([item])\n'
+        script += 'try:\n'
+        script += "    clr.AddReference('RiverSystem')\n"
+        script += '    from RiverSystem.DataManagement.DataManager import DataManager\n'
+        script += '    restrict = DataManager.RestrictName\n'
+        script += 'except (ImportError, AttributeError):\n'
+        script += '    def restrict(name):\n'
+        script += '        for c in %s:\n' % _unicode_literal(DATA_SOURCE_RESERVED_CHARACTERS)
+        script += "            name = name.replace(c, u'_')\n"
+        script += "        return name[:200].strip(u' ')\n"
+        script += 'dm = scenario.Network.DataManager\n'
+        script += "posted = [group.Name, u'TMP___' + group.Name]\n"
+        script += 'left = posted + [restrict(n) for n in posted]\n'
+        script += 'def work():\n'
+        script += '    for g in [g for g in dm.DataGroups\n'
+        script += '              if g.Name in left and not list(g.DataDetails)]:\n'
+        script += '        dm.RemoveGroup(g)\n'
+        script += '    # As SourceService.CreateDataSource: replace one of exactly that name.\n'
+        script += '    # Not for a file: Veneer would then load it from TMP___<filename>.\n'
+        script += '    existing = dm.DataGroups.FirstOrDefault(lambda g: g.Name == group.Name)\n'
+        script += '    if existing is not None and item.DetailsAsCSV is not None:\n'
+        script += '        group.ReplaceInScenario(scenario, existing)\n'
+        script += '    else:\n'
+        script += '        group.AddToScenario(scenario)\n'
+        script += 'if _ui_form() is None:\n'
+        script += '    result = False\n'
+        script += 'else:\n'
+        script += '    _on_ui_thread(work)\n'
+        script += '    result = True\n'
+        return bool(self.simplify_response(self._safe_run(script)['Response']))
 
     def add_constituent(self, new_constituent):
         s = self._init_script(

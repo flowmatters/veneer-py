@@ -141,6 +141,11 @@ def _keepable_data_source_name(name):
         logger.warning('Data source %r is named %r, as Source would rename it.', name, kept)
     return kept
 
+# The Veneer protocol version (v.status()['Version']) from which POST /dataSources
+# makes its data group changes on Source's UI thread, names a file data source apart
+# from its filename, and returns the name Source keeps.
+DATA_SOURCE_CONTRACT = 20261027
+
 def _scripts_disabled(exc):
     """Whether exc is Veneer refusing a server side script ("Allow Scripts" is off)."""
     if isinstance(exc, VeneerHTTPError):
@@ -944,7 +949,11 @@ class Veneer(object):
             dummy_item['UnitsForNewTS'] = units
         dummy_data_group['Items'] = [dummy_item]
 
-        self.post_json('/dataSources', data=dummy_data_group)
+        try:
+            self.post_json('/dataSources', data=dummy_data_group)
+        except VeneerHTTPError as e:
+            if not self._create_data_source_on_ui_thread(dummy_data_group, e):
+                raise
 
         if not from_file:
             return data_source_name
@@ -973,6 +982,37 @@ class Veneer(object):
             self.model.set_data_source_units(given, units)
 
         return given
+
+    def _create_data_source_on_ui_thread(self, data_group, error):
+        '''
+        Create a data source whose POST failed, if Source's interface is why.
+
+        Veneer older than DATA_SOURCE_CONTRACT adds the data group on a worker thread.
+        With Source's interface open, Source builds a tree node for it there, which
+        (on Source 6.10 at least) fails: "The calling thread must be STA". The POST
+        returns 400 and leaves an empty data group behind. Veneer ships with Source,
+        so a fixed Veneer reaches those users slowly; until then, this does the same
+        work in a server side script on Source's UI thread.
+
+        Only for a 400, from a Veneer older than DATA_SOURCE_CONTRACT, with "Allow
+        Scripts" on and Source's interface open. Anything else is left to raise.
+
+        Returns True if the data source was created.
+        '''
+        if error.status_code != 400:
+            return False
+        if int(self.status().get('Version') or 0) >= DATA_SOURCE_CONTRACT:
+            return False
+        try:
+            created = self.model._create_data_source_on_ui_thread(data_group)
+        except Exception as e:
+            if _scripts_disabled(e):
+                return False
+            raise
+        if created:
+            logger.info('Created data source %r on Source\'s UI thread: this Veneer could '
+                        'not, with Source\'s interface open.', data_group['Name'])
+        return created
 
     def _name_given_to_file_data_source(self, filename):
         '''The name of the most recent data source Veneer created from `filename`, as

@@ -76,12 +76,95 @@ class DataManager:
     def __init__(self):
         self.DataGroups = Groups()
         self.refreshed = 0
+        # Source's interface, when its data source tree insists on the UI thread
+        self.ui = None
+
+    def _check_thread(self):
+        """As Source 6.10's interface fails a data group change off its UI thread."""
+        if self.ui is not None and not self.ui.on_ui_thread:
+            raise Exception('The calling thread must be STA, because many UI '
+                            'components require this.')
+
+    def add(self, group):
+        self._check_thread()
+        self.DataGroups.append(group)
 
     def RemoveGroup(self, group):
+        self._check_thread()
         self.DataGroups.remove(group)
 
     def Refresh(self):
+        self._check_thread()
         self.refreshed += 1
+
+
+class FakeForm:
+    """Source's main window: RiverSystem.Forms.MainForm.Instance."""
+
+    def __init__(self, responds=True):
+        self.InvokeRequired = True
+        self.on_ui_thread = False
+        self.invoked = 0
+        self.responds = responds
+
+    def BeginInvoke(self, action):
+        self.invoked += 1
+        if self.responds:
+            self.on_ui_thread = True
+            try:
+                action()
+            finally:
+                self.on_ui_thread = False
+        return SimpleNamespace(
+            AsyncWaitHandle=SimpleNamespace(WaitOne=lambda timeout: self.responds))
+
+    def EndInvoke(self, handle):
+        pass
+
+
+class SimpleDataItem:
+    """Veneer's FlowMatters.Source.Veneer.ExchangeObjects.DataSources.SimpleDataItem."""
+    Name = None
+    InputSets = None
+    DetailsAsCSV = None
+    UnitsForNewTS = None
+    ReloadOnRun = False
+
+
+class SimpleDataGroupItem:
+    """Veneer's SimpleDataGroupItem, as its AddToScenario and ReplaceInScenario
+    behave: the group named as given - after the file, for one loaded from a file."""
+    Name = None
+    Items = None
+
+    def AddToScenario(self, scenario):
+        source = scenario.fake_source
+        [item] = self.Items
+        if item.DetailsAsCSV is None:
+            if self.Name not in source.files:
+                raise Exception('Could not find file ' + self.Name)
+            columns, filename = source.files[self.Name], self.Name
+        else:
+            columns, filename = item.DetailsAsCSV.splitlines()[0].split(',')[1:], None
+        group = Group(self.Name, columns, filename, item.ReloadOnRun)
+        if source.gui:
+            group.Name = source.rule(group.Name)
+        scenario.Network.DataManager.add(group)
+        return group
+
+    def ReplaceInScenario(self, scenario, existing):
+        dm = scenario.Network.DataManager
+        name = self.Name
+        self.Name = 'TMP___' + name
+        new = self.AddToScenario(scenario)
+        for detail in existing.DataDetails:
+            [dest] = [d for d in new.DataDetails if d.Name == detail.Name]
+            dest.Usages.extend(detail.Usages)
+            detail.Usages.Clear()
+        self.Name = name
+        new.Name = name
+        dm.RemoveGroup(existing)
+        dm.Refresh()
 
 
 class Response:
@@ -106,15 +189,25 @@ def veneer_value(value):
 
 
 class FakeSource:
-    """Veneer's HTTP interface, over a fake data manager."""
+    """Veneer's HTTP interface, over a fake data manager.
 
-    def __init__(self, gui=True, scripts=True, files=None, rule=restrict_name):
+    ui: Source's main window, when Source has its interface open. Veneer older than
+        DATA_SOURCE_CONTRACT changes data groups on a worker thread, which Source
+        6.10's interface refuses: a POST to /dataSources then fails with 400, leaving
+        an empty group behind under the name the interface gives it."""
+
+    def __init__(self, gui=True, scripts=True, files=None, rule=restrict_name, ui=None,
+                 version=20261019):
         self.gui = gui
         self.scripts = scripts
-        self.files = files or {PATH: ['A', 'B']}
+        self.files = {PATH: ['A', 'B']} if files is None else files
         self.rule = rule
         self.dm = DataManager()
+        self.dm.ui = ui
+        self.ui = ui
+        self.version = version
         self.posted = []
+        self.scripts_run = []
 
     @property
     def names(self):
@@ -136,6 +229,8 @@ class FakeSource:
 
     def get(self, url):
         path = url.split(':9876', 1)[1]
+        if path == '/':
+            return Response(200, {'Version': self.version})
         assert path == '/dataSources', path
         return Response(200, [{'Name': g.Name} for g in self.dm.DataGroups])
 
@@ -143,6 +238,13 @@ class FakeSource:
         self.posted.append(body)
         name = body['Name']
         [item] = body['Items']
+        if self.ui is not None and self.version < 20261027:
+            # The group is added before Source's interface throws, so it stays,
+            # empty and renamed - under TMP___<name> when replacing one.
+            existing = any(g.Name == name for g in self.dm.DataGroups)
+            left = Group(self.rule(('TMP___' if existing else '') + name))
+            self.dm.DataGroups.append(left)
+            return Response(400, '<html>Request Error</html>')
         if item.get('DetailsAsCSV') is None:
             columns, filename = self.files[name], name
         else:
@@ -164,9 +266,12 @@ class FakeSource:
         return Response(200)
 
     def _run(self, script):
+        self.scripts_run.append(script)
         if not self.scripts:
             return Response(403)
-        scope = {'scenario': SimpleNamespace(Network=SimpleNamespace(DataManager=self.dm))}
+        sys.modules['RiverSystem.Forms'].MainForm.Instance = self.ui
+        scope = {'scenario': SimpleNamespace(Network=SimpleNamespace(DataManager=self.dm),
+                                             fake_source=self)}
         try:
             exec(script, scope)
         except Exception as e:
@@ -187,13 +292,23 @@ def dotnet(monkeypatch):
         modules[name] = m
         return m
 
+    class Array:
+        """System.Array: Array[T](items)."""
+        def __class_getitem__(cls, item_type):
+            return list
+
     module('clr', AddReference=lambda name: None, ImportExtensions=lambda ns: None)
-    module('System', Linq=object())
+    module('System', Linq=object(), Action=lambda f: f, Array=Array, String=str,
+           TimeSpan=SimpleNamespace(FromSeconds=lambda s: s))
     for name in ['FlowMatters', 'FlowMatters.Source', 'FlowMatters.Source.Veneer',
                  'FlowMatters.Source.Veneer.RemoteScripting',
                  'FlowMatters.Source.Veneer.RemoteScripting.ScriptHelpers',
+                 'FlowMatters.Source.Veneer.ExchangeObjects',
                  'TIME', 'RiverSystem', 'RiverSystem.DataManagement']:
         module(name)
+    module('FlowMatters.Source.Veneer.ExchangeObjects.DataSources',
+           SimpleDataGroupItem=SimpleDataGroupItem, SimpleDataItem=SimpleDataItem)
+    module('RiverSystem.Forms', MainForm=SimpleNamespace(Instance=None))
     module('TIME.Core', Unit=SimpleNamespace(parse=lambda s: 'unit:' + s))
     data_manager = module('RiverSystem.DataManagement.DataManager',
                           DataManager=SimpleNamespace(RestrictName=restrict_name))
@@ -361,3 +476,125 @@ def test_recreating_a_dataframe_data_source_replaces_it(dotnet):
     v.create_data_source('fire.tss', frame('A'))
     v.create_data_source('fire.tss', frame('A'))
     assert source.names == ['fire_tss']
+
+
+# Source's interface with a Veneer older than DATA_SOURCE_CONTRACT: Veneer adds the
+# group on a worker thread, the interface refuses, and the POST fails with 400.
+# veneer-py then does the same work in a script on the interface's own thread.
+
+def unfixed_gui(**kwargs):
+    return FakeSource(gui=True, ui=FakeForm(), **kwargs)
+
+
+def test_an_unfixed_interface_gets_its_file_data_source_on_its_ui_thread(dotnet):
+    source = unfixed_gui()
+    assert connect(source).create_data_source(PATH, reload_on_run=True) == 'fire_tss'
+
+    assert source.names == ['fire_tss']
+    group = source.group('fire_tss')
+    assert [d.Name for d in group.DataDetails] == ['A', 'B']
+    assert group.filename == PATH and group.reload_on_run
+    assert source.ui.invoked
+
+
+def test_an_unfixed_interface_gets_its_dataframe_data_source(dotnet):
+    source = unfixed_gui()
+    assert connect(source).create_data_source('flow', frame('A')) == 'flow'
+    assert source.names == ['flow']
+    assert [d.Name for d in source.group('flow').DataDetails] == ['A']
+
+
+def test_an_unfixed_interface_replaces_a_dataframe_data_source_keeping_assignments(dotnet):
+    source = unfixed_gui()
+    old = Group('flow', ['A'])
+    old.DataDetails[0].Usages.append('usage of A')
+    source.dm.DataGroups.append(old)
+
+    assert connect(source).create_data_source('flow', frame('A')) == 'flow'
+
+    assert source.names == ['flow']
+    new = source.group('flow')
+    assert new is not old and new.usages() == {'A': ['usage of A']}
+
+
+def test_an_unfixed_interface_replaces_a_named_file_data_source(dotnet):
+    """The rename and replace that follow creating a file data source change data
+    groups too, so they also run on the interface's thread."""
+    source = unfixed_gui()
+    old = Group('fire_tss', ['A', 'B'])
+    old.DataDetails[0].Usages.append('usage of A')
+    source.dm.DataGroups.append(old)
+
+    assert connect(source).create_data_source(PATH) == 'fire_tss'
+
+    assert source.names == ['fire_tss']
+    assert source.group('fire_tss').usages() == {'A': ['usage of A']}
+
+
+def test_only_the_empty_group_the_failed_post_left_is_removed(dotnet):
+    """A data source already of that name, with columns, is not the failed POST's."""
+    source = unfixed_gui(files={PATH: ['A'], 'C:\other\fire_tss.csv': ['A']})
+    earlier = Group(restrict_name(PATH), ['A'])
+    source.dm.DataGroups.append(earlier)
+
+    connect(source).create_data_source(PATH, data_source_name='new_tss')
+
+    assert source.group(restrict_name(PATH)) is earlier
+    assert sorted(source.names) == sorted(['new_tss', restrict_name(PATH)])
+
+
+def test_a_file_the_interface_cannot_load_is_reported(dotnet):
+    source = unfixed_gui(files={})
+    with pytest.raises(Exception, match='Could not find file'):
+        connect(source).create_data_source(PATH)
+
+
+def test_an_interface_that_does_not_respond_is_reported(dotnet):
+    source = FakeSource(gui=True, ui=FakeForm(responds=False))
+    with pytest.raises(Exception, match='did not respond'):
+        connect(source).create_data_source('flow', frame('A'))
+
+
+def test_a_fixed_veneer_is_not_worked_around(dotnet):
+    """From DATA_SOURCE_CONTRACT, Veneer makes the change on the UI thread itself, so
+    a 400 from it means something else, and is raised as it is."""
+    from veneer.general import VeneerHTTPError
+    source = FakeSource(gui=True, ui=FakeForm(), version=20261027)
+    source._create = lambda body: Response(400, '<html>Request Error</html>')
+    with pytest.raises(VeneerHTTPError) as raised:
+        connect(source).create_data_source('flow', frame('A'))
+    assert raised.value.status_code == 400
+    assert source.scripts_run == []
+
+
+def test_a_command_line_400_is_raised_as_it_is(dotnet):
+    """With no interface there is no UI thread to blame: the POST's error stands, and
+    nothing is removed."""
+    from veneer.general import VeneerHTTPError
+    source = FakeSource(gui=False)
+    left = Group(PATH)
+    def failing(body):
+        source.dm.DataGroups.append(left)
+        return Response(400, '<html>Request Error</html>')
+    source._create = failing
+    with pytest.raises(VeneerHTTPError):
+        connect(source).create_data_source(PATH)
+    assert source.names == [PATH]
+
+
+def test_without_scripts_the_400_is_raised_as_it_is(dotnet):
+    from veneer.general import VeneerHTTPError
+    source = unfixed_gui(scripts=False)
+    with pytest.raises(VeneerHTTPError) as raised:
+        connect(source).create_data_source('flow', frame('A'))
+    assert raised.value.status_code == 400
+
+
+def test_other_failures_are_not_worked_around(dotnet):
+    from veneer.general import VeneerHTTPError
+    source = unfixed_gui()
+    source._create = lambda body: Response(500, 'boom')
+    with pytest.raises(VeneerHTTPError) as raised:
+        connect(source).create_data_source('flow', frame('A'))
+    assert raised.value.status_code == 500
+    assert source.scripts_run == []
