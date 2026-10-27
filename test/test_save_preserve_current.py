@@ -68,7 +68,7 @@ def test_restore_statements_are_inside_the_finally_block(ironpy):
     and still pass a substring check - so assert on structure, not text."""
     ironpy.save('C:/tmp/scratch.rsproj')
     tree = ast.parse(ironpy.clean_script(ironpy.scripts[-1]))
-    tries = [n for n in ast.walk(tree) if isinstance(n, ast.Try)]
+    tries = [n for n in ast.walk(tree) if isinstance(n, ast.Try) and n.finalbody]
     assert len(tries) == 1
     finalbody = ast.dump(ast.Module(body=tries[0].finalbody, type_ignores=[]))
     assert 'saved_output_file' in finalbody

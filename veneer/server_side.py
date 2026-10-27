@@ -208,6 +208,13 @@ def scenario_rebind(scenario):
             % (literal, literal))
 
 
+NO_PROJECT_HANDLER_MESSAGE = (
+    'Cannot save: this Veneer server gave the script no project handler '
+    '(project_handler is None), and only the handler that opened the project can save it. '
+    'Check that this is the Veneer you meant to reach, and that its build passes the '
+    'project handler to scripts. Server process: ')
+
+
 #@deprecate_async
 class VeneerIronPython(object):
     """
@@ -1149,6 +1156,15 @@ class VeneerIronPython(object):
                  from RiverSystem import RiverSystemProject
 
                  ph = project_handler
+                 if ph is None:
+                     # No substitute: a new handler cannot save a project another handler opened
+                     try:
+                         import System
+                         host = System.Diagnostics.Process.GetCurrentProcess()
+                         host = str(host.MainModule.FileName) + ' (process ' + str(host.Id) + ')'
+                     except Exception:
+                         host = 'unknown'
+                     raise Exception(%r + host)
                  cb = DefaultCallback()
                  cb.OutputFileName=%s
                  saved_cb = ph.CallBackHandler
@@ -1164,7 +1180,7 @@ class VeneerIronPython(object):
                      ph.CallBackHandler = saved_cb
                      %s
                      %s
-                 ''' % (fn, restore_output_file, restore_project)
+                 ''' % (NO_PROJECT_HANDLER_MESSAGE, fn, restore_output_file, restore_project)
         return self._safe_run(script)
 
 
