@@ -868,15 +868,25 @@ class Veneer(object):
             data source that way when it showed it, so its name would depend on whether
             Source has its interface open.
 
-            Naming a file-based data source runs a server side script, which requires
-            the "Allow Scripts" option in Veneer. Without it, the data source keeps the
-            name Source gives it - the filename, or with its interface open the filename
-            put through the rule above - and a warning says so.
+            A Veneer with protocol version DATA_SOURCE_CONTRACT (20261027, see
+            v.status()['Version']) or later names the data source as it creates it,
+            applies Source's rule itself, and reports the name it kept, which is the
+            one returned. No server side script is needed.
+
+            An older Veneer loads a file from the data source's name, so a file-based
+            data source is created under its filename and then named by a server side
+            script, which requires the "Allow Scripts" option in Veneer. Without it,
+            the data source keeps the name Source gives it - the filename, or with its
+            interface open the filename put through the rule above - and a warning says
+            so. With Source's interface open, such a Veneer cannot create a data source
+            at all on Source 6.10 (HTTP 400); veneer-py then creates it with a server
+            side script on Source's UI thread instead.
 
             Any other data source already of that name is replaced, as Veneer replaces
             one created under an existing name: assignments from its columns move to the
-            columns of the same name in the new data source (with a warning naming any
-            that have none), and it is removed.
+            columns of the same name in the new data source, and it is removed. Where
+            veneer-py does the replacing (an older Veneer), a warning names any columns
+            whose assignments had nowhere to go; a newer Veneer logs them itself.
 
             NOTE: Up to veneer-py 0.2.1, a file-based data source was named after the
             filename as given (eg 'C:\\inputs\\flow.csv'), names were not put through
@@ -921,10 +931,13 @@ class Veneer(object):
         from_file = data is None
         if data_source_name is None:
             data_source_name = _file_stem(name) if from_file else name
-        if not from_file:
+        version = self._protocol_version()
+        contract = version >= DATA_SOURCE_CONTRACT
+        if contract or not from_file:
             data_source_name = _keepable_data_source_name(data_source_name)
-        # Veneer names a file-based data source after the file it loads.
-        group_name = name if from_file else data_source_name
+        # An older Veneer loads a file from the data source's name, so a file data
+        # source is created under its filename there, and renamed afterwards.
+        group_name = name if (from_file and not contract) else data_source_name
 
         dummy_data_group = {}
         dummy_data_group['Name'] = group_name
@@ -947,13 +960,29 @@ class Veneer(object):
             dummy_item['UnitsForNewTS'] = 'mm/day' if data is not None else ''
         else:
             dummy_item['UnitsForNewTS'] = units
+        if from_file and contract:
+            dummy_item['Filename'] = name
+            # Veneer ignores units for a file: they are applied below instead.
+            dummy_item['UnitsForNewTS'] = ''
         dummy_data_group['Items'] = [dummy_item]
 
+        response = None
         try:
-            self.post_json('/dataSources', data=dummy_data_group)
+            _, response = self.post_json('/dataSources', data=dummy_data_group)
         except VeneerHTTPError as e:
-            if not self._create_data_source_on_ui_thread(dummy_data_group, e):
+            if contract or not self._create_data_source_on_ui_thread(
+                    dummy_data_group, e, version):
                 raise
+
+        if contract:
+            # The server applies Source's naming rule itself, and its name is the one kept.
+            given = (response or {}).get('Name') or data_source_name
+            if given != data_source_name:
+                logger.warning('Data source %r is named %r, as Source would rename it.',
+                               data_source_name, given)
+            if from_file and units is not None:
+                self.model.set_data_source_units(given, units)
+            return given
 
         if not from_file:
             return data_source_name
@@ -983,7 +1012,12 @@ class Veneer(object):
 
         return given
 
-    def _create_data_source_on_ui_thread(self, data_group, error):
+    def _protocol_version(self):
+        '''This Veneer's protocol version (v.status()['Version']): 0 for one too old to
+        report it.'''
+        return int(self.status().get('Version') or 0)
+
+    def _create_data_source_on_ui_thread(self, data_group, error, version):
         '''
         Create a data source whose POST failed, if Source's interface is why.
 
@@ -994,14 +1028,13 @@ class Veneer(object):
         so a fixed Veneer reaches those users slowly; until then, this does the same
         work in a server side script on Source's UI thread.
 
-        Only for a 400, from a Veneer older than DATA_SOURCE_CONTRACT, with "Allow
-        Scripts" on and Source's interface open. Anything else is left to raise.
+        Only for a 400, from a Veneer older than DATA_SOURCE_CONTRACT (`version` is
+        its protocol version), with "Allow Scripts" on and Source's interface open.
+        Anything else is left to raise.
 
         Returns True if the data source was created.
         '''
-        if error.status_code != 400:
-            return False
-        if int(self.status().get('Version') or 0) >= DATA_SOURCE_CONTRACT:
+        if error.status_code != 400 or version >= DATA_SOURCE_CONTRACT:
             return False
         try:
             created = self.model._create_data_source_on_ui_thread(data_group)

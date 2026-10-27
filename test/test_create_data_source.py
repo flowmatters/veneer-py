@@ -236,6 +236,8 @@ class FakeSource:
 
     def _create(self, body):
         self.posted.append(body)
+        if self.version >= 20261027:
+            return self._create_by_contract(body)
         name = body['Name']
         [item] = body['Items']
         if self.ui is not None and self.version < 20261027:
@@ -264,6 +266,40 @@ class FakeSource:
                 new.Name = self.rule(name)
             self.dm.DataGroups.append(new)
         return Response(200)
+
+    def _create_by_contract(self, body):
+        """POST /dataSources from Veneer protocol 20261027: a file item loads from its
+        Filename, the server applies RestrictName itself and replaces a data source of
+        that name, and the response is the new data source's summary."""
+        name = body.get('Name') or ''
+        if not name.strip():
+            return Response(400, {'Message': 'A data source needs a Name.',
+                                  'StackTrace': 'at CreateDataSource'})
+        [item] = body['Items']
+        kept = self.rule(name)
+        if item.get('DetailsAsCSV') is None:
+            filename = item.get('Filename') or name
+            if filename not in self.files:
+                return Response(500, {'Message': 'Could not find file ' + filename,
+                                      'StackTrace': 'at LoadFromFile'})
+            columns = self.files[filename]
+        else:
+            columns, filename = item['DetailsAsCSV'].splitlines()[0].split(',')[1:], None
+        new = Group(kept, columns, filename, item['ReloadOnRun'])
+        for old in [g for g in self.dm.DataGroups if g.Name in (kept, name)]:
+            for detail in old.DataDetails:
+                dest = [d for d in new.DataDetails if d.Name == detail.Name]
+                if dest:
+                    dest[0].Usages.extend(detail.Usages)
+            self.dm.DataGroups.remove(old)
+        self.dm.DataGroups.append(new)
+        return Response(200, {
+            'Name': kept, 'id': '/dataSources/' + kept, 'FullName': '/' + kept,
+            'Path': '/', 'ReloadMatchesOnName': False,
+            'Items': [{'Name': item['Name'], 'InputSets': item['InputSets'],
+                       'Filename': filename, 'FilenameIsRelative': False,
+                       'ReloadOnRun': item['ReloadOnRun'], 'UseName': False,
+                       'Details': [{'Name': c, 'TimeSeries': {}} for c in columns]}]})
 
     def _run(self, script):
         self.scripts_run.append(script)
@@ -598,3 +634,113 @@ def test_other_failures_are_not_worked_around(dotnet):
         connect(source).create_data_source('flow', frame('A'))
     assert raised.value.status_code == 500
     assert source.scripts_run == []
+
+
+# A Veneer with the data source contract (protocol 20261027 and later): the file
+# loads from Items[0].Filename, so the data source is named in the POST itself, by a
+# server that applies Source's naming rule and returns the name it kept. No script.
+
+def contract(**kwargs):
+    kwargs.setdefault('version', 20261027)
+    return FakeSource(**kwargs)
+
+
+@pytest.mark.parametrize('gui', [True, False])
+def test_a_file_data_source_is_named_in_the_post_with_no_script(dotnet, gui):
+    source = contract(gui=gui, scripts=False)
+    assert connect(source).create_data_source(PATH, reload_on_run=True) == 'fire_tss'
+
+    [posted] = source.posted
+    assert posted['Name'] == 'fire_tss'
+    assert posted['Items'][0]['Filename'] == PATH
+    assert posted['Items'][0]['ReloadOnRun'] is True
+    assert source.names == ['fire_tss']
+    assert source.group('fire_tss').filename == PATH
+    assert source.scripts_run == []
+
+
+def test_the_name_given_is_the_one_the_server_kept(dotnet, caplog):
+    def other_rule(name):
+        return restrict_name(name).replace('-', '_')
+    source = contract(rule=other_rule)
+    v = connect(source)
+    assert v.create_data_source(PATH, data_source_name='fire-tss') == 'fire_tss'
+    assert source.names == ['fire_tss']
+    assert "'fire_tss'" in caplog.text
+
+
+def test_a_name_with_reserved_characters_is_kept_as_source_keeps_it(dotnet, caplog):
+    source = contract()
+    assert connect(source).create_data_source(PATH, data_source_name='fire.tss') == 'fire_tss'
+    assert "'fire.tss'" in caplog.text and "'fire_tss'" in caplog.text
+
+
+def test_units_for_a_file_are_applied_to_the_name_the_server_kept(dotnet):
+    """The server still ignores units for a file item."""
+    source = contract()
+    assert connect(source).create_data_source(PATH, units='kg/d') == 'fire_tss'
+    assert source.group('fire_tss').units() == ['unit:kg/d', 'unit:kg/d']
+    [posted] = source.posted
+    assert posted['Items'][0]['UnitsForNewTS'] == ''
+
+
+def test_a_dataframe_data_source_is_posted_as_before(dotnet):
+    source = contract(scripts=False)
+    assert connect(source).create_data_source('fire.tss', frame('A'), units='kg/d') \
+        == 'fire_tss'
+    [posted] = source.posted
+    item = posted['Items'][0]
+    assert item['UnitsForNewTS'] == 'kg/d'
+    assert item['DetailsAsCSV'].startswith(',A')
+    assert 'Filename' not in item
+    assert source.names == ['fire_tss']
+
+
+def test_the_server_replaces_one_of_the_same_name_keeping_assignments(dotnet):
+    source = contract(scripts=False)
+    old = Group('fire_tss', ['A', 'B'])
+    old.DataDetails[0].Usages.append('usage of A')
+    source.dm.DataGroups.extend([old, Group('other', ['X'])])
+
+    assert connect(source).create_data_source(PATH) == 'fire_tss'
+
+    assert sorted(source.names) == ['fire_tss', 'other']
+    assert source.group('fire_tss').usages() == {'A': ['usage of A']}
+
+
+def test_a_file_the_server_cannot_load_is_reported_with_its_message(dotnet):
+    from veneer.general import VeneerHTTPError
+    source = contract(files={})
+    with pytest.raises(VeneerHTTPError) as raised:
+        connect(source).create_data_source(PATH)
+    assert raised.value.status_code == 500
+    assert 'Could not find file' in str(raised.value)
+    assert 'at LoadFromFile' in str(raised.value)
+    assert source.names == []
+
+
+def test_a_contract_server_is_not_worked_around_in_its_interface(dotnet):
+    """It makes its changes on Source's UI thread itself."""
+    from veneer.general import VeneerHTTPError
+    source = contract(ui=FakeForm())
+    source._create_by_contract = lambda body: Response(400, {'Message': 'nope'})
+    with pytest.raises(VeneerHTTPError):
+        connect(source).create_data_source('flow', frame('A'))
+    assert source.scripts_run == []
+
+
+def test_an_older_server_is_never_sent_a_filename(dotnet):
+    """It would ignore Filename and load from Name: so Name is the path."""
+    source = FakeSource()
+    connect(source).create_data_source(PATH, data_source_name='other_name')
+    [posted] = source.posted
+    assert posted['Name'] == PATH
+    assert 'Filename' not in posted['Items'][0]
+
+
+def test_a_veneer_that_reports_no_version_is_treated_as_older(dotnet):
+    source = FakeSource()
+    source.get = lambda url: (Response(200, {}) if url.endswith(':9876/')
+                              else FakeSource.get(source, url))
+    assert connect(source).create_data_source(PATH) == 'fire_tss'
+    assert source.posted[0]['Name'] == PATH
