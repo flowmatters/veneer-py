@@ -33,6 +33,10 @@ Otherwise:
 
 Keep the path to the unzipped Veneer folder. Section 4 needs it.
 
+> **If your Source was installed by MSI and already bundles Veneer, step 2 won't work.** The Source GUI always loads the bundled copy from its own `Plugins\CommunityPlugins\`, even if you select a different `FlowMatters.Source.Veneer.dll` in the Plugin Manager. To use a newer release or your own build with that install, close Source and copy **all** the new Veneer files over the existing copy. Depending on the Source version, that copy is directly in `CommunityPlugins`, in a subfolder such as `CommunityPlugins\Veneer`, or in both. Copying into `C:\Program Files` needs administrator rights. Back up the old files first if you might want them back. The [Veneer README](https://github.com/flowmatters/Veneer#updating-a-bundled-veneer) has the steps.
+>
+> This affects the GUI only. A command line built in section 4 uses whichever Veneer folder you give it. If you use `command_line_for`, which finds Veneer through the running GUI, replace the bundled copy first so the GUI and the command line run the same Veneer.
+
 ## 2. Install veneer-py
 
 You need Python 3. Any distribution works: Anaconda, Miniforge, python.org Python in a virtual environment, and so on. veneer-py depends on `requests`, `pandas`, `numpy`, `geopandas` and `psutil`. On Windows, `geopandas` is usually easiest to get through conda (`conda install -c conda-forge geopandas`).
