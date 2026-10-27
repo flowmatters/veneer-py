@@ -810,6 +810,14 @@ class VeneerIronPython(object):
         data_source: name of the data group. For file-based data sources this is the
                      filename the group was created from.
 
+                     A group named exactly this is used if there is one. Otherwise,
+                     the most recent group named as Source's DataManager.RestrictName
+                     would name it: with its interface open, Source renames the data
+                     sources it shows that way, replacing '.', '@', '>', ',' and
+                     backslash with underscores - so a group created from a Windows
+                     file path loses its backslashes and the full stop before its
+                     extension.
+
         units: a single unit or a comma separated string of units, applied to the
                items of the group in order (cycling if there are more items than units).
                See predefined_units() for valid identifiers.
@@ -826,8 +834,19 @@ class VeneerIronPython(object):
         script += "clr.AddReference('TIME')\n"
         script += 'from TIME.Core import Unit\n'
         script += 'units = [Unit.parse(s.strip()) for s in {0}.split(",")]\n'.format(json.dumps(units))
-        script += 'grp = scenario.Network.DataManager.DataGroups.FirstOrDefault(lambda g: g.Name == {0})\n'.format(json.dumps(data_source))
-        script += 'assert grp is not None, "Unknown data source: " + {0}\n'.format(json.dumps(data_source))
+        script += 'name = {0}\n'.format(json.dumps(data_source))
+        script += 'groups = scenario.Network.DataManager.DataGroups\n'
+        script += 'grp = groups.FirstOrDefault(lambda g: g.Name == name)\n'
+        script += 'if grp is None:\n'
+        script += '    try:\n'
+        script += "        clr.AddReference('RiverSystem')\n"
+        script += '        from RiverSystem.DataManagement.DataManager import DataManager\n'
+        script += '        restricted = DataManager.RestrictName(name)\n'
+        script += '    except (ImportError, AttributeError):\n'
+        script += '        restricted = None\n'
+        script += '    if restricted is not None:\n'
+        script += '        grp = groups.LastOrDefault(lambda g: g.Name == restricted)\n'
+        script += 'assert grp is not None, "Unknown data source: " + name\n'
         script += 'count = 0\n'
         script += 'for isi in grp.InputSetItems:\n'
         script += '    ds = isi.DataSource\n'

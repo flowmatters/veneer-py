@@ -849,6 +849,11 @@ class Veneer(object):
             here, veneer-py applies them after creation with a server side script,
             which requires the "Allow Scripts" option in Veneer.
 
+            A data source created from a file is named after the filename. With its
+            interface open, Source then renames it, replacing the backslashes and the
+            full stop in the filename with underscores (see
+            v.model.set_data_source_units, which finds it either way).
+
             NOTE: With reload_on_run=True, Source re-reads the file before each run and
             re-derives units from the CSV column headers, so header-embedded units take
             effect on every load and override units applied via this parameter. When the
