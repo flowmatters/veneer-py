@@ -1,6 +1,7 @@
 
 from .utils import (_stringToList, _variable_safe_name,
-                    _safe_filename, deprecate_async, simplify_response, parse_iron_python_date)
+                    _safe_filename, deprecate_async, simplify_response, parse_iron_python_date,
+                    DATA_SOURCE_RESERVED_CHARACTERS)
 from .templates import *
 from .component import VeneerComponentModelActions
 
@@ -858,6 +859,60 @@ class VeneerIronPython(object):
         script += '        count += 1\n'
         script += 'result = count\n'
         return self.simplify_response(self._safe_run(script)['Response'])
+
+    def _name_file_data_source(self, filename, data_source_name):
+        '''
+        Name the data source just created from `filename` (see v.create_data_source).
+
+        Finds the most recent data source named after the filename - as given, or as
+        Source's interface renames it - and names it `data_source_name`, put through
+        Source's DataManager.RestrictName (or veneer-py's copy, where Source has none).
+
+        Any other data source already of that name is replaced, as Veneer replaces one
+        when a data source is created under an existing name: its assignments move to
+        the column of the same name in the new one, and it is removed.
+
+        Returns (name given, [columns whose assignments had no column to move to]).
+        '''
+        script = self._init_script()
+        script += 'filename = u{0}\n'.format(json.dumps(filename))
+        script += 'requested = u{0}\n'.format(json.dumps(data_source_name))
+        script += 'try:\n'
+        script += "    clr.AddReference('RiverSystem')\n"
+        script += '    from RiverSystem.DataManagement.DataManager import DataManager\n'
+        script += '    restrict = DataManager.RestrictName\n'
+        script += 'except (ImportError, AttributeError):\n'
+        script += '    def restrict(name):\n'
+        script += '        for c in u{0}:\n'.format(json.dumps(DATA_SOURCE_RESERVED_CHARACTERS))
+        script += "            name = name.replace(c, u'_')\n"
+        script += "        return name[:200].strip(u' ')\n"
+        script += 'target = restrict(requested)\n'
+        script += 'dm = scenario.Network.DataManager\n'
+        script += 'from_file = [g for g in dm.DataGroups\n'
+        script += '             if g.Name == filename or g.Name == restrict(filename)]\n'
+        script += 'if not from_file:\n'
+        script += "    raise Exception(u'No data source was created from ' + filename)\n"
+        script += '# Veneer adds the new one after any earlier ones\n'
+        script += 'grp = from_file[-1]\n'
+        script += 'replaced = [g for g in dm.DataGroups if g.Name == target and not g is grp]\n'
+        script += 'dropped = []\n'
+        script += 'for old in replaced:\n'
+        script += '    for detail in old.DataDetails:\n'
+        script += '        dest = [d for d in grp.DataDetails if d.Name == detail.Name]\n'
+        script += '        usages = list(detail.Usages)\n'
+        script += '        if dest:\n'
+        script += '            for usage in usages:\n'
+        script += '                dest[0].Usages.Add(usage)\n'
+        script += '        elif usages:\n'
+        script += '            dropped.append(detail.Name)\n'
+        script += '        detail.Usages.Clear()\n'
+        script += '    dm.RemoveGroup(old)\n'
+        script += 'grp.Name = target\n'
+        script += 'if replaced:\n'
+        script += '    dm.Refresh()\n'
+        script += 'result = [target] + dropped\n'
+        response = self.simplify_response(self._safe_run(script)['Response'])
+        return response[0], response[1:]
 
     def add_constituent(self, new_constituent):
         s = self._init_script(

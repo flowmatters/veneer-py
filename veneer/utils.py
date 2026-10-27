@@ -401,6 +401,23 @@ def _quote_string(s):
         return '"%s"'%s
     return s
 
+# Characters Source's DataManager.RestrictName replaces with '_' in a data source name.
+DATA_SOURCE_RESERVED_CHARACTERS = '.@>,\\'
+
+def restricted_data_source_name(name):
+    '''
+    The name Source keeps for a data source called `name`: a copy of Source's
+    DataManager.RestrictName, which replaces '.', '@', '>', ',' and backslash with
+    '_', cuts the name to 200 characters and strips surrounding spaces.
+
+    With its interface open, Source applies this to every data source it shows, and
+    the new name sticks; a Veneer command line does not. v.create_data_source applies
+    it up front, so a data source has the same name either way.
+    '''
+    for c in DATA_SOURCE_RESERVED_CHARACTERS:
+        name = name.replace(c, '_')
+    return name[:200].strip(' ')
+
 def simplify_response(response):
     if response is None:
         return response

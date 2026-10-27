@@ -6,10 +6,13 @@ except:
 import requests
 
 import json
+import logging
 import re
+from pathlib import PureWindowsPath
 from datetime import datetime, timedelta
 from .server_side import VeneerIronPython
-from .utils import SearchableList, _stringToList, read_veneer_csv, objdict #, deprecate_async
+from .utils import SearchableList, _stringToList, read_veneer_csv, objdict, \
+    restricted_data_source_name #, deprecate_async
 import pandas as pd
 import numpy as np
 # Source
@@ -113,6 +116,8 @@ def _describe_fault(fault, inner=False):
         lines = ['Response body:', json.dumps(fault)]
     return lines
 
+logger = logging.getLogger(__name__)
+
 def _raise_for_status(resp):
     '''
     Like requests' Response.raise_for_status, but raises VeneerHTTPError with the response body details.
@@ -122,6 +127,25 @@ def _raise_for_status(resp):
     request = getattr(resp, 'request', None)
     raise VeneerHTTPError(resp.status_code, resp.url, resp.text, reason=resp.reason,
                           method=getattr(request, 'method', None), response=resp)
+
+def _file_stem(filename):
+    """A filename without its folder or extension, whichever separators it uses:
+    Source runs on Windows, but veneer-py may not."""
+    stem = PureWindowsPath(filename).stem
+    return stem or filename
+
+def _keepable_data_source_name(name):
+    """`name` as Source keeps it for a data source, with a warning if that differs."""
+    kept = restricted_data_source_name(name)
+    if kept != name:
+        logger.warning('Data source %r is named %r, as Source would rename it.', name, kept)
+    return kept
+
+def _scripts_disabled(exc):
+    """Whether exc is Veneer refusing a server side script ("Allow Scripts" is off)."""
+    if isinstance(exc, VeneerHTTPError):
+        return exc.status_code == 403
+    return 'Script disabled' in str(exc)
 
 def _veneer_url_safe_id_string(s):
     return s.replace('#', '').replace('/', '%2F').replace(':', '')
@@ -819,12 +843,39 @@ class Veneer(object):
             [_transform_data_source_item(i) for i in result['Items']])
         return result
 
-    def create_data_source(self, name, data=None, units=None, precision=3, reload_on_run=False):
+    def create_data_source(self, name, data=None, units=None, precision=3, reload_on_run=False,
+                           data_source_name=None):
         '''
         Create a new data source (name) using a Pandas dataframe (data)
 
         If no dataframe is provided, name is interpreted as a filename, which Source
         will load directly (and reload before each run if reload_on_run=True).
+
+        Returns the name of the new data source - the one to assign from.
+
+        data_source_name: name to give the new data source. Defaults to `name` for a
+            dataframe, and to the file's stem (its name without folder or extension:
+            'C:\\inputs\\flow.csv' -> 'flow') for a file.
+
+            The name is put through Source's naming rule first (see
+            veneer.utils.restricted_data_source_name): '.', '@', '>', ',' and backslash
+            become '_', with a warning. Source's interface would otherwise rename the
+            data source that way when it showed it, so its name would depend on whether
+            Source has its interface open.
+
+            Naming a file-based data source runs a server side script, which requires
+            the "Allow Scripts" option in Veneer. Without it, the data source keeps the
+            name Source gives it - the filename, or with its interface open the filename
+            put through the rule above - and a warning says so.
+
+            Any other data source already of that name is replaced, as Veneer replaces
+            one created under an existing name: assignments from its columns move to the
+            columns of the same name in the new data source (with a warning naming any
+            that have none), and it is removed.
+
+            NOTE: Up to veneer-py 0.2.1, a file-based data source was named after the
+            filename as given (eg 'C:\\inputs\\flow.csv'), names were not put through
+            Source's rule, and this returned the HTTP response rather than the name.
 
         units: units to apply to the columns of the new data source.
 
@@ -849,11 +900,6 @@ class Veneer(object):
             here, veneer-py applies them after creation with a server side script,
             which requires the "Allow Scripts" option in Veneer.
 
-            A data source created from a file is named after the filename. With its
-            interface open, Source then renames it, replacing the backslashes and the
-            full stop in the filename with underscores (see
-            v.model.set_data_source_units, which finds it either way).
-
             NOTE: With reload_on_run=True, Source re-reads the file before each run and
             re-derives units from the CSV column headers, so header-embedded units take
             effect on every load and override units applied via this parameter. When the
@@ -862,14 +908,22 @@ class Veneer(object):
             headers is the most robust option for reloaded file-based data sources
             since the file then remains self-describing.
         '''
+        from_file = data is None
+        if data_source_name is None:
+            data_source_name = _file_stem(name) if from_file else name
+        if not from_file:
+            data_source_name = _keepable_data_source_name(data_source_name)
+        # Veneer names a file-based data source after the file it loads.
+        group_name = name if from_file else data_source_name
+
         dummy_data_group = {}
-        dummy_data_group['Name'] = name
+        dummy_data_group['Name'] = group_name
         dummy_item = {}
-        dummy_item['Name'] = 'Item for %s' % name
+        dummy_item['Name'] = 'Item for %s' % group_name
         dummy_item['InputSets'] = ['Default Input Set']
 
         dummy_detail = {}
-        dummy_detail['Name'] = 'Details for %s' % name
+        dummy_detail['Name'] = 'Details for %s' % group_name
         dummy_detail['TimeSeries'] = {}
 
         #dummy_item['Details'] = [dummy_detail]
@@ -885,12 +939,43 @@ class Veneer(object):
             dummy_item['UnitsForNewTS'] = units
         dummy_data_group['Items'] = [dummy_item]
 
-        result = self.post_json('/dataSources', data=dummy_data_group)
+        self.post_json('/dataSources', data=dummy_data_group)
 
-        if data is None and units is not None:
-            self.model.set_data_source_units(name, units)
+        if not from_file:
+            return data_source_name
 
-        return result
+        try:
+            given, dropped = self.model._name_file_data_source(name, data_source_name)
+        except Exception as e:
+            if not _scripts_disabled(e):
+                raise
+            given = self._name_given_to_file_data_source(name)
+            logger.warning(
+                'Could not name the data source loaded from %r %r: naming it needs '
+                'Veneer\'s "Allow Scripts" option. It keeps the name Source gave it: %r',
+                name, data_source_name, given)
+        else:
+            if given != data_source_name:
+                logger.warning('Data source %r is named %r, as Source would rename it.',
+                               data_source_name, given)
+            if dropped:
+                logger.warning(
+                    'Replaced data source %r. Assignments from its columns %s were dropped: '
+                    'the new data source has no columns of those names.',
+                    given, ', '.join(repr(c) for c in dropped))
+
+        if units is not None:
+            self.model.set_data_source_units(given, units)
+
+        return given
+
+    def _name_given_to_file_data_source(self, filename):
+        '''The name of the most recent data source Veneer created from `filename`, as
+        Source left it - found without a server side script.'''
+        candidates = (filename, restricted_data_source_name(filename))
+        names = [g['Name'] for g in self.retrieve_json('/dataSources')
+                 if g['Name'] in candidates]
+        return names[-1] if names else filename
 
     def delete_data_source(self, group):
         '''
