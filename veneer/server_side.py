@@ -120,6 +120,11 @@ def _transform_node_type_name(n):
     return n + 'NodeModel'
 
 
+def _unicode_literal(s):
+    '''A u"..." IronPython literal reading as `s` on IronPython 2.7 and 3.4 alike.'''
+    return 'u' + json.dumps(s)
+
+
 def scenario_rebind(scenario):
     '''
     IronPython that points the script's `scenario` variable at another
@@ -716,13 +721,22 @@ class VeneerIronPython(object):
 
     def assign_time_series(self, theThing, theValue, column=0, from_list=False, literal=True,
                            data_group=None, namespace=None,dry_run=False):
-        assignment = "H.AssignTimeSeries(scenario,%s__init__.__self__,'%s','" + \
-            data_group + "',newVal"
+        # u"..." literals, as in scenario_rebind: a plain literal would read a Windows
+        # path's backslashes as escapes on IronPython 2.7 (Source 5.x), and a quote
+        # would end it. The template is %-formatted by _generateLoop, so a '%' in the
+        # name goes in as the escape %.
+        group_literal = _unicode_literal(data_group).replace('%', '\\u0025')
+        assignment = "H.AssignTimeSeries(scenario,%s__init__.__self__,'%s'," + \
+            group_literal + ",newVal"
         post_assignment = ",%d)" % column
         theValue = [_safe_filename(fn) for fn in _stringToList(theValue)]
-        if len(theValue) == 1:
+        if literal:
+            theValue = [_unicode_literal(v) for v in theValue]
+            if not from_list and len(theValue) > 1:
+                theValue = 'tuple([%s])' % ','.join(theValue)
+        if len(theValue) == 1 and not from_list:
             theValue = theValue[0]
-        return self._assignment(theThing, theValue, namespace, literal, from_list,
+        return self._assignment(theThing, theValue, namespace, False, from_list,
                                 False, assignment, post_assignment,dry_run=dry_run)
 
     def clear_time_series(self,theThing,namespace=None):
