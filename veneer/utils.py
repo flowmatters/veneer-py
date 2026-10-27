@@ -404,6 +404,12 @@ def _quote_string(s):
 # Characters Source's DataManager.RestrictName replaces with '_' in a data source name.
 DATA_SOURCE_RESERVED_CHARACTERS = '.@>,\\'
 
+# The Veneer protocol version (v.status()['Version']) from which Veneer makes its
+# data group changes on Source's UI thread - in POST /dataSources and in its
+# AssignTimeSeries script helper - and POST /dataSources names a file data source
+# apart from its filename and returns the name Source keeps.
+DATA_SOURCE_CONTRACT = 20261027
+
 def restricted_data_source_name(name):
     '''
     The name Source keeps for a data source called `name`: a copy of Source's

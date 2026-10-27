@@ -306,8 +306,8 @@ class FakeSource:
         if not self.scripts:
             return Response(403)
         sys.modules['RiverSystem.Forms'].MainForm.Instance = self.ui
-        scope = {'scenario': SimpleNamespace(Network=SimpleNamespace(DataManager=self.dm),
-                                             fake_source=self)}
+        network = SimpleNamespace(DataManager=self.dm, Nodes=getattr(self, 'nodes', []))
+        scope = {'scenario': SimpleNamespace(Network=network, fake_source=self)}
         try:
             exec(script, scope)
         except Exception as e:
@@ -744,3 +744,94 @@ def test_a_veneer_that_reports_no_version_is_treated_as_older(dotnet):
                               else FakeSource.get(source, url))
     assert connect(source).create_data_source(PATH) == 'fire_tss'
     assert source.posted[0]['Name'] == PATH
+
+
+# assign_time_series on a Veneer older than DATA_SOURCE_CONTRACT. Veneer's
+# ScriptHelpers.AssignTimeSeries adds a data group, or a column to one, when the one
+# named is missing - a change Source's interface refuses off its UI thread.
+
+class FakeScriptHelpers:
+    """FlowMatters.Source.Veneer.RemoteScripting.ScriptHelpers.AssignTimeSeries."""
+
+    @staticmethod
+    def AssignTimeSeries(scenario, target, element, data_group, item, column=0):
+        dm = scenario.Network.DataManager
+        group = dm.DataGroups.FirstOrDefault(lambda g: g.Name == data_group)
+        if group is None:
+            group = Group(data_group)
+            dm.add(group)
+        detail = next((d for d in group.DataDetails if d.Name == item), None)
+        if detail is None:
+            if item == 'missing':
+                raise Exception('Could not load ' + item)
+            dm._check_thread()
+            detail = Detail(item)
+            group.DataDetails.append(detail)
+        detail.Usages.Add('%s.%s' % (target.name, element))
+
+
+@pytest.fixture
+def helpers(dotnet, monkeypatch):
+    module = sys.modules['FlowMatters.Source.Veneer.RemoteScripting.ScriptHelpers']
+    monkeypatch.setattr(module, 'AssignTimeSeries', FakeScriptHelpers.AssignTimeSeries,
+                        raising=False)
+    return module
+
+
+def with_nodes(source, *names):
+    source.nodes = [SimpleNamespace(name=n, NodeModel=SimpleNamespace(Flow=0.0))
+                    for n in names]
+    return source
+
+
+def assign(source, column, data_group):
+    return connect(source).model.assign_time_series(
+        'scenario.Network.Nodes.*NodeModel.Flow', column, data_group=data_group)
+
+
+def test_an_unfixed_interface_assigns_from_a_new_data_source_on_its_ui_thread(helpers):
+    source = with_nodes(unfixed_gui(), 'Inflow 1', 'Inflow 2')
+    assert assign(source, 'A', 'flows')
+    assert source.group('flows').usages() == {
+        'A': ['Inflow 1.NodeModel.Flow', 'Inflow 2.NodeModel.Flow']}
+    assert source.ui.invoked
+
+
+def test_an_unfixed_interface_assigns_from_an_existing_column(helpers):
+    source = with_nodes(unfixed_gui(), 'Inflow 1')
+    source.dm.DataGroups.append(Group('flows', ['A']))
+    assert assign(source, 'A', 'flows')
+    assert source.group('flows').usages() == {'A': ['Inflow 1.NodeModel.Flow']}
+
+
+def test_a_failed_assignment_on_the_ui_thread_is_raised(helpers):
+    source = with_nodes(unfixed_gui(), 'Inflow 1')
+    source.dm.DataGroups.append(Group('flows', ['A']))
+    with pytest.raises(Exception, match='Could not load missing'):
+        assign(source, 'missing', 'flows')
+
+
+def test_an_older_command_line_assigns_directly(helpers):
+    source = with_nodes(FakeSource(gui=False), 'Inflow 1')
+    assert assign(source, 'A', 'flows')
+    assert source.group('flows').usages() == {'A': ['Inflow 1.NodeModel.Flow']}
+
+
+def test_a_contract_veneer_is_left_to_marshal_for_itself(helpers):
+    """From DATA_SOURCE_CONTRACT, Veneer's own AssignTimeSeries uses the UI thread."""
+    source = with_nodes(contract(ui=FakeForm()), 'Inflow 1')
+    source.dm.ui = None   # the server marshals: the fake need not check
+    assert assign(source, 'A', 'flows')
+    assert source.ui.invoked == 0
+    assert '_on_ui_thread' not in source.scripts_run[-1]
+
+
+def test_the_loop_run_on_the_ui_thread_imports_linq_extensions_itself(helpers):
+    """In IronPython, clr.ImportExtensions holds only for the code that called it, so
+    the loop - run by exec - needs its own for the accessors' .Where(...) (seen on
+    Source 6.10: "'List[INode]' object has no attribute 'Where'")."""
+    import re
+    source = with_nodes(unfixed_gui(), 'Inflow 1')
+    assign(source, 'A', 'flows')
+    [loop] = re.findall(r'^_assignments = (u".*")$', source.scripts_run[-1], re.M)
+    assert eval(loop[1:]).startswith('clr.ImportExtensions(System.Linq)\n')

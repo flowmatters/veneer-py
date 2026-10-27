@@ -1,7 +1,7 @@
 
 from .utils import (_stringToList, _variable_safe_name,
                     _safe_filename, deprecate_async, simplify_response, parse_iron_python_date,
-                    DATA_SOURCE_RESERVED_CHARACTERS)
+                    DATA_SOURCE_RESERVED_CHARACTERS, DATA_SOURCE_CONTRACT)
 from .templates import *
 from .component import VeneerComponentModelActions
 
@@ -691,7 +691,7 @@ class VeneerIronPython(object):
     def _assignment(self, theThing, theValue, namespace=None, literal=False,
                     fromList=False, instantiate=False,
                     assignment="", post_assignment="",
-                    print_script=False, dry_run=False):
+                    print_script=False, dry_run=False, ui_thread=False):
         def convert_value(val):
             if hasattr(val,'year') and hasattr(val,'month') and hasattr(val,'day'):
                 return "System.DateTime(%d,%d,%d)" % (val.year,val.month,val.day)
@@ -726,7 +726,19 @@ class VeneerIronPython(object):
             innerLoop += 'if len(newVal)==0: newVal = origNewVal[:]\n'
         else:
             innerLoop += val_transform + post_assignment
-        script += self._generateLoop(theThing, innerLoop)
+        loop = self._generateLoop(theThing, innerLoop)
+        if ui_thread:
+            # The loop, run on Source's UI thread when it has its interface open. It
+            # imports the LINQ extensions again: clr.ImportExtensions holds only for the
+            # code that calls it, and exec runs the loop as code of its own.
+            script += UI_THREAD_HELPERS
+            script += '_assignments = %s\n' % _unicode_literal(
+                'clr.ImportExtensions(System.Linq)\n' + loop)
+            script += 'def _assign():\n'
+            script += '    exec(_assignments, globals())\n'
+            script += '_on_ui_thread(_assign)\n'
+        else:
+            script += loop
         script += 'result = have_succeeded\n'
 #       return script
 #        return None
@@ -760,6 +772,13 @@ class VeneerIronPython(object):
 
     def assign_time_series(self, theThing, theValue, column=0, from_list=False, literal=True,
                            data_group=None, namespace=None,dry_run=False):
+        # Veneer's AssignTimeSeries adds the data group, or a column to it, when the one
+        # named is missing. With Source's interface open, a Veneer older than
+        # DATA_SOURCE_CONTRACT does that off Source's UI thread, which Source 6.10
+        # refuses ("The calling thread must be STA"), so against such a Veneer the
+        # assignments run on the UI thread (see UI_THREAD_HELPERS). A newer Veneer
+        # marshals for itself, and a command line has no UI thread to use.
+        ui_thread = not dry_run and self._older_than_data_source_contract()
         # u"..." literals, as in scenario_rebind: a plain literal would read a Windows
         # path's backslashes as escapes on IronPython 2.7 (Source 5.x), and a quote
         # would end it. The template is %-formatted by _generateLoop, so a '%' in the
@@ -776,7 +795,14 @@ class VeneerIronPython(object):
         if len(theValue) == 1 and not from_list:
             theValue = theValue[0]
         return self._assignment(theThing, theValue, namespace, False, from_list,
-                                False, assignment, post_assignment,dry_run=dry_run)
+                                False, assignment, post_assignment,dry_run=dry_run,
+                                ui_thread=ui_thread)
+
+    def _older_than_data_source_contract(self):
+        '''Whether the Veneer behind this is older than DATA_SOURCE_CONTRACT. False for
+        one that cannot say (no protocol version to ask for).'''
+        version = getattr(self._veneer, '_protocol_version', None)
+        return version is not None and version() < DATA_SOURCE_CONTRACT
 
     def clear_time_series(self,theThing,namespace=None):
         return self._assignment(theThing,None,namespace,False,False,False,CLEAR_TIMESERIES_LOOP)

@@ -12,7 +12,7 @@ from pathlib import PureWindowsPath
 from datetime import datetime, timedelta
 from .server_side import VeneerIronPython
 from .utils import SearchableList, _stringToList, read_veneer_csv, objdict, \
-    restricted_data_source_name #, deprecate_async
+    restricted_data_source_name, DATA_SOURCE_CONTRACT #, deprecate_async
 import pandas as pd
 import numpy as np
 # Source
@@ -140,11 +140,6 @@ def _keepable_data_source_name(name):
     if kept != name:
         logger.warning('Data source %r is named %r, as Source would rename it.', name, kept)
     return kept
-
-# The Veneer protocol version (v.status()['Version']) from which POST /dataSources
-# makes its data group changes on Source's UI thread, names a file data source apart
-# from its filename, and returns the name Source keeps.
-DATA_SOURCE_CONTRACT = 20261027
 
 def _scripts_disabled(exc):
     """Whether exc is Veneer refusing a server side script ("Allow Scripts" is off)."""
