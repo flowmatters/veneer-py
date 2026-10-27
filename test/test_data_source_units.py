@@ -4,7 +4,10 @@ v.create_data_source applies to a file-based data source.
 The generated script is run in CPython against a fake data manager, with the .NET
 pieces it imports (clr, TIME.Core.Unit and RiverSystem's DataManager) stood in for.
 """
+import ast
+import io
 import sys
+import tokenize
 from types import ModuleType, SimpleNamespace
 
 import pytest
@@ -47,11 +50,13 @@ class FakeModel(VeneerIronPython):
 
     def __init__(self, groups):
         self.groups = Groups(groups)
+        self.scripts = []
 
     def _init_script(self, namespace=None):
         return 'import clr\n'
 
     def run_script(self, script, run_async=False, init=False):
+        self.scripts.append(script)
         scope = {'scenario': SimpleNamespace(
             Network=SimpleNamespace(DataManager=SimpleNamespace(DataGroups=self.groups)))}
         try:
@@ -133,3 +138,47 @@ def test_without_restrict_name_only_the_exact_name_is_found(dotnet):
 def test_an_unknown_data_source_is_an_error(dotnet):
     with pytest.raises(Exception, match='Unknown data source: missing'):
         FakeModel([group('flow')]).set_data_source_units('missing', 'ML/d')
+
+
+def literals_holding(script, value):
+    """The source text of each string literal in `script` whose value is `value`."""
+    return [tok.string for tok in tokenize.generate_tokens(io.StringIO(script).readline)
+            if tok.type == tokenize.STRING and ast.literal_eval(tok.string) == value]
+
+
+# Source 5.x embeds IronPython 2.7, which reads a backslash-u escape in a plain
+# "..." literal as those six characters; Source 6.x embeds IronPython 3.4. A u"..."
+# literal reads the same on both (see scenario_rebind). These run under CPython 3,
+# which reads either kind correctly, so they check the literals' form as well as
+# running the script.
+
+NON_ASCII_PATH = 'C:\\models\\Caf\u00e9\\flow.csv'
+
+
+def test_a_non_ascii_name_reaches_source_as_a_unicode_literal(dotnet):
+    model = FakeModel([group(NON_ASCII_PATH)])
+    model.set_data_source_units(NON_ASCII_PATH, 'ML/d')
+    [script] = model.scripts
+    literals = literals_holding(script, NON_ASCII_PATH)
+    assert literals and all(lit.startswith('u') for lit in literals)
+
+
+def test_non_ascii_units_reach_source_as_a_unicode_literal(dotnet):
+    units = 'm\u00b3/s'
+    model = FakeModel([group('flow')])
+    model.set_data_source_units('flow', units)
+    [script] = model.scripts
+    literals = literals_holding(script, units)
+    assert literals and all(lit.startswith('u') for lit in literals)
+
+
+def test_a_non_ascii_name_is_found(dotnet):
+    flow = group(NON_ASCII_PATH)
+    FakeModel([flow]).set_data_source_units(NON_ASCII_PATH, 'm\u00b3/s')
+    assert units_of(flow) == ['unit:m\u00b3/s']
+
+
+def test_a_renamed_non_ascii_name_is_found(dotnet):
+    renamed = group(restrict_name(NON_ASCII_PATH))
+    FakeModel([renamed]).set_data_source_units(NON_ASCII_PATH, 'ML/d')
+    assert units_of(renamed) == ['unit:ML/d']

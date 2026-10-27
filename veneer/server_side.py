@@ -833,8 +833,10 @@ class VeneerIronPython(object):
         script = self._init_script()
         script += "clr.AddReference('TIME')\n"
         script += 'from TIME.Core import Unit\n'
-        script += 'units = [Unit.parse(s.strip()) for s in {0}.split(",")]\n'.format(json.dumps(units))
-        script += 'name = {0}\n'.format(json.dumps(data_source))
+        # u"..." literals, as in scenario_rebind: IronPython 2.7 (Source 5.x) reads the
+        # \uXXXX escapes json.dumps writes for non-ASCII only in a unicode literal.
+        script += 'units = [Unit.parse(s.strip()) for s in u{0}.split(",")]\n'.format(json.dumps(units))
+        script += 'name = u{0}\n'.format(json.dumps(data_source))
         script += 'groups = scenario.Network.DataManager.DataGroups\n'
         script += 'grp = groups.FirstOrDefault(lambda g: g.Name == name)\n'
         script += 'if grp is None:\n'
