@@ -650,7 +650,8 @@ class VeneerIronPython(object):
         if input_set is None:
             input_set = 'None'
         else:
-            input_set = "'%s'" % input_set
+            # The list query's loop body is %-formatted, so a % in the name is escaped.
+            input_set = _unicode_literal(str(input_set)).replace('%', '\\u0025')
 
         if listQuery:
             script += 'result = []\n'
@@ -705,10 +706,10 @@ class VeneerIronPython(object):
             return val
         val_transform = '()' if instantiate else ''
         if literal and isinstance(theValue, str):
-            theValue = "'" + theValue + "'"
+            theValue = _unicode_literal(theValue)
         if fromList:
             if literal:
-                theValue = [("'" + v + "'") if isinstance(v, str)
+                theValue = [_unicode_literal(v) if isinstance(v, str)
                             else v for v in theValue]
             theValue = '[' + (','.join([str(convert_value(s)) for s in theValue])) + ']'
         elif type(theValue) == list:
@@ -2523,7 +2524,7 @@ class VeneerFunctionActions():
             values = _stringToList(values)
             fromList=True
             option = 'ResultUnit'
-            values = [f'Unit.parse("{u}")' for u in values]
+            values = [f'Unit.parse({_unicode_literal(str(u))})' for u in values]
 
         accessor = self._accessor(option, functions)
         ns = 'RiverSystem.Management.ExpressionBuilder.TimeOfEvaluation as TimeOfEvaluation'
@@ -2632,11 +2633,11 @@ class VeneerSimulationActions():
         return combined.drop_duplicates(subset=['Category', 'Name'], keep='last')
 
     def configure_assurance_rule(self, level='Off', rule=None, category=None):
-        level = '"%s"' % level
+        level = _unicode_literal(str(level))
         if rule is not None:
-            rule = '"%s"' % rule
+            rule = _unicode_literal(str(rule))
         if category is not None:
-            category = '"%s"' % category
+            category = _unicode_literal(str(category))
         script = self._ironpy._init_script(
         ) + 'H.ConfigureAssuranceRule(scenario,%s,%s,%s)' % (level, rule, category)
         return self._ironpy.run_script(script)

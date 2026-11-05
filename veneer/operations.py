@@ -1,6 +1,8 @@
 import pandas as pd
 import numpy as np
 
+from .server_side import _unicode_literal
+
 SERIALISE_TS='''
 def serialise_ts(ts):
     dates = [ts.timeForItem(i) for i in range(ts.Count)]
@@ -176,10 +178,12 @@ class VeneerOperationsActions(object):
             secondary = col[2]
             if secondary=='-':
                 secondary = None
+                secondary_literal = 'None'
             else:
-                secondary = f"'{secondary}'"
+                secondary_literal = _unicode_literal(str(secondary))
             # ignore units, assume matching
-            script += f"ts = get_override_time_series('{location}','{variable}',{secondary})\n"
+            script += (f"ts = get_override_time_series({_unicode_literal(str(location))},"
+                       f"{_unicode_literal(str(variable))},{secondary_literal})\n")
             series = overrides[col].dropna()
             for ix, val in series.items():
                 # Check for NaT or similar, which can't be serialised to .NET, and raise an error if found
