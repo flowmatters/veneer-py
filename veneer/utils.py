@@ -1,4 +1,5 @@
 import pandas as pd
+import json
 import re
 import inspect
 import warnings
@@ -261,6 +262,11 @@ class SearchableList(object):
         return pd.DataFrame(self._list)
 
 
+def _unicode_literal(s):
+    '''A u"..." IronPython literal reading as `s` on IronPython 2.7 and 3.4 alike.'''
+    return 'u' + json.dumps(s)
+
+
 class DeferredCall(object):
     def __init__(self, parameter, delimiter):
         if parameter:
@@ -300,7 +306,8 @@ class DeferredCall(object):
 
     def to_arg(self, val):
         if isinstance(val, str) and not self.is_cal_param(val):
-            return "'%s'" % val
+            # A PEST template is %-formatted after its instructions are added.
+            return _unicode_literal(val).replace('%', '\\u0025')
         return val
 
     def argstring(self):

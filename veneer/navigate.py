@@ -5,6 +5,8 @@ v = veneer.Veneer()
 scenario = Queryable(v)
 scenario.Name = 'New Scenario Name'
 '''
+from .utils import _unicode_literal
+
 
 class Queryable(object):
     def __init__(self,v,path='scenario',namespace=None,ironpy=None):
@@ -30,13 +32,7 @@ class Queryable(object):
         v = maybe_string
         if not isinstance(v,str):
             return v
-        if not "'" in v:
-            return "'%s'"%v
-        if not '"' in v:
-            return '"%s"'%v
-
-        v = v.replace('"','\\"')
-        return '"%s"'%v
+        return _unicode_literal(v)
 
     def _child_idx_(self,ix):
         return Queryable(self._v,'%s[%s]'%(self._path,str(ix)),namespace=self._ns,ironpy=self._ironpy)

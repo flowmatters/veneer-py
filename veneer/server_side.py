@@ -1,6 +1,6 @@
 
 from .utils import (_stringToList, _variable_safe_name,
-                    _safe_filename, deprecate_async, simplify_response, parse_iron_python_date,
+                    _safe_filename, _unicode_literal, deprecate_async, simplify_response, parse_iron_python_date,
                     DATA_SOURCE_RESERVED_CHARACTERS, DATA_SOURCE_CONTRACT)
 from .templates import *
 from .component import VeneerComponentModelActions
@@ -118,11 +118,6 @@ def _transform_node_type_name(n):
     if n in ['InjectedFlow','RegulatedEffluentPartitioner']:
         return n
     return n + 'NodeModel'
-
-
-def _unicode_literal(s):
-    '''A u"..." IronPython literal reading as `s` on IronPython 2.7 and 3.4 alike.'''
-    return 'u' + json.dumps(s)
 
 
 # How long a script waits for Source's interface to make a change on its own thread.
@@ -790,7 +785,7 @@ class VeneerIronPython(object):
         # u"..." literals, as in scenario_rebind: a plain literal would read a Windows
         # path's backslashes as escapes on IronPython 2.7 (Source 5.x), and a quote
         # would end it. The template is %-formatted by _generateLoop, so a '%' in the
-        # name goes in as the escape %.
+        # name goes in as the escape \u0025.
         group_literal = _unicode_literal(data_group).replace('%', '\\u0025')
         assignment = "H.AssignTimeSeries(scenario,%s__init__.__self__,'%s'," + \
             group_literal + ",newVal"
@@ -1143,7 +1138,7 @@ class VeneerIronPython(object):
                            the caller intends the project to adopt the new output file.
         '''
         if fn:
-            fn = "'%s'" % os.path.abspath(fn).replace('\\', '\\\\')
+            fn = _unicode_literal(os.path.abspath(fn))
         else:
             fn = 'ph.ProjectMetaStructure.OutputFile'
         if preserve_current:
@@ -2599,7 +2594,7 @@ class VeneerSimulationActions():
 
         New input sets can be created using v.create_input_set(name, configuration)
         '''
-        script = self._ironpy._init_script()+SET_INPUT_SET_SCRIPT%name
+        script = self._ironpy._init_script()+SET_INPUT_SET_SCRIPT%_unicode_literal(str(name))
         return self._ironpy._safe_run(script)
 
     def current_input_set(self):
