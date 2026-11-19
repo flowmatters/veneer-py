@@ -8,6 +8,8 @@ from .general import Veneer
 import os
 import tempfile
 import shutil
+import threading
+from concurrent.futures import CancelledError  # noqa: F401  (part of this module's API)
 from functools import partial
 import logging
 from dataclasses import dataclass, asdict
@@ -329,6 +331,51 @@ class ClusterVeneerClient(object):
     def __dir__(self):
         return self._dummy_v.__dir__()
 
+class JobBatch(object):
+    '''One batch of cluster jobs, submitted together, that can be cancelled and drained.
+
+    Returned by VeneerCluster.submit_jobs. `futures` are the per-job futures in
+    submission order. done()/result() behave as the aggregate future
+    run_jobs(sync=False) has always returned: done() is True once every job is done
+    OR one has raised (fail-fast), and result() returns the results in submission
+    order, or re-raises the first job exception unchanged.
+    '''
+
+    def __init__(self, cluster, futures, aggregate):
+        self._cluster = cluster
+        self.futures = list(futures)
+        self._aggregate = aggregate
+        self._cancelled = threading.Event()
+        self._dask_read = None      # drain's in-flight Dask read thread, if any
+
+    def done(self):
+        return self._aggregate is None or self._aggregate.done()
+
+    def result(self):
+        '''The results, in submission order. Raises CancelledError once cancelled.'''
+        if self._cancelled.is_set():
+            raise CancelledError()
+        if self._aggregate is None:
+            return []
+        return self._aggregate.result()
+
+    def cancel(self):
+        '''Cancel every job not yet finished. Queued jobs never start.
+
+        The cancelled flag is set FIRST, because the progress watcher checks it
+        before every report. Idempotent. A job already executing runs until its
+        function returns: Dask cannot interrupt it. drain() waits for that.
+        '''
+        self._cancelled.set()
+        targets = self.futures + ([self._aggregate] if self._aggregate is not None else [])
+        if targets:
+            # One scheduler round trip for the lot, not one per future.
+            self._cluster.dask_client.cancel(targets)
+
+    def cancelled(self):
+        return self._cancelled.is_set()
+
+
 class VeneerCluster(object):
     def __init__(self,project_file=None,veneer_exe=None,n_workers=None,debug=False,remote=False,
           script=True,overwrite_plugins=None,custom_endpoints=None,additional_plugins=None,
@@ -646,7 +693,10 @@ class VeneerCluster(object):
         '''Run a set of jobs on the cluster.
 
         jobs: list of dask.delayed jobs (wrapped via cluster.wrap or otherwise).
-        sync: True (default) → block and return results; False → return Future.
+        sync: True (default) → block and return results; False → return a
+                 single Future for the results. Cancelling that Future does NOT
+                 cancel the jobs: use submit_jobs for a batch that can be
+                 cancelled and drained.
         partial_results: False (default) → preserve historical behaviour. If
                  every result is 'ok', unwrap to the legacy
                  [(worker_tuple, value), ...] shape. If any result has
@@ -688,35 +738,55 @@ class VeneerCluster(object):
                 return list(results)
             return _unwrap_or_raise(results)
 
-        # sync=False: dask_client.compute returns list[Future] when jobs is a
-        # list, not a single Future. Both branches below wrap it into a single
-        # Future via dask_client.submit, which deep-resolves Futures inside
-        # the args before calling — so the closure receives the resolved list.
-        future_results = self.dask_client.compute(jobs, sync=False)
+        # sync=False: a single future for the results. Cancelling it does not
+        # cancel the jobs; submit_jobs returns a batch that can.
+        if not jobs:
+            # Zero jobs: today's shapes exactly, a future of the empty result.
+            return (self.dask_client.submit(list, []) if partial_results
+                    else self.dask_client.submit(_unwrap_or_raise, []))
+        return self.submit_jobs(jobs, partial_results=partial_results,
+                                progress_callback=progress_callback)._aggregate
 
-        if watching:
-            # A daemon thread, because the caller wants the aggregate Future
-            # back immediately (run_ensemble's run_jobs_with_cancellation polls
-            # it to notice a cancellation). The thread only OBSERVES: it never
-            # touches the returned Future, so cancelling that is unaffected,
-            # and nothing joins it — a consumer that can be reached after the
-            # run has ended must say so for itself.
-            def _watch(futures):
+    def submit_jobs(self, jobs, partial_results=False, progress_callback=None):
+        '''Submit jobs without waiting, and return a JobBatch.
+
+        Unlike run_jobs(sync=False), whose single returned future does not cancel the
+        jobs, the batch can cancel every job (JobBatch.cancel) and wait, bounded, for
+        the cluster to stop working on them (JobBatch.drain).
+
+        jobs, partial_results: as for run_jobs.
+        progress_callback: as for run_jobs. With at least one job, a daemon thread
+                 reports each completion, and stops reporting once the batch is
+                 cancelled. The thread only observes: nothing joins it.
+        '''
+        total = len(jobs)
+        if not total:
+            return JobBatch(self, [], None)
+        # dask_client.compute returns list[Future] for a list of jobs. submit
+        # deep-resolves the futures inside its args before calling, so the
+        # aggregate's function receives the resolved list.
+        futures = self.dask_client.compute(jobs, sync=False)
+        aggregate = (self.dask_client.submit(list, futures) if partial_results
+                     else self.dask_client.submit(_unwrap_or_raise, futures))
+        batch = JobBatch(self, futures, aggregate)
+        if progress_callback is not None:
+            emit = _make_emitter(progress_callback)
+
+            def _watch(futs):
                 from dask.distributed import as_completed
                 completed = 0
-                for _ in as_completed(futures):
+                # as_completed also yields cancelled futures, so check the
+                # batch before every report.
+                for _ in as_completed(futs):
+                    if batch.cancelled():
+                        return
                     completed += 1
-                    emit('run-jobs', completed, total, _message(completed))
+                    emit('run-jobs', completed, total,
+                         f'Simulations complete ({completed}/{total})')
 
-            import threading
-            threading.Thread(target=_watch, args=(future_results,),
-                             daemon=True,
+            threading.Thread(target=_watch, args=(futures,), daemon=True,
                              name='veneer-run-jobs-progress').start()
-
-        if partial_results:
-            return self.dask_client.submit(list, future_results)
-
-        return self.dask_client.submit(_unwrap_or_raise, future_results)
+        return batch
 
     def shutdown(self, progress_callback=None):
         '''
