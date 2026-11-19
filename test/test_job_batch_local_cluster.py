@@ -5,6 +5,7 @@ One worker with one thread makes "queued" deterministic, and processes=False kee
 it light and needs no pickling of the test functions. Run from the repository root
 so cwd shadows any installed veneer.
 """
+import http.server
 import threading
 import time
 import unittest
@@ -14,6 +15,7 @@ import requests
 from distributed import Client, LocalCluster
 
 import veneer.cluster as cluster_mod
+from veneer.general import Veneer
 
 STARTED = []
 GATE = threading.Event()
@@ -41,6 +43,29 @@ def _key(name):
     return f'{name}-{time.time_ns()}'
 
 
+class _IdleVeneer(http.server.BaseHTTPRequestHandler):
+    '''A Veneer with no run: IsRunning false, and nothing to cancel.'''
+
+    def log_message(self, *args):
+        pass
+
+    def _answer(self, code, body=b''):
+        self.send_response(code)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self):
+        if self.path == '/runs/status':
+            self._answer(200, b'{"IsRunning": false}')
+        else:
+            self._answer(404)
+
+    def do_POST(self):
+        self._answer(404)
+
+
 class LocalClusterTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -57,6 +82,9 @@ class LocalClusterTests(unittest.TestCase):
     def setUp(self):
         STARTED.clear()
         GATE.clear()
+        # Cleanups run last-registered first: release every job, then wait until the
+        # worker is idle, so no job runs on into the next test.
+        self.addCleanup(self._idle_worker)
         self.addCleanup(GATE.set)
         name = list(self.client.scheduler_info()['workers'].values())[0]['name']
         self.cluster = cluster_mod.VeneerCluster.__new__(cluster_mod.VeneerCluster)
@@ -75,8 +103,9 @@ class LocalClusterTests(unittest.TestCase):
         wait_for(heard)
 
     def _idle_worker(self):
-        # A test must not leave a job running into the next one.
-        wait_for(lambda: not any(self.client.processing().values()))
+        worker, = self.lc.workers.values()
+        wait_for(lambda: not any(self.client.processing().values())
+                 and not worker.state.executing and not worker.state.long_running)
 
     def test_cancel_leaves_queued_jobs_unstarted(self):
         jobs = [dask.delayed(job)(i, dask_key_name=_key(f'job-{i}')) for i in range(4)]
@@ -100,11 +129,37 @@ class LocalClusterTests(unittest.TestCase):
         batch = self.cluster.submit_jobs(jobs, partial_results=True)
         wait_for(lambda: len(STARTED) == 1)
         batch.cancel()
-        time.sleep(0.2)                         # let the worker hear of the cancel
+        self._worker_heard(batch)               # the running task is now 'cancelled'
         self.assertEqual(batch._dask_busy_ports(timeout=5), {9201})
         GATE.set()
         wait_for(lambda: batch._dask_busy_ports(timeout=5) == set(), timeout=5)
         self._idle_worker()
+
+    def test_drain_holds_a_cancelled_running_job_and_answers_once_it_ends(self):
+        # The real Dask read with a Veneer that looks idle: only the Dask worker shows
+        # the cancelled job still at work.
+        server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), _IdleVeneer)
+        server.daemon_threads = True
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        port = server.server_address[1]
+        self.cluster.veneer_ports = [port]
+        self.cluster.worker_affinity = {
+            name: cluster_mod.WorkerInfo(port=port, directory='C:/example')
+            for name in self.cluster.worker_affinity}
+        self.cluster._workers = [Veneer(port, host='127.0.0.1')]
+
+        batch = self.cluster.submit_jobs(
+            [dask.delayed(job)(i, dask_key_name=_key(f'job-{i}')) for i in range(3)],
+            partial_results=True)
+        wait_for(lambda: len(STARTED) == 1)
+        batch.cancel()
+        self._worker_heard(batch)
+        self.assertEqual(batch.drain(timeout=0.5, poll=0.05), [port])
+        GATE.set()
+        self.assertEqual(batch.drain(timeout=5, poll=0.05), [])
+        self.assertEqual(len(STARTED), 1)
 
     def test_the_read_ignores_a_task_from_another_batch(self):
         other = self.cluster.submit_jobs([dask.delayed(job)(0, dask_key_name=_key('other'))],

@@ -203,6 +203,25 @@ class DrainRuleTests(unittest.TestCase):
         b = self._batch(gone, lambda: next(reads, [9102]), alive={9102})
         self.assertEqual(b.drain(timeout=0.2, poll=0.05), [9102])
 
+    def test_a_process_that_exits_during_the_drain_stops_its_port(self):
+        alive = {9101, 9102}
+
+        def gone_after_first_round(n):
+            alive.discard(9102)
+        b = self._batch(lambda p: 'idle' if p == 9101 else 'unreachable', lambda: [],
+                        alive=alive)
+        t0 = time.monotonic()
+        self.assertEqual(b.drain(timeout=5, poll=0, on_poll=gone_after_first_round), [])
+        self.assertLess(time.monotonic() - t0, 2)
+
+    def test_every_port_dead_answers_at_once_without_reading_dask(self):
+        def no_read():
+            raise AssertionError('no Dask read is needed')
+        b = self._batch(lambda p: 'unreachable', no_read)
+        counts = []
+        self.assertEqual(b.drain(timeout=5, dead_ports=self.PORTS, on_poll=counts.append), [])
+        self.assertEqual(counts, [0])
+
     def test_a_stopped_port_is_not_probed_again(self):
         seen = []
 
@@ -323,15 +342,22 @@ class ProbeVeneerTests(unittest.TestCase):
         answer, reqs = self._case(200, self.IDLE, 200)
         self.assertEqual(answer, 'busy')
 
-    def test_an_unreadable_status_is_busy(self):
+    def test_an_unreadable_status_is_busy_and_is_still_asked_to_cancel(self):
         for body in (b'not json', b'[1, 2]'):
-            answer, _ = self._case(200, body, 404)
+            answer, reqs = self._case(200, body, 404)
             self.assertEqual(answer, 'busy', body)
+            self.assertIn(('POST', '/runs/cancel'), reqs)
 
-    def test_a_404_from_cancel_is_idle_only_after_a_successful_status(self):
+    def test_an_error_status_is_busy_and_is_still_asked_to_cancel(self):
+        # A 404 from /runs/cancel is idle only after a readable status said no run.
         answer, reqs = self._case(500, b'', 404)
         self.assertEqual(answer, 'busy')
-        self.assertEqual(reqs, [('GET', '/runs/status')])
+        self.assertEqual(reqs, [('GET', '/runs/status'), ('POST', '/runs/cancel')])
+
+    def test_a_status_without_is_running_is_busy(self):
+        answer, reqs = self._case(200, b'{}', 404)
+        self.assertEqual(answer, 'busy')
+        self.assertIn(('POST', '/runs/cancel'), reqs)
 
     def test_an_old_veneer_raises_and_is_not_asked_to_cancel(self):
         port, cfg = self._serve(status_code=404, cancel_code=404)
@@ -431,6 +457,71 @@ class ProcessGoneTests(unittest.TestCase):
     def test_an_unknown_pid_or_port_is_not_gone(self):
         self.assertFalse(self._batch(None)._process_gone(9101))
         self.assertFalse(self._batch(os.getpid())._process_gone(9999))
+
+
+class CancelAgainstReportTests(unittest.TestCase):
+    def test_no_report_follows_the_return_of_cancel(self):
+        fs = [FakeFuture(1), FakeFuture(2)]
+        in_report = threading.Event()
+        release = threading.Event()
+        emitted = []
+
+        def cb(stage, current, total, message):
+            emitted.append(current)
+            if current == 1:
+                in_report.set()
+                release.wait(5)
+
+        before = set(threading.enumerate())
+        with mock.patch('dask.distributed.as_completed', side_effect=lambda futs: iter(list(futs))):
+            batch = _cluster(fs).submit_jobs(['a', 'b'], partial_results=True,
+                                             progress_callback=cb)
+            watcher, = [t for t in set(threading.enumerate()) - before
+                        if t.name == 'veneer-run-jobs-progress']
+            self.assertTrue(in_report.wait(5))
+            at_return = []
+
+            def cancel():
+                batch.cancel()
+                at_return.append(list(emitted))
+            canceller = threading.Thread(target=cancel)
+            canceller.start()
+            canceller.join(0.3)
+            self.assertTrue(canceller.is_alive())   # held until the report in progress ends
+            release.set()
+            canceller.join(5)
+            watcher.join(5)
+        self.assertFalse(canceller.is_alive())
+        self.assertFalse(watcher.is_alive())
+        # The watcher may win the lock for one more report before cancel() takes it,
+        # but nothing is reported once cancel() has returned.
+        self.assertEqual(emitted, at_return[0])
+
+    def test_a_progress_callback_may_cancel_its_own_batch(self):
+        fs = [FakeFuture(1), FakeFuture(2)]
+        holder = {}
+        emitted = []
+
+        def cb(stage, current, total, message):
+            emitted.append(current)
+            holder['batch'].cancel()
+
+        before = set(threading.enumerate())
+        gate = threading.Event()
+
+        def as_completed(futs):
+            gate.wait(5)
+            return iter(list(futs))
+        with mock.patch('dask.distributed.as_completed', side_effect=as_completed):
+            holder['batch'] = _cluster(fs).submit_jobs(['a', 'b'], partial_results=True,
+                                                       progress_callback=cb)
+            watcher, = [t for t in set(threading.enumerate()) - before
+                        if t.name == 'veneer-run-jobs-progress']
+            gate.set()
+            watcher.join(5)
+        self.assertFalse(watcher.is_alive())
+        self.assertEqual(emitted, [1])
+        self.assertTrue(holder['batch'].cancelled())
 
 
 class RunJobsSyncFalseTests(unittest.TestCase):

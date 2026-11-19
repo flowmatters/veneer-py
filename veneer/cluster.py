@@ -372,6 +372,10 @@ class JobBatch(object):
         self.futures = list(futures)
         self._aggregate = aggregate
         self._cancelled = threading.Event()
+        # Held by cancel() while it sets the flag, and by the progress watcher across
+        # its check-then-report, so no report is made once cancel() has returned.
+        # Re-entrant, so a progress callback may itself call cancel().
+        self._lock = threading.RLock()
         self._dask_read = None      # drain's in-flight Dask read thread, if any
 
     def done(self):
@@ -386,13 +390,19 @@ class JobBatch(object):
         return self._aggregate.result()
 
     def cancel(self):
-        '''Cancel every job not yet finished. Queued jobs never start.
+        '''Cancel every job not yet finished.
 
-        The cancelled flag is set FIRST, because the progress watcher checks it
-        before every report. Idempotent. A job already executing runs until its
-        function returns: Dask cannot interrupt it. drain() waits for that.
+        Jobs still queued at the scheduler never start. A job the scheduler has
+        already handed to a worker can start before the worker hears of the cancel,
+        and a job already executing runs until its function returns: Dask cannot
+        interrupt it. drain() waits for both.
+
+        The cancelled flag is set first, under the lock the progress watcher holds
+        while it reports, so once cancel() returns no further report is made.
+        Idempotent.
         '''
-        self._cancelled.set()
+        with self._lock:
+            self._cancelled.set()
         targets = self.futures + ([self._aggregate] if self._aggregate is not None else [])
         if targets:
             # One scheduler round trip for the lot, not one per future.
@@ -404,25 +414,31 @@ class JobBatch(object):
     def drain(self, timeout=120, poll=1.0, request_timeout=5, on_poll=None, dead_ports=()):
         '''Wait until the cluster has stopped working on this batch, for at most
         `timeout` seconds. Returns the ports still busy at the deadline: [] means all
-        stopped. Call it after cancel().
+        stopped. Call it after cancel(), from one thread at a time.
 
         A port is stopped when its Dask worker executes none of this batch's tasks AND
         its Veneer reports no run (/runs/status IsRunning false) and has none to cancel
         (/runs/cancel answers 404), or when it is in `dead_ports`, or its Veneer process
-        is known to have exited. Each round asks every port not yet stopped to cancel,
-        so a cancelled job that starts its next model run is stopped too. Once a port
-        is stopped it is not asked again.
+        is known to have exited (checked every round). Each round asks every port not
+        yet stopped to cancel, so a cancelled job that starts its next model run is
+        stopped too. Once a port is stopped it is not asked again.
 
         Before answering [], drain reads the Dask workers once more: a task already
         queued on a worker can start after the scheduler took the cancel and before
         the worker heard of it, and its port is then busy again.
 
-        A worker running something that is not from this batch also counts as busy,
-        and holds the drain to its deadline. Unreachable ports count as busy.
+        A Veneer running something that is not from this batch also counts as busy,
+        and holds the drain to its deadline. (The Dask read looks only for this batch's
+        tasks.) Unreachable ports count as busy.
 
-        request_timeout: the per-request timeout, capped by the time left. A Veneer
-                 probe makes two requests, so one round can overrun the deadline by
-                 at most one request_timeout.
+        If the deadline has passed before the first round (timeout <= 0), no port is
+        asked to cancel, on_poll is not called, and every port not known dead is
+        returned.
+
+        request_timeout: the per-request timeout, capped by the time left. requests
+                 applies it to the connection and to each read separately, and a
+                 Veneer probe makes two requests, so a round can overrun the deadline
+                 by a few request_timeouts at worst.
         on_poll: optional callable, given the number of busy ports after each round.
         dead_ports: ports whose Veneer is known to be gone (for example, the ports of
                  jobs that failed because their worker died).
@@ -435,11 +451,20 @@ class JobBatch(object):
         deadline = time.monotonic() + timeout
         ports = list(self._cluster.veneer_ports)
         # A port whose Veneer is gone stays stopped whatever Dask says: nothing it
-        # does can reach a model run.
-        dead = set(dead_ports) | {p for p in ports if self._process_gone(p)}
+        # does can reach a model run. Each round adds any whose process has exited.
+        dead = set(dead_ports)
         clients = dict(zip(ports, self._cluster.workers))
         stopped = {p for p in ports if p in dead}
         while True:
+            for p in ports:
+                if p not in stopped and self._process_gone(p):
+                    dead.add(p)
+                    stopped.add(p)
+            if all(p in dead for p in ports):
+                # No Veneer is left that could run anything.
+                if on_poll is not None:
+                    on_poll(0)
+                return []
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 break
@@ -472,35 +497,34 @@ class JobBatch(object):
     def _probe_veneer(self, port, client, timeout):
         '''One port's Veneer answer: 'idle', 'busy' or 'unreachable'.
 
-        Asks /runs/status, then always posts /runs/cancel, so a cancelled job that has
-        started another model run is stopped too. 'idle' needs both: no run reported
-        AND a 404 ("no active run to cancel") from /runs/cancel. A 200 or 400 from
-        /runs/cancel means a run was found, or claimed and not yet started.
+        Asks /runs/status, then posts /runs/cancel, so a cancelled job that has
+        started another model run is stopped too. The cancel is posted whatever the
+        status said, except when /runs/status is missing (404), which raises
+        VeneerTooOldForDrain. 'idle' needs both: a readable status reporting no run
+        (IsRunning false) AND a 404 ("no active run to cancel") from /runs/cancel. A
+        200 or 400 from /runs/cancel means a run was found, or claimed and not yet
+        started. An error status, an unreadable body or a missing IsRunning is busy.
 
         Requests go through the client's own session, so its proxy and trust settings
-        apply. Each of the two requests gets `timeout`, so a probe can take up to
-        twice that.
+        apply. Each of the two requests gets `timeout`.
         '''
         import requests
         try:
             r = client._session.request('GET', client.url('/runs/status'), timeout=timeout)
             if r.status_code == 404:
                 raise VeneerTooOldForDrain(port)
-            if r.status_code != 200:
-                return 'busy'
-            try:
-                body = r.json()
-            except ValueError:
-                body = None
-            if not isinstance(body, dict):
-                return 'busy'
-            running = bool(body.get('IsRunning'))
             c = client._session.request('POST', client.url('/runs/cancel'), timeout=timeout)
         except requests.RequestException:
             return 'unreachable'
-        if running:
+        if r.status_code != 200 or c.status_code != 404:
             return 'busy'
-        return 'idle' if c.status_code == 404 else 'busy'
+        try:
+            body = r.json()
+        except ValueError:
+            return 'busy'
+        if not isinstance(body, dict) or body.get('IsRunning', True) is not False:
+            return 'busy'
+        return 'idle'
 
     def _dask_busy_ports(self, timeout):
         '''The ports whose Dask worker executes one of this batch's tasks. Every port
@@ -956,13 +980,14 @@ class VeneerCluster(object):
                 from dask.distributed import as_completed
                 completed = 0
                 # as_completed also yields cancelled futures, so check the
-                # batch before every report.
+                # batch before every report, under the lock cancel() takes.
                 for _ in as_completed(futs):
-                    if batch.cancelled():
-                        return
-                    completed += 1
-                    emit('run-jobs', completed, total,
-                         f'Simulations complete ({completed}/{total})')
+                    with batch._lock:
+                        if batch.cancelled():
+                            return
+                        completed += 1
+                        emit('run-jobs', completed, total,
+                             f'Simulations complete ({completed}/{total})')
 
             threading.Thread(target=_watch, args=(futures,), daemon=True,
                              name='veneer-run-jobs-progress').start()
