@@ -331,6 +331,21 @@ class ClusterVeneerClient(object):
     def __dir__(self):
         return self._dummy_v.__dir__()
 
+def _batch_task_keys(keys, dask_worker=None):
+    '''Run on each Dask worker by JobBatch.drain: which of `keys` this worker is
+    executing. Returns (worker name, [keys]).
+
+    A cancelled task that was executing stays in state.executing (or long_running, if
+    it seceded) until its function returns, so this is how drain sees a cancelled job
+    still at work between model runs, when its Veneer looks idle.
+    '''
+    wanted = set(keys)
+    state = dask_worker.state
+    running = [ts.key for ts in (set(state.executing) | set(state.long_running))
+               if ts.key in wanted]
+    return dask_worker.name, running
+
+
 class VeneerTooOldForDrain(RuntimeError):
     '''The Veneer on a port answers 404 to /runs/status, so it predates /runs/status and
     /runs/cancel, and JobBatch.drain cannot tell idle from busy.'''
@@ -455,13 +470,90 @@ class JobBatch(object):
         return [p for p in ports if p not in stopped]
 
     def _probe_veneer(self, port, client, timeout):
-        raise NotImplementedError
+        '''One port's Veneer answer: 'idle', 'busy' or 'unreachable'.
+
+        Asks /runs/status, then always posts /runs/cancel, so a cancelled job that has
+        started another model run is stopped too. 'idle' needs both: no run reported
+        AND a 404 ("no active run to cancel") from /runs/cancel. A 200 or 400 from
+        /runs/cancel means a run was found, or claimed and not yet started.
+
+        Requests go through the client's own session, so its proxy and trust settings
+        apply. Each of the two requests gets `timeout`, so a probe can take up to
+        twice that.
+        '''
+        import requests
+        try:
+            r = client._session.request('GET', client.url('/runs/status'), timeout=timeout)
+            if r.status_code == 404:
+                raise VeneerTooOldForDrain(port)
+            if r.status_code != 200:
+                return 'busy'
+            try:
+                body = r.json()
+            except ValueError:
+                body = None
+            if not isinstance(body, dict):
+                return 'busy'
+            running = bool(body.get('IsRunning'))
+            c = client._session.request('POST', client.url('/runs/cancel'), timeout=timeout)
+        except requests.RequestException:
+            return 'unreachable'
+        if running:
+            return 'busy'
+        return 'idle' if c.status_code == 404 else 'busy'
 
     def _dask_busy_ports(self, timeout):
-        raise NotImplementedError
+        '''The ports whose Dask worker executes one of this batch's tasks. Every port
+        when the read fails, does not answer within `timeout`, or names a busy worker
+        that worker_affinity cannot place.
+
+        The read runs on its own daemon thread, and at most one is alive per batch: while
+        an earlier read is still hung, this answers every port without starting another.
+        A Dask worker that has left the cluster is absent from the answer, which is
+        right: a gone worker executes nothing.
+        '''
+        everyone = set(self._cluster.veneer_ports)
+        if self._dask_read is not None and self._dask_read.is_alive():
+            return everyone
+        keys = [f.key for f in self.futures]
+        box = {}
+
+        def read():
+            try:
+                box['answer'] = self._cluster.dask_client.run(
+                    _batch_task_keys, keys, on_error='return')
+            except Exception as e:            # noqa: BLE001  (a failed read is "busy")
+                box['error'] = e
+
+        t = threading.Thread(target=read, daemon=True, name='veneer-drain-dask-read')
+        self._dask_read = t
+        t.start()
+        t.join(timeout)
+        if t.is_alive() or 'error' in box:
+            return everyone
+        busy = set()
+        affinity = self._cluster.worker_affinity
+        for answer in box['answer'].values():
+            if isinstance(answer, BaseException):
+                return everyone
+            name, running = answer
+            if not running:
+                continue
+            info = affinity.get(str(name))
+            if info is None:
+                return everyone
+            busy.add(info.port)
+        return busy
 
     def _process_gone(self, port):
-        raise NotImplementedError
+        '''True only when this port's Veneer PID is recorded and no longer exists.
+        An unknown port or PID is not gone (unlike worker_alive, which answers False
+        for both).'''
+        import psutil
+        for info in self._cluster.worker_affinity.values():
+            if info.port == port and info.veneer_pid is not None:
+                return not psutil.pid_exists(info.veneer_pid)
+        return False
 
 
 class VeneerCluster(object):

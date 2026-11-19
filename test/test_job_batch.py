@@ -2,7 +2,13 @@
 
 Run from the repository root so cwd shadows any installed veneer.
 """
+import http.server
+import os
+import socket
+import subprocess
+import sys
 import threading
+import time
 import unittest
 from unittest import mock
 
@@ -242,6 +248,189 @@ class DrainRuleTests(unittest.TestCase):
         busy = b.drain(timeout=0.5, poll=0.05, request_timeout=5)
         self.assertLess(time.monotonic() - t0, 1.5)
         self.assertEqual(busy, self.PORTS)
+
+
+class _FakeVeneerHandler(http.server.BaseHTTPRequestHandler):
+    # Set per server: status_code, status_body, cancel_code, delay, requests (a list).
+    def log_message(self, *args):
+        pass
+
+    def _answer(self, code, body=b''):
+        self.send_response(code)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self):
+        cfg = self.server.cfg
+        cfg['requests'].append(('GET', self.path))
+        if self.path == '/runs/status':
+            time.sleep(cfg.get('delay', 0))
+            self._answer(cfg['status_code'], cfg.get('status_body', b''))
+        else:
+            self._answer(404)
+
+    def do_POST(self):
+        cfg = self.server.cfg
+        cfg['requests'].append(('POST', self.path))
+        self._answer(cfg['cancel_code'] if self.path == '/runs/cancel' else 404)
+
+
+class ProbeVeneerTests(unittest.TestCase):
+    '''_probe_veneer against real HTTP servers on ephemeral ports.'''
+
+    def _serve(self, **cfg):
+        cfg.setdefault('requests', [])
+        server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), _FakeVeneerHandler)
+        server.daemon_threads = True
+        server.block_on_close = False
+        server.cfg = cfg
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        return server.server_address[1], cfg
+
+    def _probe(self, port, timeout=2):
+        from veneer.general import Veneer
+        batch = _cluster([FakeFuture(1)]).submit_jobs(['a'])
+        return batch._probe_veneer(port, Veneer(port, host='127.0.0.1'), timeout)
+
+    IDLE = b'{"IsRunning": false}'
+    RUNNING = b'{"IsRunning": true}'
+
+    def _case(self, status_code, status_body, cancel_code):
+        port, cfg = self._serve(status_code=status_code, status_body=status_body,
+                                cancel_code=cancel_code)
+        return self._probe(port), cfg['requests']
+
+    def test_not_running_and_nothing_to_cancel_is_idle(self):
+        answer, reqs = self._case(200, self.IDLE, 404)
+        self.assertEqual(answer, 'idle')
+        self.assertEqual(reqs, [('GET', '/runs/status'), ('POST', '/runs/cancel')])
+
+    def test_running_is_busy_and_is_asked_to_cancel(self):
+        answer, reqs = self._case(200, self.RUNNING, 200)
+        self.assertEqual(answer, 'busy')
+        self.assertIn(('POST', '/runs/cancel'), reqs)
+
+    def test_a_run_claimed_but_not_started_is_busy(self):
+        answer, reqs = self._case(200, self.IDLE, 400)
+        self.assertEqual(answer, 'busy')
+        self.assertIn(('POST', '/runs/cancel'), reqs)
+
+    def test_a_cancel_that_found_something_is_busy(self):
+        answer, reqs = self._case(200, self.IDLE, 200)
+        self.assertEqual(answer, 'busy')
+
+    def test_an_unreadable_status_is_busy(self):
+        for body in (b'not json', b'[1, 2]'):
+            answer, _ = self._case(200, body, 404)
+            self.assertEqual(answer, 'busy', body)
+
+    def test_a_404_from_cancel_is_idle_only_after_a_successful_status(self):
+        answer, reqs = self._case(500, b'', 404)
+        self.assertEqual(answer, 'busy')
+        self.assertEqual(reqs, [('GET', '/runs/status')])
+
+    def test_an_old_veneer_raises_and_is_not_asked_to_cancel(self):
+        port, cfg = self._serve(status_code=404, cancel_code=404)
+        with self.assertRaises(cluster_mod.VeneerTooOldForDrain) as ctx:
+            self._probe(port)
+        self.assertEqual(ctx.exception.port, port)
+        self.assertEqual(cfg['requests'], [('GET', '/runs/status')])
+
+    def test_nobody_listening_is_unreachable(self):
+        s = socket.socket()
+        s.bind(('127.0.0.1', 0))
+        port = s.getsockname()[1]
+        s.close()
+        self.assertEqual(self._probe(port), 'unreachable')
+
+    def test_a_hung_veneer_is_unreachable_within_the_timeout(self):
+        port, _ = self._serve(status_code=200, status_body=self.IDLE, cancel_code=404,
+                              delay=2)
+        t0 = time.monotonic()
+        self.assertEqual(self._probe(port, timeout=0.3), 'unreachable')
+        self.assertLess(time.monotonic() - t0, 1.5)
+
+
+class DaskReadTests(unittest.TestCase):
+    '''_dask_busy_ports on a fake client: placing answers, and failing toward busy.'''
+
+    PORTS = [9101, 9102]
+
+    def _batch(self, run):
+        c = _cluster([FakeFuture(1, key='k1'), FakeFuture(2, key='k2')])
+        c.veneer_ports = list(self.PORTS)
+        c.worker_affinity = {
+            'w1': cluster_mod.WorkerInfo(port=9101, directory='C:/example/a'),
+            'w2': cluster_mod.WorkerInfo(port=9102, directory='C:/example/b'),
+        }
+        c.dask_client.run = run
+        return c.submit_jobs(['a', 'b'], partial_results=True)
+
+    def test_answers_are_placed_by_worker_name(self):
+        seen = {}
+
+        def run(fn, keys, on_error=None):
+            seen.update(fn=fn, keys=keys, on_error=on_error)
+            return {'tcp://a': ('w1', []), 'tcp://b': ('w2', ['k2'])}
+        self.assertEqual(self._batch(run)._dask_busy_ports(1), {9102})
+        self.assertIs(seen['fn'], cluster_mod._batch_task_keys)
+        self.assertEqual(seen['keys'], ['k1', 'k2'])
+        self.assertEqual(seen['on_error'], 'return')
+
+    def test_a_busy_worker_that_cannot_be_placed_holds_every_port(self):
+        run = lambda fn, keys, on_error=None: {'tcp://c': ('stranger', ['k1'])}
+        self.assertEqual(self._batch(run)._dask_busy_ports(1), set(self.PORTS))
+
+    def test_a_worker_error_holds_every_port(self):
+        run = lambda fn, keys, on_error=None: {'tcp://a': ('w1', []), 'tcp://b': OSError('x')}
+        self.assertEqual(self._batch(run)._dask_busy_ports(1), set(self.PORTS))
+
+    def test_a_failed_read_holds_every_port(self):
+        def run(fn, keys, on_error=None):
+            raise OSError('scheduler gone')
+        self.assertEqual(self._batch(run)._dask_busy_ports(1), set(self.PORTS))
+
+    def test_a_hung_read_holds_every_port_and_starts_no_second_thread(self):
+        release = threading.Event()
+        entered = []
+
+        def run(fn, keys, on_error=None):
+            entered.append(1)
+            release.wait(5)
+            return {}
+        b = self._batch(run)
+        try:
+            t0 = time.monotonic()
+            self.assertEqual(b._dask_busy_ports(0.2), set(self.PORTS))
+            self.assertEqual(b._dask_busy_ports(0.2), set(self.PORTS))
+            self.assertLess(time.monotonic() - t0, 1.5)
+            self.assertEqual(len(entered), 1)
+        finally:
+            release.set()
+
+
+class ProcessGoneTests(unittest.TestCase):
+    def _batch(self, pid):
+        c = _cluster([FakeFuture(1)])
+        c.worker_affinity = {'w1': cluster_mod.WorkerInfo(port=9101, directory='C:/example',
+                                                          veneer_pid=pid)}
+        return c.submit_jobs(['a'])
+
+    def test_a_recorded_pid_that_has_exited_is_gone(self):
+        p = subprocess.Popen([sys.executable, '-c', 'pass'])
+        p.wait()
+        self.assertTrue(self._batch(p.pid)._process_gone(9101))
+
+    def test_a_live_pid_is_not_gone(self):
+        self.assertFalse(self._batch(os.getpid())._process_gone(9101))
+
+    def test_an_unknown_pid_or_port_is_not_gone(self):
+        self.assertFalse(self._batch(None)._process_gone(9101))
+        self.assertFalse(self._batch(os.getpid())._process_gone(9999))
 
 
 class RunJobsSyncFalseTests(unittest.TestCase):
