@@ -331,6 +331,17 @@ class ClusterVeneerClient(object):
     def __dir__(self):
         return self._dummy_v.__dir__()
 
+class VeneerTooOldForDrain(RuntimeError):
+    '''The Veneer on a port answers 404 to /runs/status, so it predates /runs/status and
+    /runs/cancel, and JobBatch.drain cannot tell idle from busy.'''
+
+    def __init__(self, port):
+        super().__init__(f'The Veneer on port {port} has no /runs/status endpoint, so '
+                         f'JobBatch.drain cannot tell whether it is still running. '
+                         f'Update Veneer on the cluster workers.')
+        self.port = port
+
+
 class JobBatch(object):
     '''One batch of cluster jobs, submitted together, that can be cancelled and drained.
 
@@ -374,6 +385,83 @@ class JobBatch(object):
 
     def cancelled(self):
         return self._cancelled.is_set()
+
+    def drain(self, timeout=120, poll=1.0, request_timeout=5, on_poll=None, dead_ports=()):
+        '''Wait until the cluster has stopped working on this batch, for at most
+        `timeout` seconds. Returns the ports still busy at the deadline: [] means all
+        stopped. Call it after cancel().
+
+        A port is stopped when its Dask worker executes none of this batch's tasks AND
+        its Veneer reports no run (/runs/status IsRunning false) and has none to cancel
+        (/runs/cancel answers 404), or when it is in `dead_ports`, or its Veneer process
+        is known to have exited. Each round asks every port not yet stopped to cancel,
+        so a cancelled job that starts its next model run is stopped too. Once a port
+        is stopped it is not asked again.
+
+        Before answering [], drain reads the Dask workers once more: a task already
+        queued on a worker can start after the scheduler took the cancel and before
+        the worker heard of it, and its port is then busy again.
+
+        A worker running something that is not from this batch also counts as busy,
+        and holds the drain to its deadline. Unreachable ports count as busy.
+
+        request_timeout: the per-request timeout, capped by the time left. A Veneer
+                 probe makes two requests, so one round can overrun the deadline by
+                 at most one request_timeout.
+        on_poll: optional callable, given the number of busy ports after each round.
+        dead_ports: ports whose Veneer is known to be gone (for example, the ports of
+                 jobs that failed because their worker died).
+
+        Raises VeneerTooOldForDrain when a Veneer has no /runs/status.
+        '''
+        import time
+        if self._aggregate is None:
+            return []
+        deadline = time.monotonic() + timeout
+        ports = list(self._cluster.veneer_ports)
+        # A port whose Veneer is gone stays stopped whatever Dask says: nothing it
+        # does can reach a model run.
+        dead = set(dead_ports) | {p for p in ports if self._process_gone(p)}
+        clients = dict(zip(ports, self._cluster.workers))
+        stopped = {p for p in ports if p in dead}
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            dask_busy = self._dask_busy_ports(min(request_timeout, remaining))
+            for p in ports:
+                if p in stopped:
+                    continue
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                answer = self._probe_veneer(p, clients[p], min(request_timeout, remaining))
+                if answer == 'idle' and p not in dask_busy:
+                    stopped.add(p)
+            busy = [p for p in ports if p not in stopped]
+            if not busy:
+                # Confirm before answering []. With the deadline already gone there is
+                # no confirming read, so every port not known dead counts as busy.
+                remaining = deadline - time.monotonic()
+                late = (self._dask_busy_ports(min(request_timeout, remaining))
+                        if remaining > 0 else set(ports))
+                stopped -= (late - dead)
+                busy = [p for p in ports if p not in stopped]
+            if on_poll is not None:
+                on_poll(len(busy))
+            if not busy:
+                return []
+            time.sleep(max(0.0, min(poll, deadline - time.monotonic())))
+        return [p for p in ports if p not in stopped]
+
+    def _probe_veneer(self, port, client, timeout):
+        raise NotImplementedError
+
+    def _dask_busy_ports(self, timeout):
+        raise NotImplementedError
+
+    def _process_gone(self, port):
+        raise NotImplementedError
 
 
 class VeneerCluster(object):
